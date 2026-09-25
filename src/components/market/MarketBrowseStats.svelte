@@ -518,17 +518,20 @@
     });
   }
 
+  // Daily rows are UTC-midnight buckets; read them in UTC or west-of-UTC clocks show the day before.
   function formatStamp(time: number, span: Period, months: string[]): string {
     const date = new Date(time);
     if (span === "48hours") return `${String(date.getHours()).padStart(2, "0")}:00`;
-    return `${months[date.getMonth()]} ${date.getDate()}`;
+    return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`;
   }
 
   function formatHoverStamp(time: number, span: Period, months: string[]): string {
     const date = new Date(time);
-    const day = `${months[date.getMonth()]} ${date.getDate()}`;
-    if (span === "48hours") return `${day}, ${String(date.getHours()).padStart(2, "0")}:00`;
-    return day;
+    if (span === "48hours") {
+      const day = `${months[date.getMonth()]} ${date.getDate()}`;
+      return `${day}, ${String(date.getHours()).padStart(2, "0")}:00`;
+    }
+    return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`;
   }
 </script>
 
