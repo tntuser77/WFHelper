@@ -142,8 +142,8 @@
     "@img/sharp-libvips-linux-x64": "1.3.3"
   },
   "build": {
-    "appId": "com.wfhelper.app",
-    "productName": "WFHelper",
+    "appId": "com.tntuser77.wfhelper-custom",
+    "productName": "WFHelper-Custom",
     "directories": {
       "output": "release"
     },
@@ -241,7 +241,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "WFHelper",
+        "owner": "tntuser77",
         "repo": "WFHelper",
         "releaseType": "release"
       }
