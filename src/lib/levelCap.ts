@@ -73,6 +73,25 @@ export function formatLevelCapDuration(sec: number | null): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 
+/** "Melee, Influence" -> ["melee", "influence"]; every term has to match. */
+export function levelCapSearchTerms(query: string): string[] {
+  return query
+    .split(",")
+    .map((term) => term.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** Adds the tag to the comma list, or takes it out when it is already there. */
+export function toggleLevelCapSearchTag(query: string, tag: string): string {
+  const terms = query
+    .split(",")
+    .map((term) => term.trim())
+    .filter(Boolean);
+  const key = tag.toLowerCase();
+  const kept = terms.filter((term) => term.toLowerCase() !== key);
+  return (kept.length === terms.length ? [...kept, tag] : kept).join(", ");
+}
+
 /** Every tag used so far, most used first, for autocomplete. */
 export function levelCapTagSuggestions(tagged: ReadonlyArray<{ tags?: string[] }>): string[] {
   const counts = new Map<string, { tag: string; n: number }>();

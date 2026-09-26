@@ -14,7 +14,7 @@
     row,
     runs,
     builds,
-    search,
+    searchTerms,
     onOpen,
     onSearchTag,
     onClearTag,
@@ -22,7 +22,8 @@
     row: LevelCapFrameRow;
     runs: LevelCapRun[];
     builds: LevelCapNamedBuild[];
-    search: string;
+    /** Lowercased comma-separated search terms. */
+    searchTerms: string[];
     onOpen: () => void;
     onSearchTag: (tag: string) => void;
     onClearTag: (tag: string) => void;
@@ -55,7 +56,7 @@
   }
 
   function isSearched(tag: string): boolean {
-    return tag.toLowerCase() === search.trim().toLowerCase();
+    return searchTerms.includes(tag.toLowerCase());
   }
 
   function nameOf(type: string): string {

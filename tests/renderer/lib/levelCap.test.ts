@@ -13,9 +13,11 @@ import {
 import {
   formatLevelCapDuration,
   levelCapFrames,
+  levelCapSearchTerms,
   levelCapSlotLayout,
   levelCapTagSuggestions,
   levelCapUpgradeRole,
+  toggleLevelCapSearchTag,
 } from "../../../src/lib/levelCap.js";
 import { underframeUrl } from "../../../src/lib/underframe.js";
 
@@ -180,5 +182,18 @@ describe("underframeUrl", () => {
   it("returns null for companions and unknown items", () => {
     expect(underframeUrl({ ...SUIT, kind: "companion" }, () => "x")).toBeNull();
     expect(underframeUrl(SUIT, () => null)).toBeNull();
+  });
+});
+
+describe("level cap search", () => {
+  it("splits on commas and drops empty terms", () => {
+    expect(levelCapSearchTerms(" Melee, Influence ,, ")).toEqual(["melee", "influence"]);
+    expect(levelCapSearchTerms("")).toEqual([]);
+  });
+
+  it("toggles a tag in and out of the comma list", () => {
+    expect(toggleLevelCapSearchTag("", "Melee")).toBe("Melee");
+    expect(toggleLevelCapSearchTag("Melee", "Influence")).toBe("Melee, Influence");
+    expect(toggleLevelCapSearchTag("melee, Influence", "Melee")).toBe("Influence");
   });
 });

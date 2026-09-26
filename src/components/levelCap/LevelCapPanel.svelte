@@ -4,7 +4,12 @@
   import { LEVEL_CAP_EXOLIZER_TARGET } from "../../../config/shared/levelCapTypes.js";
   import { tr as t } from "../../lib/i18n.js";
   import { log } from "../../lib/log.js";
-  import { levelCapFrames, levelCapTagSuggestions } from "../../lib/levelCap.js";
+  import {
+    levelCapFrames,
+    levelCapSearchTerms,
+    levelCapTagSuggestions,
+    toggleLevelCapSearchTag,
+  } from "../../lib/levelCap.js";
   import { importLevelCapFolders, levelCap, loadLevelCap } from "../../stores/levelCap.js";
   import { addToast } from "../../stores/toasts.js";
   import ThemedButton from "../ThemedButton.svelte";
@@ -38,13 +43,15 @@
     }
     return byFrame;
   });
+  const searchTerms = $derived(levelCapSearchTerms(frameSearch));
   const visibleFrames = $derived.by(() => {
-    const query = frameSearch.trim().toLowerCase();
-    if (!query) return frames;
-    return frames.filter(
-      (row) =>
-        row.frame.toLowerCase().includes(query) ||
-        (tagsByFrame[row.frame] ?? []).some((tag) => tag.includes(query)),
+    if (!searchTerms.length) return frames;
+    return frames.filter((row) =>
+      searchTerms.every(
+        (term) =>
+          row.frame.toLowerCase().includes(term) ||
+          (tagsByFrame[row.frame] ?? []).some((tag) => tag.includes(term)),
+      ),
     );
   });
   const runsByFrame = $derived.by(() => {
@@ -65,16 +72,16 @@
   const quickTags = $derived(tagSuggestions.slice(0, QUICK_TAG_COUNT));
 
   function isSearch(tag: string): boolean {
-    return frameSearch.trim().toLowerCase() === tag.toLowerCase();
+    return searchTerms.includes(tag.toLowerCase());
   }
 
-  /** Clicking a tag searches for it; clicking the searched tag again clears it. */
+  /** Clicking a tag adds it to the search; clicking it again takes it out. */
   function searchTag(tag: string): void {
-    frameSearch = isSearch(tag) ? "" : tag;
+    frameSearch = toggleLevelCapSearchTag(frameSearch, tag);
   }
 
   function clearTag(tag: string): void {
-    if (isSearch(tag)) frameSearch = "";
+    if (isSearch(tag)) frameSearch = toggleLevelCapSearchTag(frameSearch, tag);
   }
 
   async function runImport(): Promise<void> {
@@ -173,7 +180,7 @@
         {row}
         runs={runsByFrame[row.frame] ?? []}
         builds={buildsByFrame[row.frame] ?? []}
-        search={frameSearch}
+        {searchTerms}
         onOpen={() => (openFrame = row.frame)}
         onSearchTag={searchTag}
         onClearTag={clearTag}
