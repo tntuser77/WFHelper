@@ -16,11 +16,11 @@ export interface LevelCapFrameRow {
 }
 
 /** The card's gear strip, in display order. */
-export const LEVEL_CAP_CARD_SLOTS = ["primary", "secondary", "melee", "companion"] as const;
+const LEVEL_CAP_CARD_SLOTS = ["primary", "secondary", "melee", "companion"] as const;
 
 type LevelCapCardSlot = (typeof LEVEL_CAP_CARD_SLOTS)[number];
 
-export interface LevelCapGearUse {
+interface LevelCapGearUse {
   slot: LevelCapCardSlot;
   /** Every item run in this slot, most-used first; empty when the slot was never filled. */
   items: Array<{ type: string; count: number }>;

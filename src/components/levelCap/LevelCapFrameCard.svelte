@@ -10,11 +10,8 @@
     type LevelCapFrameRow,
   } from "../../lib/levelCap.js";
 
-  let {
-    row,
-    runs,
-    onOpen,
-  }: { row: LevelCapFrameRow; runs: LevelCapRun[]; onOpen: () => void } = $props();
+  let { row, runs, onOpen }: { row: LevelCapFrameRow; runs: LevelCapRun[]; onOpen: () => void } =
+    $props();
 
   const SLOT_KEYS: Record<string, MessageKey> = {
     primary: "profile.primaryWeapon",
@@ -49,7 +46,11 @@
       class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-md)] bg-bg-raised"
     >
       {#if row.frameType && $itemDb[row.frameType]?.imageUrl}
-        <img src={$itemDb[row.frameType].imageUrl ?? ""} alt="" class="h-full w-full object-contain" />
+        <img
+          src={$itemDb[row.frameType].imageUrl ?? ""}
+          alt=""
+          class="h-full w-full object-contain"
+        />
       {/if}
     </div>
     <span class="min-w-0 flex-1 truncate text-xl font-bold text-text-primary">{row.frame}</span>

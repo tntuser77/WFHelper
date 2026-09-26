@@ -9,15 +9,7 @@ export type SidebarViewName = Exclude<ViewName, "setup">;
 /** Views loaded on first visit. Everything else is in the initial bundle. */
 export type LazyViewName = Extract<
   ViewName,
-  | "dashboard"
-  | "world"
-  | "syndicates"
-  | "market"
-  | "analytics"
-  | "relics"
-  | "wiki"
-  | "arbi"
-  | "levelcap"
+  "dashboard" | "world" | "syndicates" | "market" | "analytics" | "relics" | "wiki" | "arbi"
 >;
 
 type LazyViewComponent = Component<Record<string, never>>;
@@ -34,7 +26,6 @@ export const LAZY_VIEW_LOADERS: Record<
   relics: () => import("../views/RelicsView.svelte"),
   wiki: () => import("../views/WikiView.svelte"),
   arbi: () => import("../views/ArbiAnalyzeView.svelte"),
-  levelcap: () => import("../views/LevelCapView.svelte"),
 };
 
 export function isLazyView(view: ViewName): view is LazyViewName {
@@ -56,7 +47,6 @@ export const VIEW_LABEL_KEYS: Record<ViewName, MessageKey> = {
   wiki: "common.wiki",
   rivens: "common.rivens",
   arbi: "nav.runAnalysis",
-  levelcap: "nav.levelCap",
   settings: "common.settings",
 };
 
@@ -76,7 +66,6 @@ const SIDEBAR_VIEW_HIDEABLE: Record<SidebarViewName, boolean> = {
   wiki: true,
   rivens: true,
   arbi: true,
-  levelcap: true,
   settings: false,
 };
 
