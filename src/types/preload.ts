@@ -285,6 +285,41 @@ export interface PreloadAPI {
     id: IpcInvokeMap["showPtRunLogInFolder"]["args"][0],
   ) => Promise<IpcInvokeMap["showPtRunLogInFolder"]["return"]>;
   onPtRunSaved: (callback: (run: IpcEventMap["pt-run-saved"]) => void) => () => void;
+  getLevelCap: () => Promise<IpcInvokeMap["getLevelCap"]["return"]>;
+  setLevelCapTags: (
+    id: IpcInvokeMap["setLevelCapTags"]["args"][0],
+    tags: IpcInvokeMap["setLevelCapTags"]["args"][1],
+  ) => Promise<IpcInvokeMap["setLevelCapTags"]["return"]>;
+  setLevelCapNotes: (
+    id: IpcInvokeMap["setLevelCapNotes"]["args"][0],
+    notes: IpcInvokeMap["setLevelCapNotes"]["args"][1],
+  ) => Promise<IpcInvokeMap["setLevelCapNotes"]["return"]>;
+  setLevelCapArchgun: (
+    id: IpcInvokeMap["setLevelCapArchgun"]["args"][0],
+    used: IpcInvokeMap["setLevelCapArchgun"]["args"][1],
+  ) => Promise<IpcInvokeMap["setLevelCapArchgun"]["return"]>;
+  applyLevelCapBuild: (
+    ids: IpcInvokeMap["applyLevelCapBuild"]["args"][0],
+    source: IpcInvokeMap["applyLevelCapBuild"]["args"][1],
+  ) => Promise<IpcInvokeMap["applyLevelCapBuild"]["return"]>;
+  deleteLevelCapRun: (
+    id: IpcInvokeMap["deleteLevelCapRun"]["args"][0],
+  ) => Promise<IpcInvokeMap["deleteLevelCapRun"]["return"]>;
+  importLevelCapFolders: () => Promise<IpcInvokeMap["importLevelCapFolders"]["return"]>;
+  updateLevelCapSettings: (
+    patch: IpcInvokeMap["updateLevelCapSettings"]["args"][0],
+  ) => Promise<IpcInvokeMap["updateLevelCapSettings"]["return"]>;
+  pickLevelCapFolder: (
+    kind: IpcInvokeMap["pickLevelCapFolder"]["args"][0],
+  ) => Promise<IpcInvokeMap["pickLevelCapFolder"]["return"]>;
+  getLevelCapThumbnail: (
+    id: IpcInvokeMap["getLevelCapThumbnail"]["args"][0],
+  ) => Promise<IpcInvokeMap["getLevelCapThumbnail"]["return"]>;
+  openLevelCapScreenshot: (
+    id: IpcInvokeMap["openLevelCapScreenshot"]["args"][0],
+  ) => Promise<IpcInvokeMap["openLevelCapScreenshot"]["return"]>;
+  onLevelCapUpdated: (callback: (payload: IpcEventMap["level-cap-updated"]) => void) => () => void;
+  onLevelCapHotkey: (callback: (payload: IpcEventMap["level-cap-hotkey"]) => void) => () => void;
   workbenchGetState: () => Promise<IpcInvokeMap["workbenchGetState"]["return"]>;
   workbenchPreviewPlan: (
     plan: IpcInvokeMap["workbenchPreviewPlan"]["args"][0],

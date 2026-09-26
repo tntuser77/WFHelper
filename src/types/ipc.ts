@@ -715,6 +715,50 @@ export interface IpcInvokeMap {
     args: [id: string];
     return: { ok: boolean };
   };
+  getLevelCap: {
+    args: [];
+    return: LevelCapPayload;
+  };
+  setLevelCapTags: {
+    args: [id: string, tags: string[]];
+    return: LevelCapRun | null;
+  };
+  setLevelCapNotes: {
+    args: [id: string, notes: string];
+    return: LevelCapRun | null;
+  };
+  setLevelCapArchgun: {
+    args: [id: string, used: boolean];
+    return: LevelCapRun | null;
+  };
+  applyLevelCapBuild: {
+    args: [ids: string[], source: string];
+    return: LevelCapPayload;
+  };
+  deleteLevelCapRun: {
+    args: [id: string];
+    return: LevelCapPayload;
+  };
+  importLevelCapFolders: {
+    args: [];
+    return: { result: LevelCapImportResult; payload: LevelCapPayload };
+  };
+  updateLevelCapSettings: {
+    args: [patch: Partial<LevelCapSettings>];
+    return: LevelCapPayload;
+  };
+  pickLevelCapFolder: {
+    args: [kind: "screenshotDir" | "backupDir"];
+    return: LevelCapPayload;
+  };
+  getLevelCapThumbnail: {
+    args: [id: string];
+    return: string | null;
+  };
+  openLevelCapScreenshot: {
+    args: [id: string];
+    return: { ok: boolean };
+  };
   workbenchGetState: {
     args: [];
     return: WorkbenchState;
@@ -867,6 +911,15 @@ import type {
 } from "../../config/shared/profitTakerTypes.js";
 export type { PtRunRecord };
 
+import type {
+  LevelCapHotkeyOutcome,
+  LevelCapImportResult,
+  LevelCapPayload,
+  LevelCapRun,
+  LevelCapSettings,
+} from "../../config/shared/levelCapTypes.js";
+export type { LevelCapPayload, LevelCapRun, LevelCapSettings };
+
 type WfmTradeMatchEvent = TradeMatchPayload;
 
 interface TradeRecordedEvent {
@@ -888,6 +941,8 @@ export interface IpcEventMap {
   "arbi-run-saved": ArbiRunRecord;
   "arbi-open-run": string;
   "pt-run-saved": PtRunRecord;
+  "level-cap-updated": LevelCapPayload;
+  "level-cap-hotkey": LevelCapHotkeyOutcome;
   "warframe-ui-scale-updated": number | null;
   "notification-history-added": NotificationEntry;
   "notification-sound-play": import("../../config/shared/notificationSound.js").NotificationSoundPlayback;

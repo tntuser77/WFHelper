@@ -207,6 +207,20 @@ export const PT_IMPORT_LOG = "pt:import-log";
 export const PT_SHOW_LOG_IN_FOLDER = "pt:show-log-in-folder";
 export const PT_RUN_SAVED = "pt-run-saved";
 
+export const LEVEL_CAP_GET = "level-cap:get";
+export const LEVEL_CAP_SET_TAGS = "level-cap:set-tags";
+export const LEVEL_CAP_SET_NOTES = "level-cap:set-notes";
+export const LEVEL_CAP_SET_ARCHGUN = "level-cap:set-archgun";
+export const LEVEL_CAP_APPLY_BUILD = "level-cap:apply-build";
+export const LEVEL_CAP_DELETE_RUN = "level-cap:delete-run";
+export const LEVEL_CAP_IMPORT_FOLDERS = "level-cap:import-folders";
+export const LEVEL_CAP_UPDATE_SETTINGS = "level-cap:update-settings";
+export const LEVEL_CAP_PICK_FOLDER = "level-cap:pick-folder";
+export const LEVEL_CAP_THUMBNAIL = "level-cap:thumbnail";
+export const LEVEL_CAP_OPEN_SCREENSHOT = "level-cap:open-screenshot";
+export const LEVEL_CAP_UPDATED = "level-cap-updated";
+export const LEVEL_CAP_HOTKEY = "level-cap-hotkey";
+
 export const ARBI_SCHED_GET = "arbi-sched:get";
 export const ARBI_SCHED_SET_OCCURRENCE = "arbi-sched:set-occurrence";
 export const ARBI_SCHED_SET_FAVORITE = "arbi-sched:set-favorite";

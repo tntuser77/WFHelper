@@ -101,6 +101,10 @@ const eventApiMap: Record<
   "arbi-open-run": (cb) =>
     window.api.onArbiOpenRun(cb as (runId: IpcEventMap["arbi-open-run"]) => void),
   "pt-run-saved": (cb) => window.api.onPtRunSaved(cb as (run: IpcEventMap["pt-run-saved"]) => void),
+  "level-cap-updated": (cb) =>
+    window.api.onLevelCapUpdated(cb as (p: IpcEventMap["level-cap-updated"]) => void),
+  "level-cap-hotkey": (cb) =>
+    window.api.onLevelCapHotkey(cb as (p: IpcEventMap["level-cap-hotkey"]) => void),
   "warframe-ui-scale-updated": (cb) =>
     window.api.onWarframeUiScaleUpdated(
       cb as (scale: IpcEventMap["warframe-ui-scale-updated"]) => void,
