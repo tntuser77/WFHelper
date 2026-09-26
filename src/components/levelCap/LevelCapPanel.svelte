@@ -61,6 +61,8 @@
   const openRow = $derived(frames.find((row) => row.frame === openFrame) ?? null);
   // Runs still carry tags until they are put on a build, so offer those too.
   const tagSuggestions = $derived(levelCapTagSuggestions([...builds, ...runs]));
+  const QUICK_TAG_COUNT = 8;
+  const quickTags = $derived(tagSuggestions.slice(0, QUICK_TAG_COUNT));
 
   function isSearch(tag: string): boolean {
     return frameSearch.trim().toLowerCase() === tag.toLowerCase();
@@ -110,23 +112,45 @@
   }
 </script>
 
-<header class="view-header mb-0 items-end" data-level-cap>
-  <div class="flex flex-col gap-1">
+<header class="view-header mb-0 flex-nowrap items-start" data-level-cap>
+  <div class="flex shrink-0 flex-col gap-1">
     <h2>{$t("nav.levelCap")}</h2>
     <p class="m-0 text-sm text-text-secondary">{$t("levelCap.subtitle", { target })}</p>
     <p class="m-0 text-xs {status?.inCascade ? 'text-accent' : 'text-text-muted'}">
       {statusLine()}
     </p>
   </div>
-  <div class="flex items-center gap-2">
-    {#if frames.length}
+  {#if frames.length}
+    <div class="flex min-w-0 max-w-3xl flex-1 flex-col gap-2">
       <input
-        class="w-80 rounded border border-border bg-bg-raised px-2 py-1 text-sm text-text-primary outline-none focus:border-info"
+        class="w-full rounded-[var(--radius-md)] border border-border bg-bg-raised px-4 py-3 text-base text-text-primary outline-none focus:border-info"
         type="search"
         placeholder={$t("levelCap.searchFrames")}
         bind:value={frameSearch}
       />
-    {/if}
+      {#if quickTags.length}
+        <div class="flex flex-wrap gap-1.5" data-level-cap-quick-tags>
+          {#each quickTags as tag (tag)}
+            <button
+              type="button"
+              class="cursor-pointer rounded border px-2 py-0.5 text-xs font-semibold transition-colors duration-100 {isSearch(
+                tag,
+              )
+                ? 'border-info bg-info/25 text-text-primary'
+                : 'border-info/40 bg-info/10 text-info hover:border-info'}"
+              title={$t("levelCap.tagHint")}
+              onclick={() => searchTag(tag)}
+              oncontextmenu={(event) => {
+                event.preventDefault();
+                clearTag(tag);
+              }}>{tag}</button
+            >
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
+  <div class="flex shrink-0 items-center gap-2">
     <ThemedButton disabled={importing} onClick={runImport}>{$t("levelCap.import")}</ThemedButton>
     <ThemedButton active={showSettings} onClick={() => (showSettings = !showSettings)}
       >{$t("common.settings")}</ThemedButton
