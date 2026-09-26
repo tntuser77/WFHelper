@@ -47,7 +47,8 @@
 
   let draft = $state<LevelCapBuild>(untrack(() => structuredClone(record.build)));
   let name = $state(untrack(() => record.name));
-  let tags = $state<string[]>(untrack(() => [...(record.tags ?? [])]));
+  // Ordered once on open; tags added here stay last until the editor closes.
+  let tags = $state<string[]>(untrack(() => orderLevelCapTags(record.tags ?? [], tagSuggestions)));
   let tagDraft = $state("");
   let busy = $state(false);
   let catalog = $state<LevelCapCatalog | null>(null);
@@ -60,7 +61,7 @@
 
   const dirty = $derived(
     name.trim() !== record.name ||
-      JSON.stringify(tags) !== JSON.stringify(record.tags ?? []) ||
+      JSON.stringify([...tags].sort()) !== JSON.stringify([...(record.tags ?? [])].sort()) ||
       JSON.stringify(draft) !== JSON.stringify(record.build),
   );
   // The frame slot only swaps between variants of this frame, e.g. Dante and Dante Prime.
@@ -226,7 +227,7 @@
 
   <div class="flex flex-wrap items-center gap-2">
     <span class="text-xs uppercase tracking-wide text-text-muted">{$t("common.tags")}</span>
-    {#each orderLevelCapTags(tags, tagSuggestions) as tag (tag)}
+    {#each tags as tag (tag)}
       <span
         class="inline-flex items-center gap-1.5 rounded border border-info/40 bg-info/10 px-2.5 py-1 text-sm font-semibold text-info"
       >
