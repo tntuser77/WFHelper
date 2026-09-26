@@ -12,12 +12,15 @@ interface PepEntry {
   rarity?: string;
   fusionLimit?: number;
   resultType?: string;
+  compat?: string;
+  parentName?: string;
   abilities?: Array<{ uniqueName?: string; name?: string }>;
 }
 
 type PepExport = Record<string, PepEntry>;
 
 interface Pep {
+  dict_en?: Record<string, string>;
   ExportWarframes?: PepExport;
   ExportWeapons?: PepExport;
   ExportSentinels?: PepExport;
@@ -54,7 +57,36 @@ const VARIANT_BASES: Record<string, string> = {
   "Sacrificial Steel": "True Steel",
 };
 
+// Augment cards open with the ability they change: "Tempest Barrage Augment: ...".
+const AUGMENT_TEXT_RE = /^(.+?) Augment:/;
+const AUGMENT_COMPAT_RE = /^\/Lotus\/Powersuits\//;
+
 let _catalog: LevelCapCatalog | null = null;
+
+/** "/Lotus/Powersuits/Pirate/CannonBarrageAugmentCard" -> "cannonbarrage". */
+function abilityStem(type: string): string {
+  return (type.split("/").pop() ?? "")
+    .replace(/Augment.*$/, "")
+    .replace(/Ability$/, "")
+    .toLowerCase();
+}
+
+/** The ability an augment changes, by the card text first and the path second. */
+export function levelCapAugmentAbility(
+  type: string,
+  stats: string,
+  abilities: ReadonlyArray<{ type: string; name: string }>,
+): string | null {
+  const named = AUGMENT_TEXT_RE.exec(stats)?.[1]?.toLowerCase();
+  const byText = named && abilities.find((a) => a.name.toLowerCase() === named);
+  if (byText) return byText.type;
+  const stem = abilityStem(type);
+  const byPath = abilities.find((a) => {
+    const other = abilityStem(a.type);
+    return stem && (other.includes(stem) || stem.includes(other));
+  });
+  return byPath?.type ?? null;
+}
 
 /** Mods that share a family cannot sit on one item together: Continuity, Primed
  *  Continuity and Archon Continuity are all "WARFRAME|Continuity". */
@@ -141,6 +173,27 @@ function build(): LevelCapCatalog {
   });
   const knownMods = new Set(modEntries.map((mod) => `${mod.compat}|${mod.name}`));
 
+  // Augments target a frame's base suit, which every variant (Prime too) shares.
+  const english = pep.dict_en ?? {};
+  const suitParents: Record<string, string> = {};
+  const suitAbilities = new Map<string, Array<{ type: string; name: string }>>();
+  for (const [type, frame] of Object.entries(pep.ExportWarframes ?? {})) {
+    if (!frame.parentName) continue;
+    suitParents[type] = frame.parentName;
+    const list = suitAbilities.get(frame.parentName) ?? [];
+    for (const ability of frame.abilities ?? []) {
+      if (!ability.uniqueName || list.some((a) => a.type === ability.uniqueName)) continue;
+      list.push({ type: ability.uniqueName, name: english[ability.name ?? ""] ?? "" });
+    }
+    suitAbilities.set(frame.parentName, list);
+  }
+  const augmentOf = (type: string, entry: PepEntry, stats: string) => {
+    const suit = entry.compat;
+    if (!suit || !AUGMENT_COMPAT_RE.test(suit)) return {};
+    const ability = levelCapAugmentAbility(type, stats, suitAbilities.get(suit) ?? []);
+    return { augment: { suit, ability } };
+  };
+
   const helminth = Object.entries(pep.ExportRecipes ?? {}).flatMap(([recipe, entry]) => {
     const type = entry.resultType;
     const name = type && abilityNames.get(type);
@@ -165,6 +218,7 @@ function build(): LevelCapCatalog {
         rarity: entry.rarity ?? "COMMON",
         family: levelCapModFamily(name, compat, knownMods),
         stats: statText.get(type) ?? "",
+        ...augmentOf(type, entry, statText.get(type) ?? ""),
       })),
     ),
     arcanes: byName(
@@ -183,6 +237,7 @@ function build(): LevelCapCatalog {
       }),
     ),
     abilities: byName(helminth),
+    suitParents,
   };
 }
 
@@ -203,6 +258,7 @@ export function levelCapCatalog(): LevelCapCatalog {
       mods: [],
       arcanes: [],
       abilities: [],
+      suitParents: {},
     };
   }
   return _catalog;

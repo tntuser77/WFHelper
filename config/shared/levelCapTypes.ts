@@ -141,11 +141,15 @@ export interface LevelCapCatalog {
       rarity: string;
       family: string;
       stats: string;
+      /** Set on augments: the base suit they fit and the ability they change. */
+      augment?: { suit: string; ability: string | null };
     }
   >;
   arcanes: Array<LevelCapCatalogEntry & { maxRank: number; rarity: string; stats: string }>;
   /** What the Helminth can graft: one ability per frame plus its own. */
   abilities: LevelCapCatalogEntry[];
+  /** Frame type -> the base suit its augments name, e.g. HydroidPrime -> PirateBaseSuit. */
+  suitParents: Record<string, string>;
 }
 
 export interface LevelCapSettings {

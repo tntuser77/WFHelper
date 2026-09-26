@@ -207,9 +207,21 @@
     onChange(next);
   }
 
+  /** Augments fit only this frame's own abilities or the one the Helminth grafted. */
+  function fitsItem(mod: LevelCapCatalog["mods"][number]): boolean {
+    if (!mod.augment) return true;
+    if (kind !== "suit" || !item) return false;
+    return (
+      mod.augment.suit === catalog.suitParents[item.type] ||
+      (mod.augment.ability !== null && mod.augment.ability === item.helminth?.ability)
+    );
+  }
+
+  const fittingMods = $derived(catalog.mods.filter(fitsItem));
+
   function modOptions(compat: readonly string[]) {
     if (!compat.length) return catalog.arcanes;
-    return catalog.mods.filter((mod) => compat.includes(mod.compat));
+    return fittingMods.filter((mod) => compat.includes(mod.compat));
   }
 </script>
 
@@ -335,7 +347,7 @@
           {/if}
           <LevelCapPicker
             options={modOptions(pickedSpec.compat)}
-            fallback={pickedSpec.compat.length ? catalog.mods : []}
+            fallback={pickedSpec.compat.length ? fittingMods : []}
             placeholder={$t(
               pickedSpec.role === "arcane"
                 ? "levelCap.editor.searchArcane"

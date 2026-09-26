@@ -42,6 +42,20 @@ describe("levelCapCatalog", () => {
     expect(family("Overextended")).not.toBe(family("Stretch"));
   });
 
+  it("ties each augment to its frame and, where the card names it, its ability", () => {
+    const mod = (name: string) => catalog.mods.find((m) => m.name === name);
+    const ability = (name: string) => catalog.abilities.find((a) => a.name === name)?.type;
+    const hydroid = catalog.suitParents["/Lotus/Powersuits/Pirate/HydroidPrime"];
+    expect(hydroid).toBe(catalog.suitParents["/Lotus/Powersuits/Pirate/Pirate"]);
+    expect(mod("Viral Tempest")?.augment).toEqual({
+      suit: hydroid,
+      ability: ability("Tempest Barrage"),
+    });
+    // The card path says Intimidate; only the card text says Warcry.
+    expect(mod("Eternal War")?.augment?.ability).toBe(ability("Warcry"));
+    expect(mod("Continuity")?.augment).toBeUndefined();
+  });
+
   it("offers only what the Helminth can graft, once each", () => {
     expect(has(catalog.abilities, "Roar")).toBe(true);
     expect(has(catalog.abilities, "Radial Blind")).toBe(true);
