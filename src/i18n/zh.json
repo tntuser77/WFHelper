@@ -2615,7 +2615,6 @@
   "levelCap.legacyTagsHint": "构建出现之前的标签。确认此运行后，它们会移到构建上。",
   "levelCap.role.arcane": "赋能",
   "levelCap.builds.edit": "编辑构建",
-  "levelCap.builds.filterHint": "只显示此构建的运行",
   "levelCap.builds.needsCheck": "需要确认",
   "levelCap.builds.needsCheckHint": "导入的运行使用的是推测的构建。请确认，或移到正确的构建。",
   "levelCap.builds.new": "新建构建",
@@ -2668,5 +2667,6 @@
   "overlay.levelCap.belowTarget": "{count} / {target} 个 Exolizer",
   "overlay.levelCap.failedDetail": "无法截取游戏窗口",
   "levelCap.exo": "Exo",
-  "levelCap.dateAt": "{date} {time}"
+  "levelCap.dateAt": "{date} {time}",
+  "levelCap.builds.editHint": "单击只显示此配置的记录，双击编辑"
 }

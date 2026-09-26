@@ -2635,7 +2635,6 @@
   "levelCap.legacyTagsHint": "Tags from before builds had them. They move onto the build when you confirm this run.",
   "levelCap.role.arcane": "Arcane",
   "levelCap.builds.edit": "Edit build",
-  "levelCap.builds.filterHint": "Show only this build's runs",
   "levelCap.builds.needsCheck": "Needs a check",
   "levelCap.builds.needsCheckHint": "Imported runs got a guessed build. Confirm it or move them to the right one.",
   "levelCap.builds.new": "New build",
@@ -2688,5 +2687,6 @@
   "overlay.levelCap.belowTarget": "{count} / {target} Exolizers",
   "overlay.levelCap.failedDetail": "Could not capture the game window",
   "levelCap.exo": "exo",
-  "levelCap.dateAt": "{date} at {time}"
+  "levelCap.dateAt": "{date} at {time}",
+  "levelCap.builds.editHint": "Click to show only this build's runs, double-click to edit it"
 }

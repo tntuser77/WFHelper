@@ -2615,7 +2615,6 @@
   "levelCap.legacyTagsHint": "Tags aus der Zeit vor den Builds. Sie wandern zum Build, sobald du diesen Run bestätigst.",
   "levelCap.role.arcane": "Arkana",
   "levelCap.builds.edit": "Build bearbeiten",
-  "levelCap.builds.filterHint": "Nur die Runs dieses Builds zeigen",
   "levelCap.builds.needsCheck": "Muss geprüft werden",
   "levelCap.builds.needsCheckHint": "Importierte Runs haben einen geschätzten Build. Bestätige ihn oder verschiebe sie zum richtigen.",
   "levelCap.builds.new": "Neuer Build",
@@ -2668,5 +2667,6 @@
   "overlay.levelCap.belowTarget": "{count} / {target} Exolizer",
   "overlay.levelCap.failedDetail": "Spielfenster konnte nicht aufgenommen werden",
   "levelCap.exo": "Exo",
-  "levelCap.dateAt": "{date} um {time}"
+  "levelCap.dateAt": "{date} um {time}",
+  "levelCap.builds.editHint": "Klicken, um nur die Runs dieses Builds zu zeigen, Doppelklick zum Bearbeiten"
 }

@@ -162,15 +162,18 @@
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" data-level-cap-builds>
           {#each builds as build (build.id)}
             {@const active = filter === build.id}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
               class="flex flex-col gap-2 rounded-[var(--radius-md)] border p-2.5 transition-colors {active
                 ? 'border-accent bg-[color-mix(in_srgb,var(--accent)_8%,transparent)]'
                 : 'border-border/60 bg-bg-raised/40'}"
+              title={$t("levelCap.builds.editHint")}
+              ondblclick={() => (editingId = build.id)}
             >
               <button
                 type="button"
                 class="flex cursor-pointer items-center gap-2 text-left"
-                title={$t("levelCap.builds.filterHint")}
+                title={$t("levelCap.builds.editHint")}
                 onclick={() => (filter = active ? null : build.id)}
               >
                 <span class="min-w-0 flex-1 truncate text-sm font-bold text-text-primary"
@@ -237,15 +240,15 @@
           {/if}
 
           <div
-            class="relative flex flex-col justify-center rounded-[var(--radius-md)] border border-dashed border-border p-2.5"
+            class="flex flex-col rounded-[var(--radius-md)] border border-dashed border-border transition-colors hover:border-accent"
           >
             <button
               type="button"
-              class="cursor-pointer text-sm font-semibold text-text-secondary hover:text-accent"
+              class="flex flex-1 cursor-pointer items-center justify-center p-2.5 text-sm font-semibold text-text-secondary hover:text-accent"
               onclick={() => (showNew = !showNew)}>+ {$t("levelCap.builds.new")}</button
             >
             {#if showNew}
-              <div class="mt-2 flex flex-col gap-1">
+              <div class="flex flex-col gap-1 px-2.5 pb-2.5">
                 <ThemedButton size="compact" onClick={() => newBuild({ kind: "equipped" })}
                   >{$t("levelCap.builds.fromEquipped")}</ThemedButton
                 >
