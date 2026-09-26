@@ -88,6 +88,12 @@
     "inventory"
   ],
   "author": "WFHelper",
+  "contributors": [
+    {
+      "name": "Elijah Shope",
+      "url": "https://github.com/tntuser77"
+    }
+  ],
   "license": "MIT",
   "devDependencies": {
     "@electron/asar": "^3.4.1",
@@ -143,8 +149,8 @@
     "@img/sharp-libvips-linux-x64": "1.3.3"
   },
   "build": {
-    "appId": "com.wfhelper.app",
-    "productName": "WFHelper",
+    "appId": "com.tntuser77.wfhelper-custom",
+    "productName": "WFHelper-Custom",
     "directories": {
       "output": "release"
     },
@@ -242,7 +248,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "WFHelper",
+        "owner": "tntuser77",
         "repo": "WFHelper",
         "releaseType": "release"
       }
@@ -250,10 +256,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/WFHelper/WFHelper.git"
+    "url": "https://github.com/tntuser77/WFHelper.git"
   },
   "bugs": {
-    "url": "https://github.com/WFHelper/WFHelper/issues"
+    "url": "https://github.com/tntuser77/WFHelper/issues"
   },
-  "homepage": "https://github.com/WFHelper/WFHelper#readme"
+  "homepage": "https://github.com/tntuser77/WFHelper#readme"
 }

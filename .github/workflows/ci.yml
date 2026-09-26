@@ -176,6 +176,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Runners default to UTC, where a day bucket read in local time is still
+      # the right day; a US zone makes those date bugs fail here, not just locally.
+      # Windows Chromium ignores TZ, so the system zone itself is switched.
+      - name: Use a US time zone
+        run: tzutil /s "Eastern Standard Time"
+
       - name: Build
         run: |
           pnpm run verify:onnx-models
