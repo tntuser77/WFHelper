@@ -181,6 +181,7 @@
         runs={runsByFrame[row.frame] ?? []}
         builds={buildsByFrame[row.frame] ?? []}
         {searchTerms}
+        tagOrder={tagSuggestions}
         onOpen={() => (openFrame = row.frame)}
         onSearchTag={searchTag}
         onClearTag={clearTag}

@@ -12,6 +12,7 @@
   import { tr as t, type MessageKey } from "../../lib/i18n.js";
   import { confirmWithDialog } from "../../lib/ipc.js";
   import { log } from "../../lib/log.js";
+  import { orderLevelCapTags } from "../../lib/levelCap.js";
   import {
     deleteLevelCapBuild,
     loadLevelCapCatalog,
@@ -84,12 +85,48 @@
   });
   const tagCompletion = $derived(tagMatch ? tagMatch.slice(tagDraft.trimStart().length) : "");
 
-  /** Tab and Enter take the suggestion; with none, Enter adds what was typed. */
+  let listOpen = $state(false);
+  let listActive = $state(0);
+  /** Unused tags containing the draft, in the app-wide order. */
+  const listOptions = $derived.by(() => {
+    const draft = tagDraft.trim().toLowerCase();
+    const used = new Set(tags.map((tag) => tag.toLowerCase()));
+    return tagSuggestions.filter(
+      (tag) => !used.has(tag.toLowerCase()) && tag.toLowerCase().includes(draft),
+    );
+  });
+
+  function openTagList(): void {
+    listOpen = true;
+    listActive = 0;
+  }
+
+  function pickListTag(tag: string): void {
+    tagDraft = tag;
+    addTag();
+    listActive = 0;
+  }
+
+  /** Tab and Enter take the suggestion; with none, Enter adds what was typed.
+   *  With the list open, the arrows move through it and Enter takes the highlighted tag. */
   function onTagKeydown(e: KeyboardEvent): void {
-    if (e.key === "Escape" && tagDraft) {
+    if (e.key === "Escape" && (listOpen || tagDraft)) {
       e.preventDefault();
       e.stopPropagation();
-      tagDraft = "";
+      if (listOpen) listOpen = false;
+      else tagDraft = "";
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!listOpen) return openTagList();
+      const last = listOptions.length - 1;
+      listActive = Math.max(0, Math.min(last, listActive + (e.key === "ArrowDown" ? 1 : -1)));
+      return;
+    }
+    if (listOpen && e.key === "Enter" && listOptions[listActive]) {
+      e.preventDefault();
+      pickListTag(listOptions[listActive]);
       return;
     }
     if (e.key !== "Enter" && !(e.key === "Tab" && tagMatch)) return;
@@ -188,10 +225,10 @@
   </div>
 
   <div class="flex flex-wrap items-center gap-2">
-    <span class="text-[10px] uppercase tracking-wide text-text-muted">{$t("common.tags")}</span>
-    {#each tags as tag (tag)}
+    <span class="text-xs uppercase tracking-wide text-text-muted">{$t("common.tags")}</span>
+    {#each orderLevelCapTags(tags, tagSuggestions) as tag (tag)}
       <span
-        class="inline-flex items-center gap-1 rounded border border-info/40 bg-info/10 px-2 py-0.5 text-xs font-semibold text-info"
+        class="inline-flex items-center gap-1.5 rounded border border-info/40 bg-info/10 px-2.5 py-1 text-sm font-semibold text-info"
       >
         {tag}
         <button
@@ -203,26 +240,57 @@
       </span>
     {/each}
     <span
-      class="relative inline-block w-44 rounded border border-border bg-bg-raised focus-within:border-info"
+      class="relative inline-block w-64 rounded border border-border bg-bg-raised focus-within:border-info"
       data-level-cap-tag-input
     >
       <span
-        class="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre px-2 py-0.5 text-xs"
+        class="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre px-2.5 py-1 [font-family:inherit] text-sm leading-5"
         aria-hidden="true"
         ><span class="invisible">{tagDraft}</span><span class="text-text-muted"
           >{tagCompletion}</span
         ></span
       >
       <input
-        class="relative w-full bg-transparent px-2 py-0.5 text-xs text-text-primary outline-none"
+        class="relative w-full bg-transparent px-2.5 py-1 [font-family:inherit] text-sm leading-5 text-text-primary outline-none"
         type="text"
         maxlength="32"
         placeholder={$t("arbi.tags.add")}
         title={$t("levelCap.tags.acceptHint")}
         bind:value={tagDraft}
+        oninput={() => (listActive = 0)}
         onkeydown={onTagKeydown}
-        onblur={addTag}
+        ondblclick={() => openTagList()}
+        onblur={() => {
+          listOpen = false;
+          addTag();
+        }}
       />
+      {#if listOpen}
+        <ul
+          class="absolute left-0 right-0 top-full z-20 m-0 mt-1 max-h-48 list-none overflow-y-auto rounded-[var(--radius-md)] border border-info/60 bg-bg-surface p-1 shadow-lg"
+          data-level-cap-tag-list
+        >
+          {#each listOptions as tag, i (tag)}
+            <li>
+              <button
+                type="button"
+                class="w-full cursor-pointer truncate rounded px-2 py-1 text-left text-sm {i ===
+                listActive
+                  ? 'bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] text-accent'
+                  : 'text-text-primary hover:bg-bg-raised'}"
+                onmouseenter={() => (listActive = i)}
+                onmousedown={(e) => {
+                  // Keep focus in the input so its blur does not add the half-typed draft.
+                  e.preventDefault();
+                  pickListTag(tag);
+                }}>{tag}</button
+              >
+            </li>
+          {:else}
+            <li class="px-2 py-1 text-xs text-text-muted">{$t("levelCap.editor.noMatch")}</li>
+          {/each}
+        </ul>
+      {/if}
     </span>
   </div>
 

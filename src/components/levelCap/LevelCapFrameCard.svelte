@@ -7,6 +7,7 @@
   import {
     levelCapGearUse,
     levelCapTagSuggestions,
+    orderLevelCapTags,
     type LevelCapFrameRow,
   } from "../../lib/levelCap.js";
 
@@ -15,6 +16,7 @@
     runs,
     builds,
     searchTerms,
+    tagOrder,
     onOpen,
     onSearchTag,
     onClearTag,
@@ -24,6 +26,8 @@
     builds: LevelCapNamedBuild[];
     /** Lowercased comma-separated search terms. */
     searchTerms: string[];
+    /** App-wide tag order, so every card lists shared tags alike. */
+    tagOrder: string[];
     onOpen: () => void;
     onSearchTag: (tag: string) => void;
     onClearTag: (tag: string) => void;
@@ -37,7 +41,7 @@
   };
 
   const gear = $derived(levelCapGearUse(runs));
-  const allTags = $derived(levelCapTagSuggestions(builds));
+  const allTags = $derived(orderLevelCapTags(levelCapTagSuggestions(builds), tagOrder));
   const tags = $derived(allTags.slice(0, 3));
   const hiddenTags = $derived(allTags.slice(3));
   let showAllTags = $state(false);

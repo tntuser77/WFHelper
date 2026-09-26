@@ -3,7 +3,11 @@
 
   import type { LevelCapNamedBuild, LevelCapRun } from "../../types/ipc.js";
   import { locale, tr as t } from "../../lib/i18n.js";
-  import { formatLevelCapDuration, type LevelCapFrameRow } from "../../lib/levelCap.js";
+  import {
+    formatLevelCapDuration,
+    orderLevelCapTags,
+    type LevelCapFrameRow,
+  } from "../../lib/levelCap.js";
   import { assignLevelCapBuild, createLevelCapBuild } from "../../stores/levelCap.js";
   import { itemDb } from "../../stores/data.js";
   import { addToast } from "../../stores/toasts.js";
@@ -208,7 +212,7 @@
               </div>
               {#if build.tags?.length}
                 <div class="flex flex-wrap gap-1">
-                  {#each build.tags as tag (tag)}
+                  {#each orderLevelCapTags(build.tags, tagSuggestions) as tag (tag)}
                     <span
                       class="rounded border border-info/40 bg-info/10 px-1.5 py-0.5 text-[10px] font-semibold text-info"
                       >{tag}</span

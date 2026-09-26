@@ -92,6 +92,14 @@ export function toggleLevelCapSearchTag(query: string, tag: string): string {
   return (kept.length === terms.length ? [...kept, tag] : kept).join(", ");
 }
 
+/** Puts tags in one app-wide order (`order`, usually the suggestions) so every
+ *  build lists the same tags the same way; unknown tags go last, A-Z. */
+export function orderLevelCapTags(tags: readonly string[], order: readonly string[]): string[] {
+  const rank = new Map(order.map((tag, i) => [tag.toLowerCase(), i]));
+  const at = (tag: string) => rank.get(tag.toLowerCase()) ?? order.length;
+  return [...tags].sort((a, b) => at(a) - at(b) || a.localeCompare(b));
+}
+
 /** Every tag used so far, most used first, for autocomplete. */
 export function levelCapTagSuggestions(tagged: ReadonlyArray<{ tags?: string[] }>): string[] {
   const counts = new Map<string, { tag: string; n: number }>();

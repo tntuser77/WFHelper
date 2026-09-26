@@ -17,6 +17,7 @@ import {
   levelCapSlotLayout,
   levelCapTagSuggestions,
   levelCapUpgradeRole,
+  orderLevelCapTags,
   toggleLevelCapSearchTag,
 } from "../../../src/lib/levelCap.js";
 import { underframeUrl } from "../../../src/lib/underframe.js";
@@ -195,5 +196,17 @@ describe("level cap search", () => {
     expect(toggleLevelCapSearchTag("", "Melee")).toBe("Melee");
     expect(toggleLevelCapSearchTag("Melee", "Influence")).toBe("Melee, Influence");
     expect(toggleLevelCapSearchTag("melee, Influence", "Melee")).toBe("Influence");
+  });
+});
+
+describe("orderLevelCapTags", () => {
+  it("lists tags in the shared order, unknown ones last A-Z", () => {
+    const order = ["Weapon Platform", "Secondary", "Vaz Dash"];
+    expect(orderLevelCapTags(["vaz dash", "Zeta", "Secondary", "Alpha"], order)).toEqual([
+      "Secondary",
+      "vaz dash",
+      "Alpha",
+      "Zeta",
+    ]);
   });
 });
