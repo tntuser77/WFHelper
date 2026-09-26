@@ -4,6 +4,45 @@ import type {
   LevelCapUpgrade,
 } from "../../config/shared/levelCapTypes.js";
 import type { LevelCapRun } from "../types/ipc.js";
+import { fallbackNameFromUniqueName } from "../../config/shared/displayName.js";
+import { itemLabel } from "./itemLabel.js";
+
+/** What names and pictures a build item: its type, plus the parts of a modular build. */
+export type LevelCapItemRef = Pick<LevelCapItem, "type" | "parts" | "customName">;
+
+type ItemArt = Record<
+  string,
+  { name?: string | null; displayName?: string | null; imageUrl?: string | null } | undefined
+>;
+
+// The part that makes a modular build what it is: a zaw's strike, a kitgun's chamber.
+const DEFINING_PART_RE = /\/Tips?\/|\/Barrels?\/|MoaPetHead|ZanukaPetPartHead/i;
+
+function definingPart(item: LevelCapItemRef): string | null {
+  return item.parts?.find((part) => DEFINING_PART_RE.test(part)) ?? null;
+}
+
+/** "Rabve Status" for a named zaw, else its strike's name, else the item's own. */
+export function levelCapItemName(item: LevelCapItemRef, db: ItemArt): string {
+  const part = definingPart(item);
+  return (
+    item.customName ||
+    (part ? itemLabel(db[part]) : "") ||
+    itemLabel(db[item.type]) ||
+    fallbackNameFromUniqueName(item.type)
+  );
+}
+
+/** A modular build shows its strike or chamber; the shared base type has no art. */
+export function levelCapItemImage(item: LevelCapItemRef, db: ItemArt): string | null {
+  const part = definingPart(item);
+  return (part ? db[part]?.imageUrl : null) ?? db[item.type]?.imageUrl ?? null;
+}
+
+/** Same item for counting and matching: two zaws differ by parts, not by type. */
+export function levelCapItemKey(item: LevelCapItemRef): string {
+  return item.parts?.length ? `${item.type}<${[...item.parts].sort().join(",")}>` : item.type;
+}
 
 export interface LevelCapFrameRow {
   frame: string;
@@ -22,21 +61,25 @@ type LevelCapCardSlot = (typeof LEVEL_CAP_CARD_SLOTS)[number];
 interface LevelCapGearUse {
   slot: LevelCapCardSlot;
   /** Every item run in this slot, most-used first; empty when the slot was never filled. */
-  items: Array<{ type: string; count: number }>;
+  items: Array<{ item: LevelCapItemRef; count: number }>;
 }
 
 /** What a frame's runs carried in each card slot. A frame run with several
  * setups shows its most-used item per slot, the rest counted behind it. */
 export function levelCapGearUse(runs: readonly LevelCapRun[]): LevelCapGearUse[] {
   return LEVEL_CAP_CARD_SLOTS.map((slot) => {
-    const counts = new Map<string, number>();
+    const counts = new Map<string, { item: LevelCapItemRef; count: number }>();
     for (const run of runs) {
-      const type = run.build?.[slot]?.type;
-      if (type) counts.set(type, (counts.get(type) ?? 0) + 1);
+      const item = run.build?.[slot];
+      if (!item) continue;
+      const key = levelCapItemKey(item);
+      const entry = counts.get(key) ?? { item, count: 0 };
+      entry.count++;
+      counts.set(key, entry);
     }
-    const items = [...counts]
-      .map(([type, count]) => ({ type, count }))
-      .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
+    const items = [...counts.values()].sort(
+      (a, b) => b.count - a.count || levelCapItemKey(a.item).localeCompare(levelCapItemKey(b.item)),
+    );
     return { slot, items };
   });
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  findModularIdentity,
+  ownedModularItems,
   ownedSuitTypes,
   rivensByWeapon,
   snapshotBuildForFrame,
@@ -9,6 +11,66 @@ import {
   suitTypeForId,
 } from "../../services/levelCapBuild";
 import { DANTE_SUIT_ID, levelCapInventory } from "../fixtures/levelcap/inventory";
+
+const ZAW = "/Lotus/Weapons/Ostron/Melee/LotusModularWeapon";
+const STRIKE = "/Lotus/Weapons/Ostron/Melee/ModularMelee02/Tip/TipTen";
+const RABVE = [
+  "/Lotus/Weapons/Ostron/Melee/ModularMelee01/Balance/BalanceSpeedIStatusII",
+  "/Lotus/Weapons/Ostron/Melee/ModularMelee01/Handle/HandleFour",
+  STRIKE,
+];
+const BALLA = [
+  "/Lotus/Weapons/Ostron/Melee/ModularMelee01/Balance/BalanceDamageI",
+  "/Lotus/Weapons/Ostron/Melee/ModularMelee01/Handle/HandleOne",
+  "/Lotus/Weapons/Ostron/Melee/ModularMelee01/Tip/TipOne",
+];
+
+/** Two zaws: every build of the kind shares one ItemType. */
+function zawInventory(): Record<string, unknown> {
+  const inventory = levelCapInventory();
+  const zaw = (id: string, name: string, parts: string[], mods: string[]) => ({
+    ItemId: { $oid: id },
+    ItemType: ZAW,
+    ItemName: name,
+    ModularParts: parts,
+    Configs: [{ Upgrades: mods }, { Upgrades: [] }],
+  });
+  (inventory.Melee as unknown[]).push(
+    zaw("z1", "Balla dagger", BALLA, ["/Lotus/Upgrades/Mods/Melee/WeaponMeleeDamageMod"]),
+    zaw("z2", "Rabve Status", RABVE, ["/Lotus/Upgrades/Mods/Melee/WeaponMeleeRangeIncMod"]),
+  );
+  return inventory;
+}
+
+describe("levelCapBuild modular weapons", () => {
+  it("lists every owned zaw by the name it was given, with its parts", () => {
+    const owned = ownedModularItems(zawInventory(), "melee");
+    expect(owned.map((item) => item.customName)).toEqual(["Balla dagger", "Rabve Status"]);
+    expect(owned[1]).toMatchObject({ type: ZAW, parts: RABVE, config: 0 });
+    expect(ownedModularItems(zawInventory(), "suit")).toEqual([]);
+  });
+
+  it("reads the configs of the zaw with these parts, not the most modded one", () => {
+    const configs = snapshotItemConfigs(zawInventory(), "melee", ZAW, [...RABVE].reverse());
+    expect(configs[0]?.customName).toBe("Rabve Status");
+    expect(configs[0]?.upgrades[0]?.type).toContain("WeaponMeleeRangeIncMod");
+  });
+
+  it("finds the zaw an older build used by its mods, only when one fits", () => {
+    const item = {
+      kind: "melee" as const,
+      type: ZAW,
+      config: 0,
+      upgrades: [{ slot: 0, type: "/Lotus/Upgrades/Mods/Melee/WeaponMeleeRangeIncMod", rank: 3 }],
+    };
+    expect(findModularIdentity(zawInventory(), item)).toEqual({
+      parts: RABVE,
+      customName: "Rabve Status",
+    });
+    // Both zaws have an empty config B, so an unmodded build is ambiguous.
+    expect(findModularIdentity(zawInventory(), { ...item, upgrades: [] })).toBeNull();
+  });
+});
 
 describe("levelCapBuild", () => {
   it("snapshots the equipped loadout with the selected mod config", () => {

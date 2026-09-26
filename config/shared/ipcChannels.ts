@@ -216,6 +216,7 @@ export const LEVEL_CAP_DELETE_BUILD = "level-cap:delete-build";
 export const LEVEL_CAP_ASSIGN_BUILD = "level-cap:assign-build";
 export const LEVEL_CAP_CATALOG = "level-cap:catalog";
 export const LEVEL_CAP_ITEM_CONFIGS = "level-cap:item-configs";
+export const LEVEL_CAP_MODULAR_ITEMS = "level-cap:modular-items";
 export const LEVEL_CAP_DELETE_RUN = "level-cap:delete-run";
 export const LEVEL_CAP_IMPORT_FOLDERS = "level-cap:import-folders";
 export const LEVEL_CAP_UPDATE_SETTINGS = "level-cap:update-settings";

@@ -102,6 +102,12 @@ export async function pickLevelCapFolder(kind: "screenshotDir" | "backupDir"): P
 export function loadLevelCapItemConfigs(
   kind: LevelCapSlotKind,
   type: string,
+  parts?: string[],
 ): Promise<LevelCapItem[]> {
-  return invoke("getLevelCapItemConfigs", kind, type);
+  return invoke("getLevelCapItemConfigs", kind, type, parts);
+}
+
+/** Owned zaws, kitguns and MOAs for a slot, under the names the player gave them. */
+export function loadLevelCapModularItems(kind: LevelCapSlotKind): Promise<LevelCapItem[]> {
+  return invoke("getLevelCapModularItems", kind);
 }

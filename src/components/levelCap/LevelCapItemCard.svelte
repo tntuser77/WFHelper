@@ -4,7 +4,7 @@
   import { fallbackNameFromUniqueName } from "../../../config/shared/displayName.js";
   import { itemDb } from "../../stores/data.js";
   import { loadLevelCapCatalog } from "../../stores/levelCap.js";
-  import { itemLabel } from "../../lib/itemLabel.js";
+  import { levelCapItemImage, levelCapItemName } from "../../lib/levelCap.js";
   import { tr as t, type MessageKey } from "../../lib/i18n.js";
   import { log } from "../../lib/log.js";
   import {
@@ -29,11 +29,6 @@
       .catch((err) => log.warn("[LevelCap] catalogue failed", String(err)));
   });
 
-  function nameOf(type: string | null): string {
-    if (!type) return "?";
-    return itemLabel($itemDb[type]) || fallbackNameFromUniqueName(type);
-  }
-
   const helminth = $derived(
     item.helminth
       ? (abilityNames[item.helminth.ability] ?? fallbackNameFromUniqueName(item.helminth.ability))
@@ -47,16 +42,18 @@
   class="flex flex-col gap-3 rounded-[var(--radius-md)] border border-border/60 bg-bg-raised/40 p-3"
 >
   <div class="flex items-center gap-2">
-    {#if $itemDb[item.type]?.imageUrl}
+    {#if levelCapItemImage(item, $itemDb)}
       <img
-        src={$itemDb[item.type].imageUrl ?? ""}
+        src={levelCapItemImage(item, $itemDb) ?? ""}
         alt=""
         class="h-10 w-10 shrink-0 object-contain"
       />
     {/if}
     <div class="flex min-w-0 flex-col">
       <span class="text-[10px] uppercase tracking-wide text-text-muted">{$t(label)}</span>
-      <span class="truncate text-base font-semibold text-text-primary">{nameOf(item.type)}</span>
+      <span class="truncate text-base font-semibold text-text-primary"
+        >{levelCapItemName(item, $itemDb)}</span
+      >
     </div>
     <span class="ml-auto text-[10px] uppercase tracking-wide text-text-muted">
       {item.configName ||

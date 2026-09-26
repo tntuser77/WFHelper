@@ -6,12 +6,14 @@
   import { log } from "../../lib/log.js";
   import {
     levelCapFrames,
+    levelCapItemName,
     levelCapSearchTerms,
     levelCapTagSuggestions,
     toggleLevelCapSearchTag,
   } from "../../lib/levelCap.js";
   import { importLevelCapFolders, levelCap, loadLevelCap } from "../../stores/levelCap.js";
   import { addToast } from "../../stores/toasts.js";
+  import { itemDb } from "../../stores/data.js";
   import ThemedButton from "../ThemedButton.svelte";
   import ThemedPanel from "../ThemedPanel.svelte";
   import LevelCapFrameCard from "./LevelCapFrameCard.svelte";
@@ -19,6 +21,7 @@
   import LevelCapSettings from "./LevelCapSettings.svelte";
 
   const target = String(LEVEL_CAP_EXOLIZER_TARGET);
+  const LEVEL_CAP_SLOTS = ["primary", "secondary", "melee", "archgun", "companion"] as const;
 
   let showSettings = $state(false);
   let importing = $state(false);
@@ -43,6 +46,17 @@
     }
     return byFrame;
   });
+  // Each frame's build items by name, so "rabve" finds the frame running that zaw.
+  const itemsByFrame = $derived.by(() => {
+    const byFrame: Record<string, string[]> = {};
+    for (const { frame, build } of builds) {
+      for (const slot of LEVEL_CAP_SLOTS) {
+        const item = build[slot];
+        if (item) (byFrame[frame] ??= []).push(levelCapItemName(item, $itemDb).toLowerCase());
+      }
+    }
+    return byFrame;
+  });
   const searchTerms = $derived(levelCapSearchTerms(frameSearch));
   const visibleFrames = $derived.by(() => {
     if (!searchTerms.length) return frames;
@@ -50,7 +64,8 @@
       searchTerms.every(
         (term) =>
           row.frame.toLowerCase().includes(term) ||
-          (tagsByFrame[row.frame] ?? []).some((tag) => tag.includes(term)),
+          (tagsByFrame[row.frame] ?? []).some((tag) => tag.includes(term)) ||
+          (itemsByFrame[row.frame] ?? []).some((name) => name.includes(term)),
       ),
     );
   });

@@ -314,7 +314,11 @@ export interface PreloadAPI {
   getLevelCapItemConfigs: (
     kind: IpcInvokeMap["getLevelCapItemConfigs"]["args"][0],
     type: IpcInvokeMap["getLevelCapItemConfigs"]["args"][1],
+    parts?: IpcInvokeMap["getLevelCapItemConfigs"]["args"][2],
   ) => Promise<IpcInvokeMap["getLevelCapItemConfigs"]["return"]>;
+  getLevelCapModularItems: (
+    kind: IpcInvokeMap["getLevelCapModularItems"]["args"][0],
+  ) => Promise<IpcInvokeMap["getLevelCapModularItems"]["return"]>;
   deleteLevelCapRun: (
     id: IpcInvokeMap["deleteLevelCapRun"]["args"][0],
   ) => Promise<IpcInvokeMap["deleteLevelCapRun"]["return"]>;

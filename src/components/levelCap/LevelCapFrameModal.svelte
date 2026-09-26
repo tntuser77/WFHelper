@@ -5,6 +5,8 @@
   import { locale, tr as t } from "../../lib/i18n.js";
   import {
     formatLevelCapDuration,
+    levelCapItemImage,
+    levelCapItemName,
     orderLevelCapTags,
     type LevelCapFrameRow,
   } from "../../lib/levelCap.js";
@@ -189,18 +191,16 @@
               </button>
               <div class="flex items-center gap-1.5">
                 {#each GEAR as slot (slot)}
-                  {@const type = build.build[slot]?.type}
+                  {@const gear = build.build[slot]}
+                  {@const art = gear ? levelCapItemImage(gear, $itemDb) : null}
                   <div
-                    class="flex h-8 w-8 items-center justify-center rounded bg-bg-raised {type
+                    class="flex h-8 w-8 items-center justify-center rounded bg-bg-raised {gear
                       ? ''
                       : 'border border-dashed border-border'}"
+                    title={gear ? levelCapItemName(gear, $itemDb) : ""}
                   >
-                    {#if type && $itemDb[type]?.imageUrl}
-                      <img
-                        src={$itemDb[type].imageUrl ?? ""}
-                        alt=""
-                        class="h-4/5 w-4/5 object-contain"
-                      />
+                    {#if art}
+                      <img src={art} alt="" class="h-4/5 w-4/5 object-contain" />
                     {/if}
                   </div>
                 {/each}
@@ -324,19 +324,16 @@
                 <div class="flex w-[22rem] shrink-0 items-center gap-2">
                   <div class="flex shrink-0 items-center gap-1">
                     {#each GEAR as slot (slot)}
-                      {@const type = run.build?.[slot]?.type}
+                      {@const gear = run.build?.[slot]}
+                      {@const art = gear ? levelCapItemImage(gear, $itemDb) : null}
                       <div
-                        class="flex h-9 w-9 items-center justify-center rounded bg-bg-raised {type
+                        class="flex h-9 w-9 items-center justify-center rounded bg-bg-raised {gear
                           ? ''
                           : 'border border-dashed border-border'}"
-                        title={type ? ($itemDb[type]?.name ?? "") : ""}
+                        title={gear ? levelCapItemName(gear, $itemDb) : ""}
                       >
-                        {#if type && $itemDb[type]?.imageUrl}
-                          <img
-                            src={$itemDb[type].imageUrl ?? ""}
-                            alt=""
-                            class="h-4/5 w-4/5 object-contain"
-                          />
+                        {#if art}
+                          <img src={art} alt="" class="h-4/5 w-4/5 object-contain" />
                         {/if}
                       </div>
                     {/each}

@@ -40,6 +40,10 @@ export interface LevelCapItem {
   shards?: Array<{ color: string; type: string }>;
   /** Companion weapon riding with a companion. */
   weapon?: LevelCapItem;
+  /** Fitted parts of a zaw, kitgun or MOA, whose `type` every build of its kind shares. */
+  parts?: string[];
+  /** The name the player gave a modular build, e.g. "Rabve Status". */
+  customName?: string;
 }
 
 export interface LevelCapBuild {

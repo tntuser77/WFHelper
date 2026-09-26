@@ -13,6 +13,8 @@ import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
 import { levelCapCatalog } from "../services/levelCapCatalog";
 import {
+  findModularIdentity,
+  ownedModularItems,
   ownedSuitTypes,
   rivensByWeapon,
   snapshotBuildForFrame,
@@ -32,6 +34,7 @@ import {
   LEVEL_CAP_GET,
   LEVEL_CAP_HOTKEY,
   LEVEL_CAP_ITEM_CONFIGS,
+  LEVEL_CAP_MODULAR_ITEMS,
   LEVEL_CAP_IMPORT_FOLDERS,
   LEVEL_CAP_OPEN_SCREENSHOT,
   LEVEL_CAP_PICK_FOLDER,
@@ -125,6 +128,13 @@ function backfillRivens(inventory: unknown): boolean {
     );
     return fits.length === 1 ? fits[0] : null;
   });
+}
+
+/** Details older builds lack that only the inventory knows; true when any changed. */
+function backfillInventory(inventory: unknown): boolean {
+  if (!inventory) return false;
+  const modular = store.backfillModular((item) => findModularIdentity(inventory, item));
+  return backfillRivens(inventory) || modular;
 }
 
 const SLOT_KINDS = new Set<LevelCapSlotKind>([
@@ -248,11 +258,11 @@ function register(): void {
   bindHotkey();
 
   handleAuthorized(LEVEL_CAP_GET, assertMainRendererSender, () => {
-    backfillRivens(ctx.currentInventoryData);
+    backfillInventory(ctx.currentInventoryData);
     return payload();
   });
   addInventoryListener((inventory) => {
-    if (backfillRivens(inventory)) pushUpdate();
+    if (backfillInventory(inventory)) pushUpdate();
   });
 
   handleAuthorized(
@@ -337,12 +347,25 @@ function register(): void {
   handleAuthorized(
     LEVEL_CAP_ITEM_CONFIGS,
     assertMainRendererSender,
-    (_e, kind: unknown, type: unknown) => {
+    (_e, kind: unknown, type: unknown, parts: unknown) => {
       if (typeof kind !== "string" || !SLOT_KINDS.has(kind as LevelCapSlotKind)) return [];
       if (typeof type !== "string" || type.length > 512) return [];
-      return snapshotItemConfigs(ctx.currentInventoryData, kind as LevelCapSlotKind, type);
+      const fitted = Array.isArray(parts)
+        ? parts.filter((p): p is string => typeof p === "string" && p.length <= 512).slice(0, 8)
+        : undefined;
+      return snapshotItemConfigs(
+        ctx.currentInventoryData,
+        kind as LevelCapSlotKind,
+        type,
+        fitted,
+      );
     },
   );
+
+  handleAuthorized(LEVEL_CAP_MODULAR_ITEMS, assertMainRendererSender, (_e, kind: unknown) => {
+    if (typeof kind !== "string" || !SLOT_KINDS.has(kind as LevelCapSlotKind)) return [];
+    return ownedModularItems(ctx.currentInventoryData, kind as LevelCapSlotKind);
+  });
 
   handleAuthorized(LEVEL_CAP_DELETE_RUN, assertMainRendererSender, (_e, id: unknown) => {
     const runId = asRunId(id);

@@ -13,6 +13,9 @@ import {
 import {
   formatLevelCapDuration,
   levelCapFrames,
+  levelCapItemImage,
+  levelCapItemKey,
+  levelCapItemName,
   levelCapSearchTerms,
   levelCapSlotLayout,
   levelCapTagSuggestions,
@@ -208,5 +211,28 @@ describe("orderLevelCapTags", () => {
       "Alpha",
       "Zeta",
     ]);
+  });
+});
+
+describe("modular build items", () => {
+  const zaw = {
+    type: "/Lotus/Weapons/Ostron/Melee/LotusModularWeapon",
+    parts: ["/Parts/Handle/HandleFour", "/Parts/Tip/TipTen"],
+  };
+  const db = {
+    "/Parts/Tip/TipTen": { name: "Rabvee", imageUrl: "https://x/rabvee.png" },
+    [zaw.type]: { name: "Lotus Modular Weapon", imageUrl: null },
+  };
+
+  it("shows the given name, else the strike, and the strike's art", () => {
+    expect(levelCapItemName({ ...zaw, customName: "Rabve Status" }, db)).toBe("Rabve Status");
+    expect(levelCapItemName(zaw, db)).toBe("Rabvee");
+    expect(levelCapItemImage(zaw, db)).toBe("https://x/rabvee.png");
+    expect(levelCapItemName({ type: zaw.type }, db)).toBe("Lotus Modular Weapon");
+  });
+
+  it("tells two zaws apart by parts, in any order", () => {
+    expect(levelCapItemKey(zaw)).toBe(levelCapItemKey({ ...zaw, parts: [...zaw.parts].reverse() }));
+    expect(levelCapItemKey(zaw)).not.toBe(levelCapItemKey({ type: zaw.type }));
   });
 });

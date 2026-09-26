@@ -1,14 +1,15 @@
 <script lang="ts">
-  import { fallbackNameFromUniqueName } from "../../../config/shared/displayName.js";
   import type { LevelCapNamedBuild, LevelCapRun } from "../../types/ipc.js";
   import { itemDb } from "../../stores/data.js";
-  import { itemLabel } from "../../lib/itemLabel.js";
   import { tr as t, type MessageKey } from "../../lib/i18n.js";
   import {
     levelCapGearUse,
+    levelCapItemImage,
+    levelCapItemName,
     levelCapTagSuggestions,
     orderLevelCapTags,
     type LevelCapFrameRow,
+    type LevelCapItemRef,
   } from "../../lib/levelCap.js";
 
   let {
@@ -63,15 +64,14 @@
     return searchTerms.includes(tag.toLowerCase());
   }
 
-  function nameOf(type: string): string {
-    return itemLabel($itemDb[type]) || fallbackNameFromUniqueName(type);
-  }
-
   /** Every item run in the slot with its count, for the hover. */
-  function slotTitle(slot: string, items: Array<{ type: string; count: number }>): string {
+  function slotTitle(slot: string, items: Array<{ item: LevelCapItemRef; count: number }>): string {
     const label = $t(SLOT_KEYS[slot]);
     if (!items.length) return label;
-    return [label, ...items.map((item) => `${nameOf(item.type)} × ${item.count}`)].join("\n");
+    return [
+      label,
+      ...items.map(({ item, count }) => `${levelCapItemName(item, $itemDb)} × ${count}`),
+    ].join("\n");
   }
 </script>
 
@@ -145,17 +145,18 @@
   <div class="relative grid grid-cols-4 gap-2">
     {#each gear as { slot, items } (slot)}
       {@const top = items[0]}
+      {@const art = top ? levelCapItemImage(top.item, $itemDb) : null}
       <div
         class="relative flex aspect-square items-center justify-center rounded-[var(--radius-md)] {top
           ? 'bg-bg-raised'
           : 'border border-dashed border-border'}"
         title={slotTitle(slot, items)}
       >
-        {#if top && $itemDb[top.type]?.imageUrl}
-          <img src={$itemDb[top.type].imageUrl ?? ""} alt="" class="h-4/5 w-4/5 object-contain" />
+        {#if art}
+          <img src={art} alt="" class="h-4/5 w-4/5 object-contain" />
         {:else if top}
           <span class="px-1 text-center text-[10px] leading-tight text-text-secondary"
-            >{nameOf(top.type)}</span
+            >{levelCapItemName(top.item, $itemDb)}</span
           >
         {/if}
         {#if items.length > 1}

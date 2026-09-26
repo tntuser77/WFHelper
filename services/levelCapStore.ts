@@ -407,6 +407,26 @@ export function backfillRivens(find: (weaponType: string) => LevelCapRiven | nul
   return changed;
 }
 
+/** Fills in the name and parts of zaws, kitguns and MOAs saved before builds kept
+ *  them, so a build shows "Rabve Status" instead of the shared modular type. */
+export function backfillModular(
+  find: (item: LevelCapItem) => Pick<LevelCapItem, "parts" | "customName"> | null,
+): boolean {
+  ensureLoaded();
+  let changed = false;
+  for (const build of [..._builds.map((b) => b.build), ..._runs.map((r) => r.build)]) {
+    for (const item of itemsOf(build)) {
+      if (item.parts || !/Modular/i.test(item.type)) continue;
+      const identity = find(item);
+      if (!identity?.parts) continue;
+      Object.assign(item, identity);
+      changed = true;
+    }
+  }
+  if (changed) save();
+  return changed;
+}
+
 /** The runs keep their last copy of the loadout and go back to needing a build. */
 export function deleteBuild(id: string): boolean {
   ensureLoaded();

@@ -2584,7 +2584,7 @@
   "levelCap.settings.change": "更改",
   "levelCap.settings.clear": "清除",
   "levelCap.empty": "还没有记录。导入截图文件夹，或用快捷键结束一局。",
-  "levelCap.searchFrames": "搜索战甲或标签，例如 近战, Influence",
+  "levelCap.searchFrames": "搜索战甲、标签或武器，例如 近战, Influence",
   "levelCap.tagHint": "点击将此标签加入搜索，右键移除",
   "levelCap.unverifiedCount": "{count} 条未核对",
   "levelCap.col.duration": "单局用时",

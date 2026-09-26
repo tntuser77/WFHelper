@@ -748,7 +748,11 @@ export interface IpcInvokeMap {
     return: LevelCapCatalog;
   };
   getLevelCapItemConfigs: {
-    args: [kind: LevelCapSlotKind, type: string];
+    args: [kind: LevelCapSlotKind, type: string, parts?: string[]];
+    return: LevelCapItem[];
+  };
+  getLevelCapModularItems: {
+    args: [kind: LevelCapSlotKind];
     return: LevelCapItem[];
   };
   deleteLevelCapRun: {

@@ -16,7 +16,8 @@ function itemKey(item: LevelCapItem | null): string {
     .join(",");
   const helminth = item.helminth ? `h${item.helminth.index}:${item.helminth.ability}` : "";
   const weapon = item.weapon ? `+${itemKey(item.weapon)}` : "";
-  return `${item.type}[${upgrades}]${helminth}${weapon}`;
+  const parts = item.parts ? `<${[...item.parts].sort().join(",")}>` : "";
+  return `${item.type}${parts}[${upgrades}]${helminth}${weapon}`;
 }
 
 /** Identity of a build for grouping; ranks and the archgun are left out because
@@ -110,6 +111,12 @@ function item(raw: unknown, kind: LevelCapSlotKind, depth = 0): LevelCapItem | n
   const out: LevelCapItem = { kind, type, config: int(value.config, 0, 9) ?? 0, upgrades };
   const configName = text(value.configName, 64);
   if (configName) out.configName = configName;
+  const parts = (Array.isArray(value.parts) ? value.parts : [])
+    .flatMap((part) => text(part) ?? [])
+    .slice(0, 8);
+  if (parts.length) out.parts = parts;
+  const customName = text(value.customName, 120);
+  if (parts.length && customName) out.customName = customName;
   const helminth = asRecord(value.helminth);
   const ability = text(helminth?.ability);
   const index = int(helminth?.index, 0, 3);

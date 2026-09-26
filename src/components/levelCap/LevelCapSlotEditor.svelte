@@ -10,7 +10,12 @@
   import { itemDb } from "../../stores/data.js";
   import { itemLabel } from "../../lib/itemLabel.js";
   import { tr as t, type MessageKey } from "../../lib/i18n.js";
-  import { levelCapSlotLayout } from "../../lib/levelCap.js";
+  import {
+    levelCapItemImage,
+    levelCapItemKey,
+    levelCapItemName,
+    levelCapSlotLayout,
+  } from "../../lib/levelCap.js";
   import {
     archonShardColorKey,
     archonShardIconUrl,
@@ -18,7 +23,7 @@
     parseArchonShardSlot,
   } from "../../lib/inventory/archonShards.js";
   import { log } from "../../lib/log.js";
-  import { loadLevelCapItemConfigs } from "../../stores/levelCap.js";
+  import { loadLevelCapItemConfigs, loadLevelCapModularItems } from "../../stores/levelCap.js";
   import LevelCapModGrid from "./LevelCapModGrid.svelte";
   import LevelCapPicker from "./LevelCapPicker.svelte";
 
@@ -52,16 +57,20 @@
   let expanded = $state(open);
   /** "item", "helminth", a mod slot number, or `shard:N` for a socket. */
   let picking = $state<string | number | null>(null);
-  /** The owned item's configs from the inventory, keyed to the type they were read for. */
-  let configs = $state<{ type: string; list: LevelCapItem[] } | null>(null);
+  /** The owned item's configs from the inventory, keyed to the item they were read for. */
+  let configs = $state<{ key: string; list: LevelCapItem[] } | null>(null);
+  /** Owned zaws, kitguns and MOAs, which the catalogue cannot list by name. */
+  let modular = $state<LevelCapItem[]>([]);
+
+  const itemKey = $derived(item ? levelCapItemKey(item) : null);
 
   $effect(() => {
-    const type = item?.type;
-    if (!type || configs?.type === type) return;
+    const key = itemKey;
+    if (!item || !key || configs?.key === key) return;
     let live = true;
-    loadLevelCapItemConfigs(kind, type)
+    loadLevelCapItemConfigs(kind, item.type, item.parts ? [...item.parts] : undefined)
       .then((list) => {
-        if (live) configs = { type, list };
+        if (live) configs = { key, list };
       })
       .catch((err) => log.warn("[LevelCap] item configs failed", String(err)));
     return () => {
@@ -69,7 +78,31 @@
     };
   });
 
-  const ownedConfigs = $derived(configs && configs.type === item?.type ? configs.list : []);
+  $effect(() => {
+    if (picking !== "item" || kind === "suit" || kind === "archgun") return;
+    let live = true;
+    loadLevelCapModularItems(kind)
+      .then((list) => {
+        if (live) modular = list;
+      })
+      .catch((err) => log.warn("[LevelCap] modular items failed", String(err)));
+    return () => {
+      live = false;
+    };
+  });
+
+  const MODULAR_PREFIX = "modular:";
+  // Named builds lead: "Rabve Status" is what the player searches for.
+  const pickerOptions = $derived([
+    ...modular.map((owned, i) => ({
+      type: `${MODULAR_PREFIX}${i}`,
+      name: levelCapItemName(owned, $itemDb),
+      stats: (owned.parts ?? []).map((part) => nameOf(part)).join(" · "),
+    })),
+    ...itemOptions,
+  ]);
+
+  const ownedConfigs = $derived(configs && configs.key === itemKey ? configs.list : []);
 
   const layout = $derived(item ? levelCapSlotLayout(kind, item) : []);
   const upgradeInfo = $derived(
@@ -125,13 +158,18 @@
   async function pickItem(type: string): Promise<void> {
     picking = null;
     expanded = true;
+    if (type.startsWith(MODULAR_PREFIX)) {
+      const owned = modular[Number(type.slice(MODULAR_PREFIX.length))];
+      if (owned) onChange(structuredClone($state.snapshot(owned)));
+      return;
+    }
     let list: LevelCapItem[] = [];
     try {
       list = await loadLevelCapItemConfigs(kind, type);
     } catch (err) {
       log.warn("[LevelCap] item configs failed", String(err));
     }
-    configs = { type, list };
+    configs = { key: type, list };
     const modded = list.find((c) => c.upgrades.length) ?? list[0];
     onChange(modded ? structuredClone(modded) : { kind, type, config: 0, upgrades: [] });
   }
@@ -240,14 +278,18 @@
       }}
     >
       <span class="flex h-10 w-10 shrink-0 items-center justify-center">
-        {#if item && $itemDb[item.type]?.imageUrl}
-          <img src={$itemDb[item.type].imageUrl ?? ""} alt="" class="h-10 w-10 object-contain" />
+        {#if item && levelCapItemImage(item, $itemDb)}
+          <img
+            src={levelCapItemImage(item, $itemDb) ?? ""}
+            alt=""
+            class="h-10 w-10 object-contain"
+          />
         {/if}
       </span>
       <span class="flex min-w-0 flex-col">
         <span class="text-[10px] uppercase tracking-wide text-text-muted">{$t(label)}</span>
         <span class="truncate text-base font-semibold text-text-primary"
-          >{item ? nameOf(item.type) : $t("common.none")}</span
+          >{item ? levelCapItemName(item, $itemDb) : $t("common.none")}</span
         >
       </span>
       {#if item}
@@ -292,7 +334,7 @@
   {#if picking === "item"}
     <div class="px-3 pb-3">
       <LevelCapPicker
-        options={itemOptions}
+        options={pickerOptions}
         placeholder={$t("levelCap.editor.searchItem")}
         onPick={pickItem}
         onCancel={() => (picking = null)}

@@ -143,6 +143,24 @@ function indexInventory(inventory: Json) {
 
 type InventoryIndex = ReturnType<typeof indexInventory>;
 
+/** A zaw, kitgun or MOA shares its ItemType with every other build of its kind;
+ *  the fitted parts and the name the player gave it are what tell them apart. */
+function modularIdentity(raw: Json): Pick<LevelCapItem, "parts" | "customName"> {
+  const parts = array(raw.ModularParts)
+    .flatMap((part) => lotusPath(part) ?? [])
+    .slice(0, 8);
+  if (!parts.length) return {};
+  // Pets store "Name|suffix"; the part before the bar is what the game shows.
+  const customName = toNonEmptyString(raw.ItemName, 120)?.split("|")[0].trim();
+  return { parts, ...(customName ? { customName } : {}) };
+}
+
+function sameParts(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {
+  if (!a?.length || !b?.length || a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((part) => set.has(part));
+}
+
 function readItem(
   index: InventoryIndex,
   kind: LevelCapSlotKind,
@@ -162,7 +180,7 @@ function readItem(
       // Unranked mods are referenced by path instead of by owned-copy id.
       return [{ slot, ...(resolved ?? { type: lotusPath(ref), rank: null }) }];
     });
-  const item: LevelCapItem = { kind, type, config, upgrades };
+  const item: LevelCapItem = { kind, type, config, upgrades, ...modularIdentity(raw) };
   const name = toNonEmptyString(source?.Name, 120);
   if (name) item.configName = name;
   if (kind === "suit") {
@@ -325,6 +343,58 @@ const CATEGORIES_BY_KIND: Record<LevelCapSlotKind, readonly string[]> = {
   companion: COMPANION_CATEGORIES,
 };
 
+function ownedCopies(inventory: Json, kind: LevelCapSlotKind, type?: string): Json[] {
+  return CATEGORIES_BY_KIND[kind].flatMap((category) =>
+    array(inventory[category]).flatMap((entry) => {
+      const raw = asRecord(entry);
+      return raw && (!type || lotusPath(raw.ItemType) === type) ? [raw] : [];
+    }),
+  );
+}
+
+/** Every owned zaw, kitgun or MOA that fits the slot, each on its first modded
+ *  config, so the picker can offer them by the names the player gave them. */
+export function ownedModularItems(payload: unknown, kind: LevelCapSlotKind): LevelCapItem[] {
+  const inventory = inventoryRecord(payload);
+  if (!inventory) return [];
+  const index = indexInventory(inventory);
+  return ownedCopies(inventory, kind).flatMap((raw) => {
+    if (!modularIdentity(raw).parts) return [];
+    const configs = array(raw.Configs).flatMap((_, n) => readItem(index, kind, raw, n) ?? []);
+    const item = configs.find((c) => c.upgrades.length) ?? readItem(index, kind, raw, 0);
+    return item ? [item] : [];
+  });
+}
+
+/** Name and parts for a modular item saved before builds kept them: the owned copy
+ *  with a config holding exactly these mods. Null unless exactly one copy fits. */
+export function findModularIdentity(
+  payload: unknown,
+  item: LevelCapItem,
+): Pick<LevelCapItem, "parts" | "customName"> | null {
+  const inventory = inventoryRecord(payload);
+  if (!inventory) return null;
+  const index = indexInventory(inventory);
+  const wanted = item.upgrades
+    .map((u) => u.type ?? "?")
+    .sort()
+    .join(",");
+  const fits = ownedCopies(inventory, item.kind, item.type).filter(
+    (raw) =>
+      modularIdentity(raw).parts &&
+      array(raw.Configs).some((_, n) => {
+        const config = readItem(index, item.kind, raw, n);
+        return (
+          config?.upgrades
+            .map((u) => u.type ?? "?")
+            .sort()
+            .join(",") === wanted
+        );
+      }),
+  );
+  return fits.length === 1 ? modularIdentity(fits[0]) : null;
+}
+
 /** Every mod config (A, B, C...) of an owned item, as the build editor offers them.
  * With several copies of one item, the copy carrying the most mods wins. Empty when
  * the item is not owned. */
@@ -332,16 +402,15 @@ export function snapshotItemConfigs(
   payload: unknown,
   kind: LevelCapSlotKind,
   type: string,
+  parts?: readonly string[],
 ): LevelCapItem[] {
   const inventory = inventoryRecord(payload);
   if (!inventory) return [];
   const index = indexInventory(inventory);
-  const copies = CATEGORIES_BY_KIND[kind].flatMap((category) =>
-    array(inventory[category]).flatMap((entry) => {
-      const raw = asRecord(entry);
-      return raw && lotusPath(raw.ItemType) === type ? [raw] : [];
-    }),
-  );
+  const all = ownedCopies(inventory, kind, type);
+  // A zaw's configs must come from that zaw, not whichever build has the most mods.
+  const matched = all.filter((raw) => sameParts(modularIdentity(raw).parts, parts));
+  const copies = matched.length ? matched : all;
   const configsOf = (raw: Json) =>
     array(raw.Configs).flatMap((_, config) => readItem(index, kind, raw, config) ?? []);
   const slotted = (items: LevelCapItem[]) =>
