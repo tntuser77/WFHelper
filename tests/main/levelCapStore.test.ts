@@ -89,16 +89,75 @@ describe("levelCapStore", () => {
     expect(b.id).toBe(`${a.id}-2`);
   });
 
-  it("cleans tags and notes on the way in", async () => {
+  it("cleans build tags and run notes on the way in", async () => {
     const store = await freshStore();
-    const { id } = store.addRun(run());
-    store.setRunTags(id, ["melee", " Melee ", "caster", 7]);
+    const { id, buildId } = store.addRun(run({ build: BUILD }));
+    store.updateBuild(buildId!, { tags: ["melee", " Melee ", "caster", 7] as string[] });
     store.setRunNotes(id, "  comfy\u0007 run  ");
-    const saved = store.getRuns()[0];
-    expect(saved.tags).toEqual(["melee", "caster"]);
-    expect(saved.notes).toBe("comfy run");
-    store.setRunTags(id, []);
-    expect(store.getRuns()[0].tags).toBeUndefined();
+    expect(store.getBuilds()[0].tags).toEqual(["melee", "caster"]);
+    expect(store.getRuns()[0].notes).toBe("comfy run");
+    store.updateBuild(buildId!, { tags: [] });
+    expect(store.getBuilds()[0].tags).toBeUndefined();
+  });
+
+  it("files a new run under the frame's build with the same loadout", async () => {
+    const store = await freshStore();
+    const first = store.addRun(run({ build: BUILD }));
+    const second = store.addRun(run({ build: structuredClone(BUILD) }));
+    const other = store.addRun(run({ build: { ...BUILD, focus: "madurai" } }));
+    expect(second.buildId).toBe(first.buildId);
+    expect(other.buildId).not.toBe(first.buildId);
+    expect(store.getBuilds().map((b) => b.name)).toEqual(["Build A", "Build B"]);
+  });
+
+  it("editing a build rewrites every run that uses it", async () => {
+    const store = await freshStore();
+    const a = store.addRun(run({ build: BUILD }));
+    const b = store.addRun(run({ build: BUILD }));
+    const caster: LevelCapBuild = { ...BUILD, focus: "zenurik" };
+    store.updateBuild(a.buildId!, { name: "Caster", build: caster });
+    const runs = store.getRuns();
+    expect(runs.map((r) => r.build?.focus)).toEqual(["zenurik", "zenurik"]);
+    expect(runs.map((r) => r.buildId)).toEqual([a.buildId, b.buildId]);
+    expect(store.getBuilds()[0].name).toBe("Caster");
+  });
+
+  it("migrates a version 1 index into named builds and keeps a copy of it", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const other: LevelCapBuild = { ...BUILD, focus: "madurai" };
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        schemaVersion: 1,
+        runs: [
+          { ...run({ build: BUILD, tags: ["caster"], completedAt: 1 }), id: "a" },
+          { ...run({ build: BUILD, tags: ["comfy"], completedAt: 2 }), id: "b" },
+          { ...run({ build: other, buildUnverified: true, tags: ["?"], completedAt: 3 }), id: "c" },
+        ],
+      }),
+    );
+    const store = await freshStore();
+    const builds = store.getBuilds();
+    expect(builds.map((b) => [b.name, b.tags])).toEqual([
+      ["Build A", ["caster", "comfy"]],
+      // A guessed loadout gets a build but keeps its tags until it is confirmed.
+      ["Build B", undefined],
+    ]);
+    const byId = new Map(store.getRuns().map((r) => [r.id, r]));
+    expect(byId.get("a")?.tags).toBeUndefined();
+    expect(byId.get("c")).toMatchObject({ buildId: builds[1].id, buildUnverified: true });
+    expect(byId.get("c")?.tags).toEqual(["?"]);
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(2);
+    const legacy = JSON.parse(fs.readFileSync(file.replace(".json", ".v1.json"), "utf8"));
+    expect(legacy.schemaVersion).toBe(1);
+  });
+
+  it("deleting a build sends its runs back to needing one", async () => {
+    const store = await freshStore();
+    const a = store.addRun(run({ build: BUILD }));
+    expect(store.deleteBuild(a.buildId!)).toBe(true);
+    expect(store.getRuns()[0]).toMatchObject({ build: BUILD, buildUnverified: true });
+    expect(store.getRuns()[0].buildId).toBeUndefined();
   });
 
   it("numbers screenshots after the highest in an existing frame folder", async () => {
@@ -132,14 +191,17 @@ describe("levelCapStore", () => {
     expect(runs[0].build).toEqual(BUILD);
   });
 
-  it("applying a build clears the unverified flag", async () => {
+  it("assigning a build confirms the run and moves its tags onto the build", async () => {
     const store = await freshStore();
-    const a = store.addRun(run({ buildUnverified: true }));
+    const a = store.addRun(run({ buildUnverified: true, tags: ["caster"] }));
     const b = store.addRun(run({ buildUnverified: true }));
-    store.applyBuild([a.id], BUILD, "Dante");
+    const target = store.createBuild("Dante", BUILD, "Caster");
+    store.assignBuild([a.id], target.id);
     const byId = new Map(store.getRuns().map((r) => [r.id, r]));
+    expect(byId.get(a.id)).toMatchObject({ buildId: target.id, frameType: BUILD.suit!.type });
     expect(byId.get(a.id)?.buildUnverified).toBeUndefined();
-    expect(byId.get(a.id)?.frameType).toBe(BUILD.suit!.type);
+    expect(byId.get(a.id)?.tags).toBeUndefined();
+    expect(store.getBuilds()[0].tags).toEqual(["caster"]);
     expect(byId.get(b.id)?.buildUnverified).toBe(true);
   });
 

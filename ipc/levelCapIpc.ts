@@ -9,6 +9,7 @@ import { asRunId } from "./runTrackerIpc";
 import * as itemDb from "../services/itemDatabase";
 import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
+import { levelCapCatalog } from "../services/levelCapCatalog";
 import {
   ownedSuitTypes,
   snapshotBuildForFrame,
@@ -19,7 +20,10 @@ import { withScope } from "../services/logger";
 import { loadRegionTranslation } from "../services/regionNames";
 import { fallbackNameFromUniqueName } from "../config/shared/displayName";
 import {
-  LEVEL_CAP_APPLY_BUILD,
+  LEVEL_CAP_ASSIGN_BUILD,
+  LEVEL_CAP_CATALOG,
+  LEVEL_CAP_CREATE_BUILD,
+  LEVEL_CAP_DELETE_BUILD,
   LEVEL_CAP_DELETE_RUN,
   LEVEL_CAP_GET,
   LEVEL_CAP_HOTKEY,
@@ -28,13 +32,14 @@ import {
   LEVEL_CAP_PICK_FOLDER,
   LEVEL_CAP_SET_ARCHGUN,
   LEVEL_CAP_SET_NOTES,
-  LEVEL_CAP_SET_TAGS,
   LEVEL_CAP_THUMBNAIL,
+  LEVEL_CAP_UPDATE_BUILD,
   LEVEL_CAP_UPDATED,
   LEVEL_CAP_UPDATE_SETTINGS,
 } from "../config/shared/ipcChannels";
 import type {
   LevelCapBuild,
+  LevelCapBuildPatch,
   LevelCapPayload,
   LevelCapSettings,
 } from "../config/shared/levelCapTypes";
@@ -81,13 +86,41 @@ function abilityNameMap(): Map<string, string> {
 
 function payload(): LevelCapPayload {
   const runs = store.getRuns();
+  const builds = store.getBuilds();
   const abilityNames: Record<string, string> = {};
-  for (const run of runs) {
-    const ability = run.build?.suit?.helminth?.ability;
+  for (const build of [...runs.map((r) => r.build), ...builds.map((b) => b.build)]) {
+    const ability = build?.suit?.helminth?.ability;
     const name = ability && abilityNameMap().get(ability);
     if (ability && name) abilityNames[ability] = name;
   }
-  return { runs, settings: store.getSettings(), status: tracker.getStatus(), abilityNames };
+  return {
+    runs,
+    builds,
+    settings: store.getSettings(),
+    status: tracker.getStatus(),
+    abilityNames,
+  };
+}
+
+function asBuildId(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 && value.length <= 64 ? value : null;
+}
+
+/** The loadout equipped right now, when it is a variant of `frame` (Dante or Dante Prime). */
+function equippedBuildFor(frame: string): LevelCapBuild | null {
+  const build = snapshotEquippedBuild(ctx.currentInventoryData);
+  const type = build?.suit?.type;
+  return build && type && tracker.frameGroup(frameName(type)) === frame ? build : null;
+}
+
+function isBuildPatch(raw: unknown): raw is LevelCapBuildPatch & { fromEquipped?: boolean } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const value = raw as Record<string, unknown>;
+  return (
+    (value.name === undefined || typeof value.name === "string") &&
+    (value.tags === undefined || Array.isArray(value.tags)) &&
+    (value.fromEquipped === undefined || typeof value.fromEquipped === "boolean")
+  );
 }
 
 function pushUpdate(): void {
@@ -155,15 +188,6 @@ function register(): void {
   handleAuthorized(LEVEL_CAP_GET, assertMainRendererSender, () => payload());
 
   handleAuthorized(
-    LEVEL_CAP_SET_TAGS,
-    assertMainRendererSender,
-    (_e, id: unknown, tags: unknown) => {
-      const runId = asRunId(id);
-      return runId ? store.setRunTags(runId, tags) : null;
-    },
-  );
-
-  handleAuthorized(
     LEVEL_CAP_SET_NOTES,
     assertMainRendererSender,
     (_e, id: unknown, notes: unknown) => {
@@ -182,24 +206,66 @@ function register(): void {
     },
   );
 
-  // Source is another run's id, or "equipped" for the loadout on right now.
+  // Starts from the loadout equipped now or a copy of another build; null when
+  // the equipped frame is not this one.
   handleAuthorized(
-    LEVEL_CAP_APPLY_BUILD,
+    LEVEL_CAP_CREATE_BUILD,
     assertMainRendererSender,
-    (_e, ids: unknown, source: unknown) => {
-      if (!Array.isArray(ids) || ids.length > 5000) return payload();
-      const targets = ids.flatMap((id) => asRunId(id) ?? []);
-      const sourceId = asRunId(source);
-      const build: LevelCapBuild | null =
-        source === "equipped"
-          ? snapshotEquippedBuild(ctx.currentInventoryData)
-          : (store.getRuns().find((run) => run.id === sourceId)?.build ?? null);
-      if (build && targets.length) {
-        const type = build.suit?.type;
-        store.applyBuild(targets, build, type ? tracker.frameGroup(frameName(type)) : null);
+    (_e, frame: unknown, source: unknown, name: unknown) => {
+      const out = { payload: payload(), buildId: null as string | null };
+      if (typeof frame !== "string" || !source || typeof source !== "object") return out;
+      const from = source as { kind?: unknown; id?: unknown };
+      const build =
+        from.kind === "equipped"
+          ? equippedBuildFor(frame)
+          : (store.getBuilds().find((b) => b.id === asBuildId(from.id))?.build ?? null);
+      if (!build) return out;
+      const record = store.createBuild(frame, build, typeof name === "string" ? name : undefined);
+      return { payload: payload(), buildId: record.id };
+    },
+  );
+
+  handleAuthorized(
+    LEVEL_CAP_UPDATE_BUILD,
+    assertMainRendererSender,
+    (_e, id: unknown, patch: unknown) => {
+      const buildId = asBuildId(id);
+      const record = store.getBuilds().find((b) => b.id === buildId);
+      if (!record || !isBuildPatch(patch)) return { payload: payload(), ok: false };
+      const { fromEquipped, ...rest } = patch;
+      const next: LevelCapBuildPatch = { ...rest };
+      if (fromEquipped) {
+        const equipped = equippedBuildFor(record.frame);
+        if (!equipped) return { payload: payload(), ok: false };
+        next.build = equipped;
       }
+      store.updateBuild(record.id, next);
+      return { payload: payload(), ok: true };
+    },
+  );
+
+  handleAuthorized(LEVEL_CAP_DELETE_BUILD, assertMainRendererSender, (_e, id: unknown) => {
+    const buildId = asBuildId(id);
+    if (buildId) store.deleteBuild(buildId);
+    return payload();
+  });
+
+  handleAuthorized(
+    LEVEL_CAP_ASSIGN_BUILD,
+    assertMainRendererSender,
+    (_e, ids: unknown, id: unknown) => {
+      const buildId = asBuildId(id);
+      if (!Array.isArray(ids) || ids.length > 5000 || !buildId) return payload();
+      store.assignBuild(
+        ids.flatMap((runId) => asRunId(runId) ?? []),
+        buildId,
+      );
       return payload();
     },
+  );
+
+  handleAuthorized(LEVEL_CAP_CATALOG, assertMainRendererSender, () =>
+    levelCapCatalog(ctx.currentInventoryData, store.getBuilds(), store.getRuns()),
   );
 
   handleAuthorized(LEVEL_CAP_DELETE_RUN, assertMainRendererSender, (_e, id: unknown) => {

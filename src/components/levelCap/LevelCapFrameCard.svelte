@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fallbackNameFromUniqueName } from "../../../config/shared/displayName.js";
-  import type { LevelCapRun } from "../../types/ipc.js";
+  import type { LevelCapNamedBuild, LevelCapRun } from "../../types/ipc.js";
   import { itemDb } from "../../stores/data.js";
   import { itemLabel } from "../../lib/itemLabel.js";
   import { tr as t, type MessageKey } from "../../lib/i18n.js";
@@ -10,8 +10,17 @@
     type LevelCapFrameRow,
   } from "../../lib/levelCap.js";
 
-  let { row, runs, onOpen }: { row: LevelCapFrameRow; runs: LevelCapRun[]; onOpen: () => void } =
-    $props();
+  let {
+    row,
+    runs,
+    builds,
+    onOpen,
+  }: {
+    row: LevelCapFrameRow;
+    runs: LevelCapRun[];
+    builds: LevelCapNamedBuild[];
+    onOpen: () => void;
+  } = $props();
 
   const SLOT_KEYS: Record<string, MessageKey> = {
     primary: "profile.primaryWeapon",
@@ -21,7 +30,7 @@
   };
 
   const gear = $derived(levelCapGearUse(runs));
-  const tags = $derived(levelCapTagSuggestions(runs).slice(0, 3));
+  const tags = $derived(levelCapTagSuggestions(builds).slice(0, 3));
 
   function nameOf(type: string): string {
     return itemLabel($itemDb[type]) || fallbackNameFromUniqueName(type);

@@ -1,5 +1,4 @@
 import type {
-  LevelCapBuild,
   LevelCapItem,
   LevelCapSlotKind,
   LevelCapUpgrade,
@@ -64,40 +63,6 @@ export function levelCapFrames(runs: readonly LevelCapRun[]): LevelCapFrameRow[]
   return [...rows.values()].sort((a, b) => b.count - a.count || a.frame.localeCompare(b.frame));
 }
 
-function itemKey(item: LevelCapItem | null): string {
-  if (!item) return "-";
-  const upgrades = item.upgrades
-    .map((u) => `${u.slot}:${u.type ?? "?"}`)
-    .sort()
-    .join(",");
-  const helminth = item.helminth ? `h${item.helminth.index}:${item.helminth.ability}` : "";
-  const weapon = item.weapon ? `+${itemKey(item.weapon)}` : "";
-  return `${item.type}[${upgrades}]${helminth}${weapon}`;
-}
-
-/** Identity of a build for grouping; ranks and the archgun are left out because
- * they change without the build meaningfully changing. */
-export function levelCapBuildKey(build: LevelCapBuild | null): string {
-  if (!build) return "";
-  return [build.suit, build.primary, build.secondary, build.melee, build.companion]
-    .map(itemKey)
-    .concat(build.focus ?? "-")
-    .join("|");
-}
-
-/** "A", "B", ... per distinct build, lettered in the order they were first run. */
-export function levelCapBuildLabels(runs: readonly LevelCapRun[]): Map<string, string> {
-  const labels = new Map<string, string>();
-  const oldestFirst = [...runs].sort((a, b) => a.completedAt - b.completedAt);
-  for (const run of oldestFirst) {
-    const key = levelCapBuildKey(run.build);
-    if (!key || labels.has(key)) continue;
-    const n = labels.size;
-    labels.set(key, n < 26 ? String.fromCharCode(65 + n) : `#${n + 1}`);
-  }
-  return labels;
-}
-
 export function formatLevelCapDuration(sec: number | null): string {
   if (sec === null) return "";
   const h = Math.floor(sec / 3600);
@@ -109,10 +74,10 @@ export function formatLevelCapDuration(sec: number | null): string {
 }
 
 /** Every tag used so far, most used first, for autocomplete. */
-export function levelCapTagSuggestions(runs: readonly LevelCapRun[]): string[] {
+export function levelCapTagSuggestions(tagged: ReadonlyArray<{ tags?: string[] }>): string[] {
   const counts = new Map<string, { tag: string; n: number }>();
-  for (const run of runs) {
-    for (const tag of run.tags ?? []) {
+  for (const entry of tagged) {
+    for (const tag of entry.tags ?? []) {
       const key = tag.toLowerCase();
       const entry = counts.get(key) ?? { tag, n: 0 };
       entry.n++;
@@ -124,7 +89,7 @@ export function levelCapTagSuggestions(runs: readonly LevelCapRun[]): string[] {
     .map((e) => e.tag);
 }
 
-type LevelCapUpgradeRole = "mod" | "aura" | "exilus" | "stance" | "arcane";
+export type LevelCapUpgradeRole = "mod" | "aura" | "exilus" | "stance" | "arcane";
 
 // Game slot layout per item kind; everything else below slot 8 is a regular mod.
 const SPECIAL_SLOTS: Partial<Record<LevelCapSlotKind, Record<number, LevelCapUpgradeRole>>> = {
@@ -141,4 +106,57 @@ export function levelCapUpgradeRole(
   if (upgrade.type?.includes("/CosmeticEnhancers/")) return "arcane";
   if (upgrade.type?.includes("/MeleeTrees/")) return "stance";
   return SPECIAL_SLOTS[kind]?.[upgrade.slot] ?? "mod";
+}
+
+/** Mod types (the export's `type`) that fit a slot; empty means arcanes. */
+const MOD_COMPAT: Record<LevelCapSlotKind, readonly string[]> = {
+  suit: ["WARFRAME"],
+  primary: ["PRIMARY"],
+  secondary: ["SECONDARY"],
+  melee: ["MELEE"],
+  archgun: ["ARCH-GUN"],
+  companion: ["SENTINEL", "KAVAT", "KUBROW"],
+};
+
+// Slots past the eight regular mods, as the game numbers them.
+const EXTRA_SLOTS: Record<LevelCapSlotKind, readonly LevelCapUpgradeRole[]> = {
+  suit: ["aura", "exilus", "arcane", "arcane"],
+  primary: ["exilus", "arcane"],
+  secondary: ["exilus", "arcane"],
+  melee: ["stance", "exilus", "arcane"],
+  archgun: ["arcane", "arcane"],
+  companion: ["mod", "mod"],
+};
+
+interface LevelCapSlotSpec {
+  slot: number;
+  role: LevelCapUpgradeRole;
+  /** Mod types offered first; empty for arcane slots. */
+  compat: readonly string[];
+}
+
+/** Every slot an item of this kind has, plus any the saved item uses outside that layout. */
+export function levelCapSlotLayout(
+  kind: LevelCapSlotKind,
+  item: LevelCapItem | null,
+): LevelCapSlotSpec[] {
+  const roles: LevelCapUpgradeRole[] = [...Array(8).fill("mod"), ...EXTRA_SLOTS[kind]];
+  const spec = (slot: number, role: LevelCapUpgradeRole): LevelCapSlotSpec => ({
+    slot,
+    role,
+    compat:
+      role === "arcane"
+        ? []
+        : role === "aura"
+          ? ["AURA"]
+          : role === "stance"
+            ? ["STANCE"]
+            : MOD_COMPAT[kind],
+  });
+  const out = roles.map((role, slot) => spec(slot, role));
+  for (const upgrade of item?.upgrades ?? []) {
+    if (upgrade.slot >= out.length)
+      out.push(spec(upgrade.slot, levelCapUpgradeRole(kind, upgrade)));
+  }
+  return out.sort((a, b) => a.slot - b.slot);
 }

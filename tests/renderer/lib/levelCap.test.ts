@@ -5,10 +5,11 @@ import type {
   LevelCapItem,
   LevelCapRun,
 } from "../../../config/shared/levelCapTypes.js";
+import { levelCapBuildKey, nextLevelCapBuildName } from "../../../config/shared/levelCapBuild.js";
 import {
   formatLevelCapDuration,
-  levelCapBuildLabels,
   levelCapFrames,
+  levelCapSlotLayout,
   levelCapTagSuggestions,
   levelCapUpgradeRole,
 } from "../../../src/lib/levelCap.js";
@@ -70,15 +71,25 @@ describe("levelCap helpers", () => {
     ]);
   });
 
-  it("letters builds in the order they were first run, ignoring mod ranks", () => {
+  it("treats builds that differ only in mod ranks as the same build", () => {
     const reranked = { ...SUIT, upgrades: SUIT.upgrades.map((u) => ({ ...u, rank: 0 })) };
     const other = { ...SUIT, upgrades: [] };
-    const labels = levelCapBuildLabels([
-      run("new", "Dante", 30, { build: build(other) }),
-      run("old", "Dante", 10, { build: build(SUIT) }),
-      run("mid", "Dante", 20, { build: build(reranked) }),
-    ]);
-    expect([...labels.values()]).toEqual(["A", "B"]);
+    expect(levelCapBuildKey(build(reranked))).toBe(levelCapBuildKey(build(SUIT)));
+    expect(levelCapBuildKey(build(other))).not.toBe(levelCapBuildKey(build(SUIT)));
+  });
+
+  it("names a new build with the first free letter", () => {
+    expect(nextLevelCapBuildName([])).toBe("Build A");
+    expect(nextLevelCapBuildName(["Build A", "caster", "build c"])).toBe("Build B");
+  });
+
+  it("lays out a frame's mod, aura, exilus and arcane slots", () => {
+    const layout = levelCapSlotLayout("suit", SUIT);
+    expect(layout).toHaveLength(12);
+    expect(layout.slice(8).map((s) => s.role)).toEqual(["aura", "exilus", "arcane", "arcane"]);
+    expect(layout[8].compat).toEqual(["AURA"]);
+    expect(layout[0].compat).toEqual(["WARFRAME"]);
+    expect(levelCapSlotLayout("melee", null)[8].compat).toEqual(["STANCE"]);
   });
 
   it("suggests tags by how often they are used", () => {

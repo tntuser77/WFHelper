@@ -719,10 +719,6 @@ export interface IpcInvokeMap {
     args: [];
     return: LevelCapPayload;
   };
-  setLevelCapTags: {
-    args: [id: string, tags: string[]];
-    return: LevelCapRun | null;
-  };
   setLevelCapNotes: {
     args: [id: string, notes: string];
     return: LevelCapRun | null;
@@ -731,9 +727,25 @@ export interface IpcInvokeMap {
     args: [id: string, used: boolean];
     return: LevelCapRun | null;
   };
-  applyLevelCapBuild: {
-    args: [ids: string[], source: string];
+  createLevelCapBuild: {
+    args: [frame: string, source: LevelCapBuildSource, name?: string];
+    return: { payload: LevelCapPayload; buildId: string | null };
+  };
+  updateLevelCapBuild: {
+    args: [id: string, patch: LevelCapBuildPatch & { fromEquipped?: boolean }];
+    return: { payload: LevelCapPayload; ok: boolean };
+  };
+  deleteLevelCapBuild: {
+    args: [id: string];
     return: LevelCapPayload;
+  };
+  assignLevelCapBuild: {
+    args: [runIds: string[], buildId: string];
+    return: LevelCapPayload;
+  };
+  getLevelCapCatalog: {
+    args: [];
+    return: LevelCapCatalog;
   };
   deleteLevelCapRun: {
     args: [id: string];
@@ -912,13 +924,17 @@ import type {
 export type { PtRunRecord };
 
 import type {
+  LevelCapBuildPatch,
+  LevelCapBuildSource,
+  LevelCapCatalog,
   LevelCapHotkeyOutcome,
   LevelCapImportResult,
+  LevelCapNamedBuild,
   LevelCapPayload,
   LevelCapRun,
   LevelCapSettings,
 } from "../../config/shared/levelCapTypes.js";
-export type { LevelCapPayload, LevelCapRun, LevelCapSettings };
+export type { LevelCapCatalog, LevelCapNamedBuild, LevelCapPayload, LevelCapRun, LevelCapSettings };
 
 type WfmTradeMatchEvent = TradeMatchPayload;
 

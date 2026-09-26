@@ -1,7 +1,13 @@
 import { writable } from "svelte/store";
 
 import { invoke, on } from "../lib/ipc.js";
-import type { LevelCapPayload, LevelCapRun, LevelCapSettings } from "../types/ipc.js";
+import type { LevelCapBuildPatch, LevelCapBuildSource } from "../../config/shared/levelCapTypes.js";
+import type {
+  LevelCapCatalog,
+  LevelCapPayload,
+  LevelCapRun,
+  LevelCapSettings,
+} from "../types/ipc.js";
 
 export const levelCap = writable<LevelCapPayload | null>(null);
 
@@ -21,10 +27,6 @@ export function subscribeLevelCap(): () => void {
   return on("level-cap-updated", (payload) => levelCap.set(payload));
 }
 
-export async function setLevelCapTags(id: string, tags: string[]): Promise<void> {
-  patchRun(await invoke("setLevelCapTags", id, tags));
-}
-
 export async function setLevelCapNotes(id: string, notes: string): Promise<void> {
   patchRun(await invoke("setLevelCapNotes", id, notes));
 }
@@ -33,9 +35,44 @@ export async function setLevelCapArchgun(id: string, used: boolean): Promise<voi
   patchRun(await invoke("setLevelCapArchgun", id, used));
 }
 
-/** `source` is a run id, or "equipped" for the loadout on right now. */
-export async function applyLevelCapBuild(ids: string[], source: string): Promise<void> {
-  levelCap.set(await invoke("applyLevelCapBuild", ids, source));
+/** Resolves to the new build's id, or null when the equipped frame is a different one. */
+export async function createLevelCapBuild(
+  frame: string,
+  source: LevelCapBuildSource,
+  name?: string,
+): Promise<string | null> {
+  const { payload, buildId } = await invoke("createLevelCapBuild", frame, source, name);
+  levelCap.set(payload);
+  return buildId;
+}
+
+/** False when the build is gone or, for `fromEquipped`, another frame is equipped. */
+export async function updateLevelCapBuild(
+  id: string,
+  patch: LevelCapBuildPatch & { fromEquipped?: boolean },
+): Promise<boolean> {
+  const { payload, ok } = await invoke("updateLevelCapBuild", id, patch);
+  levelCap.set(payload);
+  return ok;
+}
+
+export async function deleteLevelCapBuild(id: string): Promise<void> {
+  levelCap.set(await invoke("deleteLevelCapBuild", id));
+}
+
+export async function assignLevelCapBuild(runIds: string[], buildId: string): Promise<void> {
+  levelCap.set(await invoke("assignLevelCapBuild", runIds, buildId));
+}
+
+let _catalog: Promise<LevelCapCatalog> | null = null;
+
+/** Fetched once per session; the shard list only grows when a new shard is socketed. */
+export function loadLevelCapCatalog(): Promise<LevelCapCatalog> {
+  _catalog ??= invoke("getLevelCapCatalog").catch((err: unknown) => {
+    _catalog = null;
+    throw err;
+  });
+  return _catalog;
 }
 
 export async function deleteLevelCapRun(id: string): Promise<void> {

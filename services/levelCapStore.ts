@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
@@ -7,9 +8,16 @@ import { writeFileAtomicSync } from "./atomicFile";
 import { normalizeRunNotes, normalizeRunTags } from "./runAnnotations";
 import { withScope } from "./logger";
 import { normalizeErrorMessage } from "../config/shared/errors";
+import {
+  levelCapBuildKey,
+  nextLevelCapBuildName,
+  normalizeLevelCapBuild,
+} from "../config/shared/levelCapBuild";
 import type {
   LevelCapBuild,
+  LevelCapBuildPatch,
   LevelCapImportResult,
+  LevelCapNamedBuild,
   LevelCapRun,
   LevelCapSettings,
 } from "../config/shared/levelCapTypes";
@@ -17,12 +25,15 @@ import type {
 const log = withScope("levelCapStore");
 
 const INDEX_FILE = "level-cap-runs.json";
-const INDEX_SCHEMA_VERSION = 1;
+// 2: builds are named records runs point at; 1 kept a loose copy per run.
+const INDEX_SCHEMA_VERSION = 2;
+const MAX_BUILD_NAME = 48;
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp"]);
 /** Folders the old sorter script left beside the frame folders. */
 const IGNORED_DIRS = new Set(["__pycache__", "__init__"]);
 
 let _runs: LevelCapRun[] = [];
+let _builds: LevelCapNamedBuild[] = [];
 let _settings: LevelCapSettings | null = null;
 let _loaded = false;
 
@@ -69,14 +80,79 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
     squadSize: typeof run.squadSize === "number" ? run.squadSize : null,
     tile: run.tile ?? null,
     archgunUsed: run.archgunUsed === true,
-    build: run.build ?? null,
+    build: normalizeLevelCapBuild(run.build),
     screenshot: typeof run.screenshot === "string" ? run.screenshot : null,
   };
   delete out.tags;
   delete out.notes;
+  delete out.buildId;
   if (tags.length) out.tags = tags;
   if (notes) out.notes = notes;
+  if (typeof run.buildId === "string" && run.buildId) out.buildId = run.buildId;
   return out;
+}
+
+function buildName(raw: unknown): string | null {
+  return typeof raw === "string" && raw.trim() ? raw.trim().slice(0, MAX_BUILD_NAME) : null;
+}
+
+function normalizeNamedBuild(raw: unknown): LevelCapNamedBuild | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Partial<Record<keyof LevelCapNamedBuild, unknown>>;
+  const build = normalizeLevelCapBuild(value.build);
+  const name = buildName(value.name);
+  if (typeof value.id !== "string" || !value.id || typeof value.frame !== "string") return null;
+  if (!build || !name) return null;
+  const tags = normalizeRunTags(value.tags);
+  return { id: value.id, frame: value.frame, name, ...(tags.length ? { tags } : {}), build };
+}
+
+function newBuild(frame: string, build: LevelCapBuild, name?: string): LevelCapNamedBuild {
+  const taken = _builds.filter((b) => b.frame === frame).map((b) => b.name);
+  const record: LevelCapNamedBuild = {
+    id: randomUUID(),
+    frame,
+    name: buildName(name) ?? nextLevelCapBuildName(taken),
+    build: structuredClone(build),
+  };
+  _builds.push(record);
+  return record;
+}
+
+function stamp(run: LevelCapRun, record: LevelCapNamedBuild): void {
+  run.buildId = record.id;
+  run.build = structuredClone(record.build);
+  run.frame = record.frame;
+  if (record.build.suit) run.frameType = record.build.suit.type;
+}
+
+/** Points a run at the frame's build matching its loadout, making one when none
+ * does. The unverified flag stays: a guessed loadout is still a guess. */
+function linkByLoadout(run: LevelCapRun): void {
+  if (!run.build) return;
+  const key = levelCapBuildKey(run.build);
+  const record =
+    _builds.find((b) => b.frame === run.frame && levelCapBuildKey(b.build) === key) ??
+    newBuild(run.frame, run.build);
+  stamp(run, record);
+}
+
+/** Run tags move to the build a checked run belongs to. */
+function moveTagsToBuild(run: LevelCapRun, record: LevelCapNamedBuild): void {
+  if (!run.tags?.length) return;
+  const tags = normalizeRunTags([...(record.tags ?? []), ...run.tags]);
+  if (tags.length) record.tags = tags;
+  delete run.tags;
+}
+
+/** Version 1 indexes: group each frame's identical loadouts into one named build. */
+function migrateLooseBuilds(): void {
+  const oldestFirst = [..._runs].sort((a, b) => a.completedAt - b.completedAt);
+  for (const run of oldestFirst) {
+    linkByLoadout(run);
+    const record = _builds.find((b) => b.id === run.buildId);
+    if (record && !run.buildUnverified) moveTagsToBuild(run, record);
+  }
 }
 
 function ensureLoaded(): void {
@@ -84,23 +160,41 @@ function ensureLoaded(): void {
   _loaded = true;
   try {
     const parsed = JSON.parse(fs.readFileSync(userDataPath(INDEX_FILE), "utf8")) as {
+      schemaVersion?: unknown;
       runs?: unknown;
+      builds?: unknown;
       settings?: unknown;
     };
     _runs = Array.isArray(parsed.runs) ? parsed.runs.flatMap((raw) => normalizeRun(raw) ?? []) : [];
+    _builds = Array.isArray(parsed.builds)
+      ? parsed.builds.flatMap((raw) => normalizeNamedBuild(raw) ?? [])
+      : [];
     _settings = normalizeSettings(parsed.settings);
+    const version = typeof parsed.schemaVersion === "number" ? parsed.schemaVersion : 1;
+    if (version < 2) {
+      // Keep the pre-migration index untouched in case the grouping is ever wrong.
+      const legacy = userDataPath(`level-cap-runs.v${version}.json`);
+      if (!fs.existsSync(legacy)) fs.copyFileSync(userDataPath(INDEX_FILE), legacy);
+      migrateLooseBuilds();
+      save();
+      log.info(`[LevelCap] grouped ${_runs.length} runs into ${_builds.length} named builds`);
+    }
+    // A build deleted by hand leaves its runs unassigned, never pointing nowhere.
+    const known = new Set(_builds.map((b) => b.id));
+    for (const run of _runs) if (run.buildId && !known.has(run.buildId)) delete run.buildId;
   } catch (err) {
     if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
       log.warn("[LevelCap] index unreadable, starting empty:", normalizeErrorMessage(err));
     }
     _runs = [];
+    _builds = [];
     _settings = defaultSettings();
   }
 }
 
 function serialize(): string {
   return JSON.stringify(
-    { schemaVersion: INDEX_SCHEMA_VERSION, settings: _settings, runs: _runs },
+    { schemaVersion: INDEX_SCHEMA_VERSION, settings: _settings, builds: _builds, runs: _runs },
     null,
     1,
   );
@@ -203,9 +297,15 @@ export function updateSettings(patch: Partial<LevelCapSettings>): LevelCapSettin
   return _settings;
 }
 
+export function getBuilds(): LevelCapNamedBuild[] {
+  ensureLoaded();
+  return _builds;
+}
+
 export function addRun(run: Omit<LevelCapRun, "id">): LevelCapRun {
   ensureLoaded();
   const record: LevelCapRun = { ...run, id: uniqueId(run.completedAt) };
+  linkByLoadout(record);
   _runs.push(record);
   sortRuns();
   save();
@@ -222,11 +322,11 @@ export function updateRun(id: string, mutate: (run: LevelCapRun) => void): Level
   return run;
 }
 
-export function setRunTags(id: string, tags: unknown): LevelCapRun | null {
+/** The run's loadout changed under it (the tracker corrected the frame); find its build again. */
+export function relinkRun(id: string): LevelCapRun | null {
   return updateRun(id, (run) => {
-    const clean = normalizeRunTags(tags);
-    if (clean.length) run.tags = clean;
-    else delete run.tags;
+    delete run.buildId;
+    linkByLoadout(run);
   });
 }
 
@@ -238,20 +338,64 @@ export function setRunNotes(id: string, notes: unknown): LevelCapRun | null {
   });
 }
 
-/** Stamp one build onto several runs and mark them checked. */
-export function applyBuild(
-  ids: readonly string[],
+export function createBuild(
+  frame: string,
   build: LevelCapBuild,
-  frame: string | null,
-): LevelCapRun[] {
+  name?: string,
+): LevelCapNamedBuild {
   ensureLoaded();
+  const record = newBuild(frame, build, name);
+  save();
+  return record;
+}
+
+/** Renames, retags or rebuilds one build; a new loadout rewrites every run that uses it. */
+export function updateBuild(id: string, patch: LevelCapBuildPatch): LevelCapNamedBuild | null {
+  ensureLoaded();
+  const record = _builds.find((b) => b.id === id);
+  if (!record) return null;
+  const name = buildName(patch.name);
+  if (name) record.name = name;
+  if (patch.tags !== undefined) {
+    const tags = normalizeRunTags(patch.tags);
+    if (tags.length) record.tags = tags;
+    else delete record.tags;
+  }
+  const build = patch.build === undefined ? null : normalizeLevelCapBuild(patch.build);
+  if (build) {
+    record.build = build;
+    for (const run of _runs) if (run.buildId === id) stamp(run, record);
+  }
+  save();
+  return record;
+}
+
+/** The runs keep their last copy of the loadout and go back to needing a build. */
+export function deleteBuild(id: string): boolean {
+  ensureLoaded();
+  const before = _builds.length;
+  _builds = _builds.filter((b) => b.id !== id);
+  if (_builds.length === before) return false;
+  for (const run of _runs) {
+    if (run.buildId !== id) continue;
+    delete run.buildId;
+    run.buildUnverified = true;
+  }
+  save();
+  return true;
+}
+
+/** Puts runs on a build and marks them checked; this is also how a guess is confirmed. */
+export function assignBuild(ids: readonly string[], buildId: string): LevelCapRun[] {
+  ensureLoaded();
+  const record = _builds.find((b) => b.id === buildId);
+  if (!record) return [];
   const wanted = new Set(ids);
   const changed = _runs.filter((run) => wanted.has(run.id));
   for (const run of changed) {
-    run.build = structuredClone(build);
-    if (build.suit) run.frameType = build.suit.type;
-    if (frame) run.frame = frame;
+    stamp(run, record);
     delete run.buildUnverified;
+    moveTagsToBuild(run, record);
   }
   if (changed.length) save();
   return changed;
@@ -358,6 +502,7 @@ export function importScreenshotFolders(resolver: ImportResolver): LevelCapImpor
         buildUnverified: true,
         screenshot: file,
       });
+      linkByLoadout(_runs[_runs.length - 1]);
       imported++;
     }
   }
@@ -370,6 +515,7 @@ export function importScreenshotFolders(resolver: ImportResolver): LevelCapImpor
 
 export function __resetLevelCapStoreForTest(): void {
   _runs = [];
+  _builds = [];
   _settings = null;
   _loaded = false;
 }

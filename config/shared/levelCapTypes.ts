@@ -72,15 +72,58 @@ export interface LevelCapRun {
   tile: LevelCapTile | null;
   /** The archgun got kills this run, so it belongs in the build. */
   archgunUsed: boolean;
+  /** Copy of the named build's loadout, kept in step with it by the store. */
   build: LevelCapBuild | null;
+  /** Named build the run was played with; editing that build rewrites `build`. */
+  buildId?: string;
   /** Build was guessed (imported run) and still needs a manual pass. */
   buildUnverified?: true;
   /** Absolute screenshot path; null when the run was logged without one. */
   screenshot: string | null;
+  /** Only on runs without a named build; assigning one moves these onto the build. */
   tags?: string[];
   notes?: string;
 }
 
+/** A frame's loadout under a name, shared by every run played with it. */
+export interface LevelCapNamedBuild {
+  id: string;
+  /** Frame group, the same key runs use, e.g. "Dante". */
+  frame: string;
+  name: string;
+  tags?: string[];
+  build: LevelCapBuild;
+}
+
+export interface LevelCapBuildPatch {
+  name?: string;
+  tags?: string[];
+  build?: LevelCapBuild;
+}
+
+/** Where a new build starts from: the loadout equipped now, or a copy of another build. */
+export type LevelCapBuildSource = { kind: "equipped" } | { kind: "build"; id: string };
+
+interface LevelCapCatalogEntry {
+  type: string;
+  name: string;
+}
+
+/** Choices for the build editor's pickers, from the game's public export. */
+export interface LevelCapCatalog {
+  suits: LevelCapCatalogEntry[];
+  primary: LevelCapCatalogEntry[];
+  secondary: LevelCapCatalogEntry[];
+  melee: LevelCapCatalogEntry[];
+  archgun: LevelCapCatalogEntry[];
+  companion: LevelCapCatalogEntry[];
+  /** `compat` is the export's mod type, e.g. "WARFRAME", "AURA", "STANCE". */
+  mods: Array<LevelCapCatalogEntry & { compat: string; maxRank: number }>;
+  arcanes: Array<LevelCapCatalogEntry & { maxRank: number }>;
+  abilities: LevelCapCatalogEntry[];
+  /** Shard effects seen in the inventory or saved builds; the export does not list them. */
+  shards: Array<{ color: string; type: string }>;
+}
 export interface LevelCapSettings {
   /** Electron accelerator for "finish run"; empty disables the hotkey. */
   hotkey: string;
@@ -102,6 +145,7 @@ export interface LevelCapStatus {
 
 export interface LevelCapPayload {
   runs: LevelCapRun[];
+  builds: LevelCapNamedBuild[];
   settings: LevelCapSettings;
   status: LevelCapStatus;
   /** English names of the Helminth abilities the runs use, keyed by ability path. */

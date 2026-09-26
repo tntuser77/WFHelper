@@ -32,14 +32,21 @@
   const visibleFrames = $derived(
     frames.filter((row) => row.frame.toLowerCase().includes(frameSearch.trim().toLowerCase())),
   );
+  const builds = $derived($levelCap?.builds ?? []);
   const runsByFrame = $derived.by(() => {
     const byFrame: Record<string, typeof runs> = {};
     for (const run of runs) (byFrame[run.frame] ??= []).push(run);
     return byFrame;
   });
+  const buildsByFrame = $derived.by(() => {
+    const byFrame: Record<string, typeof builds> = {};
+    for (const build of builds) (byFrame[build.frame] ??= []).push(build);
+    return byFrame;
+  });
   // The frame vanishes from the list when its last run is deleted; close with it.
   const openRow = $derived(frames.find((row) => row.frame === openFrame) ?? null);
-  const tagSuggestions = $derived(levelCapTagSuggestions(runs));
+  // Runs still carry tags until they are put on a build, so offer those too.
+  const tagSuggestions = $derived(levelCapTagSuggestions([...builds, ...runs]));
 
   async function runImport(): Promise<void> {
     importing = true;
@@ -114,6 +121,7 @@
       <LevelCapFrameCard
         {row}
         runs={runsByFrame[row.frame] ?? []}
+        builds={buildsByFrame[row.frame] ?? []}
         onOpen={() => (openFrame = row.frame)}
       />
     {/each}
@@ -124,6 +132,7 @@
   <LevelCapFrameModal
     row={openRow}
     runs={runsByFrame[openRow.frame] ?? []}
+    builds={buildsByFrame[openRow.frame] ?? []}
     {tagSuggestions}
     {abilityNames}
     onClose={() => (openFrame = null)}

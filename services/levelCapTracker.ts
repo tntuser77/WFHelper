@@ -75,6 +75,7 @@ function finishMission(mission: LevelCapMission): void {
   const playedType = suitId ? suitTypeForId(deps.getInventory(), suitId) : null;
 
   if (runId) {
+    let frameCorrected = false;
     store.updateRun(runId, (run) => {
       run.exolizers = mission.exolizers ?? run.exolizers;
       run.rounds = mission.rounds ?? run.rounds ?? null;
@@ -88,8 +89,10 @@ function finishMission(mission: LevelCapMission): void {
         run.frameType = playedType;
         run.frame = frameGroup(deps.frameName(playedType));
         run.build = snapshotBuildForFrame(deps.getInventory(), playedType) ?? run.build;
+        frameCorrected = true;
       }
     });
+    if (frameCorrected) store.relinkRun(runId);
     deps.onChanged();
     return;
   }

@@ -208,10 +208,13 @@ export const PT_SHOW_LOG_IN_FOLDER = "pt:show-log-in-folder";
 export const PT_RUN_SAVED = "pt-run-saved";
 
 export const LEVEL_CAP_GET = "level-cap:get";
-export const LEVEL_CAP_SET_TAGS = "level-cap:set-tags";
 export const LEVEL_CAP_SET_NOTES = "level-cap:set-notes";
 export const LEVEL_CAP_SET_ARCHGUN = "level-cap:set-archgun";
-export const LEVEL_CAP_APPLY_BUILD = "level-cap:apply-build";
+export const LEVEL_CAP_CREATE_BUILD = "level-cap:create-build";
+export const LEVEL_CAP_UPDATE_BUILD = "level-cap:update-build";
+export const LEVEL_CAP_DELETE_BUILD = "level-cap:delete-build";
+export const LEVEL_CAP_ASSIGN_BUILD = "level-cap:assign-build";
+export const LEVEL_CAP_CATALOG = "level-cap:catalog";
 export const LEVEL_CAP_DELETE_RUN = "level-cap:delete-run";
 export const LEVEL_CAP_IMPORT_FOLDERS = "level-cap:import-folders";
 export const LEVEL_CAP_UPDATE_SETTINGS = "level-cap:update-settings";

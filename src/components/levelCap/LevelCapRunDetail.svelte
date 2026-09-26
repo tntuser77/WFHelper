@@ -10,23 +10,15 @@
     deleteLevelCapRun,
     setLevelCapArchgun,
     setLevelCapNotes,
-    setLevelCapTags,
   } from "../../stores/levelCap.js";
   import ThemedButton from "../ThemedButton.svelte";
   import LevelCapItemCard from "./LevelCapItemCard.svelte";
 
-  let {
-    run,
-    tagSuggestions = [],
-    abilityNames = {},
-  }: {
-    run: LevelCapRun;
-    tagSuggestions?: string[];
-    abilityNames?: Record<string, string>;
-  } = $props();
+  let { run, abilityNames = {} }: { run: LevelCapRun; abilityNames?: Record<string, string> } =
+    $props();
 
-  const tags = $derived(run.tags ?? []);
-  const datalistId = $derived(`level-cap-tags-${run.id}`);
+  // Tags live on builds; a run only keeps its own until it is put on one.
+  const legacyTags = $derived(run.tags ?? []);
   const items = $derived.by(() => {
     const build = run.build;
     if (!build) return [];
@@ -59,7 +51,6 @@
     };
   });
 
-  let tagDraft = $state("");
   let notesDraft = $state(untrack(() => run.notes ?? ""));
   let notesTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -86,29 +77,6 @@
   }
 
   onDestroy(flushNotes);
-
-  async function addTag(): Promise<void> {
-    const value = tagDraft.trim();
-    if (!value) return;
-    tagDraft = "";
-    // Reuse the spelling already in use so "melee" and "Melee" stay one tag.
-    const known = tagSuggestions.find((tag) => tag.toLowerCase() === value.toLowerCase());
-    await setLevelCapTags(run.id, [...tags, known ?? value]);
-  }
-
-  async function removeTag(tag: string): Promise<void> {
-    await setLevelCapTags(
-      run.id,
-      tags.filter((entry) => entry !== tag),
-    );
-  }
-
-  function onTagKeydown(e: KeyboardEvent): void {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      void addTag();
-    }
-  }
 
   async function onDelete(): Promise<void> {
     if (!(await confirmWithDialog($t("levelCap.confirmDelete"), $t))) return;
@@ -143,40 +111,19 @@
     </div>
 
     <div class="flex flex-col gap-3">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs font-semibold uppercase tracking-wide text-text-muted"
-          >{$t("common.tags")}</span
-        >
-        {#each tags as tag (tag)}
-          <span
-            class="inline-flex items-center gap-1 rounded border border-info/40 bg-info/10 px-2 py-0.5 text-xs font-semibold text-info"
+      {#if legacyTags.length}
+        <div class="flex flex-wrap items-center gap-2" title={$t("levelCap.legacyTagsHint")}>
+          <span class="text-xs font-semibold uppercase tracking-wide text-text-muted"
+            >{$t("common.tags")}</span
           >
-            {tag}
-            <button
-              type="button"
-              class="cursor-pointer leading-none text-info/70 hover:text-info"
-              title={$t("arbi.tags.remove")}
-              aria-label={$t("arbi.tags.remove")}
-              onclick={() => removeTag(tag)}>×</button
+          {#each legacyTags as tag (tag)}
+            <span
+              class="rounded border border-info/40 bg-info/10 px-2 py-0.5 text-xs font-semibold text-info"
+              >{tag}</span
             >
-          </span>
-        {/each}
-        <input
-          class="w-40 rounded border border-border bg-bg-raised px-2 py-0.5 text-xs text-text-primary outline-none focus:border-info"
-          type="text"
-          maxlength="32"
-          list={datalistId}
-          placeholder={$t("arbi.tags.add")}
-          bind:value={tagDraft}
-          onkeydown={onTagKeydown}
-          onblur={addTag}
-        />
-        <datalist id={datalistId}>
-          {#each tagSuggestions.filter((tag) => !tags.includes(tag)) as tag (tag)}
-            <option value={tag}></option>
           {/each}
-        </datalist>
-      </div>
+        </div>
+      {/if}
 
       <label class="flex flex-col gap-1">
         <span class="text-xs font-semibold uppercase tracking-wide text-text-muted"
