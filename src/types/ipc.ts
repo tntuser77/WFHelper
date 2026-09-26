@@ -747,6 +747,10 @@ export interface IpcInvokeMap {
     args: [];
     return: LevelCapCatalog;
   };
+  getLevelCapItemConfigs: {
+    args: [kind: LevelCapSlotKind, type: string];
+    return: LevelCapItem[];
+  };
   deleteLevelCapRun: {
     args: [id: string];
     return: LevelCapPayload;
@@ -929,10 +933,12 @@ import type {
   LevelCapCatalog,
   LevelCapHotkeyOutcome,
   LevelCapImportResult,
+  LevelCapItem,
   LevelCapNamedBuild,
   LevelCapPayload,
   LevelCapRun,
   LevelCapSettings,
+  LevelCapSlotKind,
 } from "../../config/shared/levelCapTypes.js";
 export type { LevelCapCatalog, LevelCapNamedBuild, LevelCapPayload, LevelCapRun, LevelCapSettings };
 

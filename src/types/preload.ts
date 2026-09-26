@@ -311,6 +311,10 @@ export interface PreloadAPI {
     buildId: IpcInvokeMap["assignLevelCapBuild"]["args"][1],
   ) => Promise<IpcInvokeMap["assignLevelCapBuild"]["return"]>;
   getLevelCapCatalog: () => Promise<IpcInvokeMap["getLevelCapCatalog"]["return"]>;
+  getLevelCapItemConfigs: (
+    kind: IpcInvokeMap["getLevelCapItemConfigs"]["args"][0],
+    type: IpcInvokeMap["getLevelCapItemConfigs"]["args"][1],
+  ) => Promise<IpcInvokeMap["getLevelCapItemConfigs"]["return"]>;
   deleteLevelCapRun: (
     id: IpcInvokeMap["deleteLevelCapRun"]["args"][0],
   ) => Promise<IpcInvokeMap["deleteLevelCapRun"]["return"]>;

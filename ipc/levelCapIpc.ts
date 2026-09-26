@@ -6,14 +6,17 @@ import ctx from "./context";
 import { broadcastToRenderers } from "./popoutIpc";
 import { registerTransientHotkey, unregisterTransientHotkey } from "./hotkeyRegistry";
 import { asRunId } from "./runTrackerIpc";
+import { addInventoryListener } from "./inventoryIpc";
 import * as itemDb from "../services/itemDatabase";
 import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
 import { levelCapCatalog } from "../services/levelCapCatalog";
 import {
   ownedSuitTypes,
+  rivensByWeapon,
   snapshotBuildForFrame,
   snapshotEquippedBuild,
+  snapshotItemConfigs,
 } from "../services/levelCapBuild";
 import { captureScreenFast } from "../services/screenCapture";
 import { withScope } from "../services/logger";
@@ -27,6 +30,7 @@ import {
   LEVEL_CAP_DELETE_RUN,
   LEVEL_CAP_GET,
   LEVEL_CAP_HOTKEY,
+  LEVEL_CAP_ITEM_CONFIGS,
   LEVEL_CAP_IMPORT_FOLDERS,
   LEVEL_CAP_OPEN_SCREENSHOT,
   LEVEL_CAP_PICK_FOLDER,
@@ -41,7 +45,9 @@ import type {
   LevelCapBuild,
   LevelCapBuildPatch,
   LevelCapPayload,
+  LevelCapRiven,
   LevelCapSettings,
+  LevelCapSlotKind,
 } from "../config/shared/levelCapTypes";
 
 const log = withScope("levelCapIpc");
@@ -101,6 +107,31 @@ function payload(): LevelCapPayload {
     abilityNames,
   };
 }
+
+/** Fills riven stats the saved builds lack from this inventory. A weapon only gets
+ * stats when a single owned riven fits it; with two there is no telling which was used. */
+function backfillRivens(inventory: unknown): boolean {
+  if (!inventory) return false;
+  let byWeapon: Map<string, LevelCapRiven[]> | null = null;
+  return store.backfillRivens((type) => {
+    // Decoding every riven is only worth it once a build turns out to need one.
+    byWeapon ??= rivensByWeapon(inventory);
+    const name = frameName(type).toLowerCase();
+    const fits = [...byWeapon].flatMap(([weapon, rivens]) =>
+      name === weapon || name.startsWith(`${weapon} `) || name.endsWith(` ${weapon}`) ? rivens : [],
+    );
+    return fits.length === 1 ? fits[0] : null;
+  });
+}
+
+const SLOT_KINDS = new Set<LevelCapSlotKind>([
+  "suit",
+  "primary",
+  "secondary",
+  "melee",
+  "archgun",
+  "companion",
+]);
 
 function asBuildId(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 && value.length <= 64 ? value : null;
@@ -185,7 +216,13 @@ function register(): void {
   });
   bindHotkey();
 
-  handleAuthorized(LEVEL_CAP_GET, assertMainRendererSender, () => payload());
+  handleAuthorized(LEVEL_CAP_GET, assertMainRendererSender, () => {
+    backfillRivens(ctx.currentInventoryData);
+    return payload();
+  });
+  addInventoryListener((inventory) => {
+    if (backfillRivens(inventory)) pushUpdate();
+  });
 
   handleAuthorized(
     LEVEL_CAP_SET_NOTES,
@@ -264,8 +301,16 @@ function register(): void {
     },
   );
 
-  handleAuthorized(LEVEL_CAP_CATALOG, assertMainRendererSender, () =>
-    levelCapCatalog(ctx.currentInventoryData, store.getBuilds(), store.getRuns()),
+  handleAuthorized(LEVEL_CAP_CATALOG, assertMainRendererSender, () => levelCapCatalog());
+
+  handleAuthorized(
+    LEVEL_CAP_ITEM_CONFIGS,
+    assertMainRendererSender,
+    (_e, kind: unknown, type: unknown) => {
+      if (typeof kind !== "string" || !SLOT_KINDS.has(kind as LevelCapSlotKind)) return [];
+      if (typeof type !== "string" || type.length > 512) return [];
+      return snapshotItemConfigs(ctx.currentInventoryData, kind as LevelCapSlotKind, type);
+    },
   );
 
   handleAuthorized(LEVEL_CAP_DELETE_RUN, assertMainRendererSender, (_e, id: unknown) => {

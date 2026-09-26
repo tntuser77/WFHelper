@@ -1,5 +1,7 @@
 <script lang="ts">
   import { fallbackNameFromUniqueName } from "../../../config/shared/displayName.js";
+  import { ARCHON_SHARD_EFFECTS } from "../../../config/shared/archonShardCatalog.js";
+  import { isLevelCapRivenType } from "../../../config/shared/levelCapBuild.js";
   import type {
     LevelCapCatalog,
     LevelCapItem,
@@ -8,12 +10,16 @@
   import { itemDb } from "../../stores/data.js";
   import { itemLabel } from "../../lib/itemLabel.js";
   import { tr as t, type MessageKey } from "../../lib/i18n.js";
-  import { levelCapSlotLayout, type LevelCapUpgradeRole } from "../../lib/levelCap.js";
+  import { levelCapSlotLayout } from "../../lib/levelCap.js";
   import {
     archonShardColorKey,
+    archonShardIconUrl,
     archonShardUpgradeLabel,
     parseArchonShardSlot,
   } from "../../lib/inventory/archonShards.js";
+  import { log } from "../../lib/log.js";
+  import { loadLevelCapItemConfigs } from "../../stores/levelCap.js";
+  import LevelCapModGrid from "./LevelCapModGrid.svelte";
   import LevelCapPicker from "./LevelCapPicker.svelte";
 
   let {
@@ -24,6 +30,7 @@
     itemOptions,
     abilityNames = {},
     removable = true,
+    open = false,
     onChange,
   }: {
     kind: LevelCapSlotKind;
@@ -34,42 +41,54 @@
     itemOptions: LevelCapCatalog["suits"];
     abilityNames?: Record<string, string>;
     removable?: boolean;
+    open?: boolean;
     onChange: (item: LevelCapItem | null) => void;
   } = $props();
 
-  const ROLE_KEYS: Record<LevelCapUpgradeRole, MessageKey> = {
-    mod: "levelCap.role.mod",
-    aura: "levelCap.role.aura",
-    exilus: "levelCap.role.exilus",
-    stance: "levelCap.role.stance",
-    arcane: "levelCap.role.arcane",
-  };
-  // Socket colours as the inventory writes them; _MYTHIC is tauforged.
-  const SHARD_COLORS = [
-    "ACC_RED",
-    "ACC_YELLOW",
-    "ACC_BLUE",
-    "ACC_GREEN",
-    "ACC_ORANGE",
-    "ACC_PURPLE",
-  ].flatMap((acc) => [acc, `${acc}_MYTHIC`]);
   const SHARD_SOCKETS = 5;
+  const TAUFORGED = ARCHON_SHARD_EFFECTS.filter((e) => e.color.endsWith("_MYTHIC"));
 
-  /** "item", "helminth", or the upgrade slot number being picked. */
-  let picking = $state<"item" | "helminth" | number | null>(null);
-  /** Ability slot chosen before the Helminth ability itself is picked. */
-  let helminthIndex = $state(3);
+  // svelte-ignore state_referenced_locally
+  let expanded = $state(open);
+  /** "item", "helminth", a mod slot number, or `shard:N` for a socket. */
+  let picking = $state<string | number | null>(null);
+  /** The owned item's configs from the inventory, keyed to the type they were read for. */
+  let configs = $state<{ type: string; list: LevelCapItem[] } | null>(null);
 
-  const layout = $derived(levelCapSlotLayout(kind, item));
+  $effect(() => {
+    const type = item?.type;
+    if (!type || configs?.type === type) return;
+    let live = true;
+    loadLevelCapItemConfigs(kind, type)
+      .then((list) => {
+        if (live) configs = { type, list };
+      })
+      .catch((err) => log.warn("[LevelCap] item configs failed", String(err)));
+    return () => {
+      live = false;
+    };
+  });
+
+  const ownedConfigs = $derived(configs && configs.type === item?.type ? configs.list : []);
+
+  const layout = $derived(item ? levelCapSlotLayout(kind, item) : []);
   const upgradeInfo = $derived(
     new Map([...catalog.mods, ...catalog.arcanes].map((entry) => [entry.type, entry])),
   );
-  const abilityName = (type: string) =>
-    abilityNames[type] ??
-    catalog.abilities.find((a) => a.type === type)?.name ??
-    fallbackNameFromUniqueName(type);
+  const pickedSlot = $derived(typeof picking === "number" ? picking : null);
+  const pickedSpec = $derived(layout.find((s) => s.slot === pickedSlot) ?? null);
+  const pickedUpgrade = $derived(
+    pickedSlot === null ? null : (item?.upgrades.find((u) => u.slot === pickedSlot) ?? null),
+  );
+  const filled = $derived(item?.upgrades.filter((u) => u.type).length ?? 0);
+  const shardOptions = $derived(
+    TAUFORGED.map((e) => ({
+      type: `${e.color}|${e.type}`,
+      name: `${e.effect} · ${shardColor(e.color)}`,
+    })),
+  );
 
-  function nameOf(type: string | null): string {
+  function nameOf(type: string | null | undefined): string {
     if (!type) return "?";
     return (
       itemLabel($itemDb[type]) ||
@@ -79,20 +98,54 @@
     );
   }
 
-  function shardLabel(color: string): string {
+  function abilityName(type: string): string {
+    return (
+      abilityNames[type] ??
+      catalog.abilities.find((a) => a.type === type)?.name ??
+      fallbackNameFromUniqueName(type)
+    );
+  }
+
+  function shardColor(color: string): string {
     const parsed = parseArchonShardSlot({ Color: color, UpgradeType: "x" }, 0);
-    if (!parsed.color) return color;
-    const name = $t(archonShardColorKey(parsed.color));
-    return parsed.tauforged ? `${name} (${$t("archon.tauforged")})` : name;
+    return parsed.color ? $t(archonShardColorKey(parsed.color)) : color;
   }
 
-  function upgradeAt(slot: number) {
-    return item?.upgrades.find((u) => u.slot === slot) ?? null;
+  function shardEffect(type: string): string {
+    return (
+      ARCHON_SHARD_EFFECTS.find((e) => e.type === type)?.effect ?? archonShardUpgradeLabel(type)
+    );
   }
 
-  function pickItem(type: string): void {
+  function toggle(key: string | number): void {
+    picking = picking === key ? null : key;
+  }
+
+  /** A new item arrives modded the way it is in the inventory, never with the old item's mods. */
+  async function pickItem(type: string): Promise<void> {
     picking = null;
-    onChange(item ? { ...item, type } : { kind, type, config: 0, upgrades: [] });
+    expanded = true;
+    let list: LevelCapItem[] = [];
+    try {
+      list = await loadLevelCapItemConfigs(kind, type);
+    } catch (err) {
+      log.warn("[LevelCap] item configs failed", String(err));
+    }
+    configs = { type, list };
+    const modded = list.find((c) => c.upgrades.length) ?? list[0];
+    onChange(modded ? structuredClone(modded) : { kind, type, config: 0, upgrades: [] });
+  }
+
+  function loadConfig(config: LevelCapItem): void {
+    picking = null;
+    // A companion's weapon is not part of its mod config, so it stays.
+    const next = $state.snapshot(config);
+    if (item?.weapon) next.weapon = $state.snapshot(item.weapon);
+    onChange(next);
+  }
+
+  function configLabel(config: LevelCapItem): string {
+    return config.configName || String.fromCharCode(65 + config.config);
   }
 
   function setUpgrade(slot: number, type: string | null, rank: number | null = null): void {
@@ -104,35 +157,42 @@
 
   function pickUpgrade(slot: number, type: string): void {
     picking = null;
+    // Nearly everything runs at max rank; the slot panel can lower it.
     setUpgrade(slot, type, upgradeInfo.get(type)?.maxRank ?? null);
   }
 
   function setRank(slot: number, value: string): void {
-    const upgrade = upgradeAt(slot);
-    if (!upgrade) return;
+    const upgrade = item?.upgrades.find((u) => u.slot === slot);
+    if (!upgrade || !item) return;
     const max = upgradeInfo.get(upgrade.type ?? "")?.maxRank ?? 30;
     const rank = Math.max(0, Math.min(max, Math.round(Number(value) || 0)));
-    setUpgrade(slot, upgrade.type, rank);
+    onChange({
+      ...item,
+      upgrades: item.upgrades.map((u) => (u.slot === slot ? { ...u, rank } : u)),
+    });
   }
 
-  function setHelminth(ability: string | null, index: number | null): void {
+  function setHelminth(ability: string | null, index: number): void {
     if (!item) return;
     const next = { ...item };
-    if (ability && index !== null) next.helminth = { ability, index };
+    if (ability) next.helminth = { ability, index };
     else delete next.helminth;
     onChange(next);
   }
 
-  function setShard(socket: number, color: string, type: string): void {
+  function setShard(socket: number, value: string | null): void {
     if (!item) return;
-    const shards = Array.from(
-      { length: SHARD_SOCKETS },
-      (_, i) => item.shards?.[i] ?? { color: "", type: "" },
-    );
-    shards[socket] = { color, type };
-    const filled = shards.filter((s) => s.type);
+    picking = null;
+    const shards = [...(item.shards ?? [])];
+    if (value) {
+      const [color, type] = value.split("|");
+      if (socket < shards.length) shards[socket] = { color, type };
+      else shards.push({ color, type });
+    } else {
+      shards.splice(socket, 1);
+    }
     const next = { ...item };
-    if (filled.length) next.shards = filled;
+    if (shards.length) next.shards = shards;
     else delete next.shards;
     onChange(next);
   }
@@ -144,191 +204,248 @@
 </script>
 
 <div
-  class="flex flex-col gap-2 rounded-[var(--radius-md)] border border-border/60 bg-bg-raised/40 p-3"
+  class="flex flex-col rounded-[var(--radius-md)] border border-border/60 bg-bg-raised/40"
   data-level-cap-slot={kind}
 >
-  <div class="flex items-center gap-2">
-    {#if item && $itemDb[item.type]?.imageUrl}
-      <img src={$itemDb[item.type].imageUrl ?? ""} alt="" class="h-8 w-8 shrink-0 object-contain" />
-    {/if}
-    <div class="flex min-w-0 flex-col">
-      <span class="text-[10px] uppercase tracking-wide text-text-muted">{$t(label)}</span>
-      <span class="truncate text-sm font-semibold text-text-primary"
-        >{item ? nameOf(item.type) : $t("common.none")}</span
-      >
-    </div>
-    <div class="ml-auto flex items-center gap-1">
-      <button
-        type="button"
-        class="cursor-pointer rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary hover:border-info hover:text-info"
-        onclick={() => (picking = picking === "item" ? null : "item")}>{$t("common.change")}</button
-      >
-      {#if item && removable}
-        <button
-          type="button"
-          class="cursor-pointer rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary hover:border-danger hover:text-danger"
-          onclick={() => onChange(null)}>{$t("levelCap.editor.removeItem")}</button
+  <div class="flex items-center gap-3 p-3">
+    <button
+      type="button"
+      class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+      aria-expanded={expanded}
+      onclick={() => {
+        expanded = !expanded;
+        picking = null;
+      }}
+    >
+      <span class="flex h-10 w-10 shrink-0 items-center justify-center">
+        {#if item && $itemDb[item.type]?.imageUrl}
+          <img src={$itemDb[item.type].imageUrl ?? ""} alt="" class="h-10 w-10 object-contain" />
+        {/if}
+      </span>
+      <span class="flex min-w-0 flex-col">
+        <span class="text-[10px] uppercase tracking-wide text-text-muted">{$t(label)}</span>
+        <span class="truncate text-base font-semibold text-text-primary"
+          >{item ? nameOf(item.type) : $t("common.none")}</span
+        >
+      </span>
+      {#if item}
+        <span class="ml-2 text-xs text-text-muted"
+          >{$t("levelCap.editor.filled", { count: String(filled) })}</span
         >
       {/if}
-    </div>
+      <span class="ml-auto text-text-muted">{expanded ? "▾" : "▸"}</span>
+    </button>
+    {#if item && ownedConfigs.length}
+      <div
+        class="flex max-w-[45%] flex-wrap items-center justify-end gap-1"
+        title={$t("levelCap.editor.configsHint")}
+        data-level-cap-configs
+      >
+        {#each ownedConfigs as config (config.config)}
+          <button
+            type="button"
+            class="max-w-32 cursor-pointer truncate rounded border px-1.5 py-0.5 text-[11px] {config.config ===
+            item.config
+              ? 'border-accent bg-accent/15 text-accent'
+              : 'border-border text-text-secondary hover:border-info hover:text-info'}"
+            onclick={() => loadConfig(config)}>{configLabel(config)}</button
+          >
+        {/each}
+      </div>
+    {/if}
+    <button
+      type="button"
+      class="cursor-pointer rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary hover:border-info hover:text-info"
+      onclick={() => toggle("item")}>{$t("common.change")}</button
+    >
+    {#if item && removable}
+      <button
+        type="button"
+        class="cursor-pointer rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary hover:border-danger hover:text-danger"
+        onclick={() => onChange(null)}>{$t("levelCap.editor.removeItem")}</button
+      >
+    {/if}
   </div>
 
   {#if picking === "item"}
-    <LevelCapPicker
-      options={itemOptions}
-      placeholder={$t("levelCap.editor.searchItem")}
-      onPick={pickItem}
-      onCancel={() => (picking = null)}
-    />
+    <div class="px-3 pb-3">
+      <LevelCapPicker
+        options={itemOptions}
+        placeholder={$t("levelCap.editor.searchItem")}
+        onPick={pickItem}
+        onCancel={() => (picking = null)}
+      />
+    </div>
   {/if}
 
-  {#if item}
-    <ul class="m-0 grid list-none grid-cols-1 gap-1 p-0 sm:grid-cols-2">
-      {#each layout as spec (spec.slot)}
-        {@const upgrade = upgradeAt(spec.slot)}
-        <li class="flex min-w-0 flex-col gap-1 {picking === spec.slot ? 'sm:col-span-2' : ''}">
-          <div class="flex min-w-0 items-center gap-1.5 text-xs">
-            <span
-              class="w-12 shrink-0 text-[10px] uppercase tracking-wide {spec.role === 'mod'
-                ? 'text-text-muted'
-                : 'text-accent'}">{$t(ROLE_KEYS[spec.role])}</span
+  {#if item && expanded}
+    <div class="flex flex-col gap-3 border-t border-border/50 p-3">
+      <LevelCapModGrid
+        {kind}
+        {item}
+        {catalog}
+        selected={pickedSlot}
+        onSelect={(slot) => toggle(slot)}
+      />
+
+      {#if pickedSpec}
+        <div class="flex flex-col gap-2 rounded-[var(--radius-md)] border border-info/40 p-2">
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <span class="font-semibold text-text-primary"
+              >{pickedUpgrade?.type
+                ? nameOf(pickedUpgrade.type)
+                : $t("levelCap.editor.empty")}</span
             >
-            <button
-              type="button"
-              class="min-w-0 flex-1 cursor-pointer truncate rounded border px-1.5 py-0.5 text-left {upgrade?.type
-                ? 'border-border/60 text-text-primary hover:border-info'
-                : 'border-dashed border-border/60 text-text-muted hover:border-info'}"
-              onclick={() => (picking = picking === spec.slot ? null : spec.slot)}
-              >{upgrade?.type ? nameOf(upgrade.type) : $t("levelCap.editor.empty")}</button
-            >
-            {#if upgrade?.type}
-              <input
-                class="w-10 shrink-0 rounded border border-border bg-bg-raised px-1 py-0.5 text-center font-mono text-xs text-text-primary"
-                type="number"
-                min="0"
-                max={upgradeInfo.get(upgrade.type)?.maxRank ?? 30}
-                title={$t("common.rank")}
-                value={upgrade.rank ?? ""}
-                onchange={(e) => setRank(spec.slot, e.currentTarget.value)}
-              />
+            {#if pickedUpgrade?.type && !isLevelCapRivenType(pickedUpgrade.type)}
+              <label class="flex items-center gap-1 text-text-muted">
+                {$t("common.rank")}
+                <input
+                  class="w-12 rounded border border-border bg-bg-raised px-1 py-0.5 text-center font-mono text-xs text-text-primary"
+                  type="number"
+                  min="0"
+                  max={upgradeInfo.get(pickedUpgrade.type)?.maxRank ?? 30}
+                  value={pickedUpgrade.rank ?? ""}
+                  onchange={(e) => setRank(pickedSpec.slot, e.currentTarget.value)}
+                />
+              </label>
+            {/if}
+            {#if pickedUpgrade?.type}
               <button
                 type="button"
-                class="shrink-0 cursor-pointer px-1 text-text-muted hover:text-danger"
-                aria-label={$t("levelCap.editor.clearSlot")}
-                title={$t("levelCap.editor.clearSlot")}
-                onclick={() => setUpgrade(spec.slot, null)}>×</button
+                class="ml-auto cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:border-danger hover:text-danger"
+                onclick={() => {
+                  setUpgrade(pickedSpec.slot, null);
+                  picking = null;
+                }}>{$t("levelCap.editor.clearSlot")}</button
               >
             {/if}
           </div>
-          {#if picking === spec.slot}
-            <LevelCapPicker
-              options={modOptions(spec.compat)}
-              fallback={spec.compat.length ? catalog.mods : []}
-              placeholder={$t(
-                spec.role === "arcane"
-                  ? "levelCap.editor.searchArcane"
-                  : "levelCap.editor.searchMod",
-              )}
-              onPick={(type) => pickUpgrade(spec.slot, type)}
-              onCancel={() => (picking = null)}
-            />
+          {#if isLevelCapRivenType(pickedUpgrade?.type ?? null)}
+            <span class="text-[11px] text-text-muted">{$t("levelCap.editor.rivenHint")}</span>
           {/if}
-        </li>
-      {/each}
-    </ul>
-
-    {#if kind === "suit"}
-      <div class="flex flex-wrap items-center gap-2 text-xs">
-        <span class="text-[10px] uppercase tracking-wide text-accent"
-          >{$t("levelCap.build.helminth")}</span
-        >
-        <select
-          class="rounded border border-border bg-bg-raised px-1.5 py-0.5 text-xs text-text-primary"
-          value={item.helminth ? String(item.helminth.index) : ""}
-          onchange={(e) => {
-            const value = e.currentTarget.value;
-            if (!value) setHelminth(null, null);
-            else if (item.helminth) setHelminth(item.helminth.ability, Number(value));
-            else {
-              helminthIndex = Number(value);
-              picking = "helminth";
-            }
-          }}
-        >
-          <option value="">{$t("common.none")}</option>
-          {#each [0, 1, 2, 3] as index (index)}
-            <option value={String(index)}
-              >{$t("levelCap.editor.replaces", { n: String(index + 1) })}</option
-            >
-          {/each}
-        </select>
-        <button
-          type="button"
-          class="min-w-0 cursor-pointer truncate rounded border border-dashed border-border/60 px-1.5 py-0.5 text-left text-text-primary hover:border-info"
-          onclick={() => (picking = picking === "helminth" ? null : "helminth")}
-          >{item.helminth
-            ? abilityName(item.helminth.ability)
-            : $t("levelCap.editor.pickAbility")}</button
-        >
-      </div>
-      {#if picking === "helminth"}
-        <LevelCapPicker
-          options={catalog.abilities}
-          placeholder={$t("levelCap.editor.searchAbility")}
-          onPick={(type) => {
-            picking = null;
-            setHelminth(type, item.helminth?.index ?? helminthIndex);
-          }}
-          onCancel={() => (picking = null)}
-        />
+          <LevelCapPicker
+            options={modOptions(pickedSpec.compat)}
+            fallback={pickedSpec.compat.length ? catalog.mods : []}
+            placeholder={$t(
+              pickedSpec.role === "arcane"
+                ? "levelCap.editor.searchArcane"
+                : "levelCap.editor.searchMod",
+            )}
+            onPick={(type) => pickUpgrade(pickedSpec.slot, type)}
+            onCancel={() => (picking = null)}
+          />
+        </div>
       {/if}
 
-      <div class="flex flex-col gap-1 text-xs">
-        <span class="text-[10px] uppercase tracking-wide text-accent"
-          >{$t("levelCap.editor.shards")}</span
-        >
-        {#each Array.from({ length: SHARD_SOCKETS }, (_, i) => i) as socket (socket)}
-          {@const shard = item.shards?.[socket] ?? null}
-          {@const effects = catalog.shards.filter((s) => s.color === shard?.color)}
-          <div class="flex items-center gap-1.5">
-            <select
-              class="w-40 rounded border border-border bg-bg-raised px-1.5 py-0.5 text-xs text-text-primary"
-              value={shard?.color ?? ""}
-              onchange={(e) => {
-                const color = e.currentTarget.value;
-                const first = catalog.shards.find((s) => s.color === color)?.type ?? "";
-                setShard(socket, color, color ? first : "");
-              }}
-            >
-              <option value="">{$t("levelCap.editor.emptySocket")}</option>
-              {#each SHARD_COLORS as color (color)}
-                <option value={color}>{shardLabel(color)}</option>
+      {#if kind === "suit"}
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="w-20 text-[10px] font-semibold uppercase tracking-wide text-accent"
+            >{$t("levelCap.build.helminth")}</span
+          >
+          <button
+            type="button"
+            class="min-w-40 cursor-pointer rounded-[var(--radius-md)] border px-2 py-1 text-left text-sm {item.helminth
+              ? 'border-accent/50 text-text-primary'
+              : 'border-dashed border-border text-text-muted'} hover:border-info"
+            onclick={() => toggle("helminth")}
+            data-level-cap-helminth
+            >{item.helminth
+              ? abilityName(item.helminth.ability)
+              : $t("levelCap.editor.pickAbility")}</button
+          >
+          {#if item.helminth}
+            {@const current = item.helminth}
+            <span class="text-text-muted">{$t("levelCap.editor.replacing")}</span>
+            <div class="flex overflow-hidden rounded border border-border">
+              {#each [0, 1, 2, 3] as index (index)}
+                <button
+                  type="button"
+                  class="cursor-pointer px-2 py-0.5 font-mono {current.index === index
+                    ? 'bg-accent/20 text-accent'
+                    : 'text-text-secondary hover:bg-bg-raised'}"
+                  title={$t("levelCap.editor.replaces", { n: String(index + 1) })}
+                  onclick={() => setHelminth(current.ability, index)}>{index + 1}</button
+                >
               {/each}
-            </select>
-            {#if shard?.color}
-              <select
-                class="min-w-0 flex-1 rounded border border-border bg-bg-raised px-1.5 py-0.5 text-xs text-text-primary"
-                value={shard.type}
-                onchange={(e) => setShard(socket, shard.color, e.currentTarget.value)}
+            </div>
+            <button
+              type="button"
+              class="cursor-pointer px-1 text-text-muted hover:text-danger"
+              aria-label={$t("levelCap.editor.clearSlot")}
+              onclick={() => setHelminth(null, 0)}>×</button
+            >
+          {/if}
+        </div>
+        {#if picking === "helminth"}
+          <LevelCapPicker
+            options={catalog.abilities}
+            placeholder={$t("levelCap.editor.searchAbility")}
+            onPick={(type) => {
+              picking = null;
+              setHelminth(type, item.helminth?.index ?? 3);
+            }}
+            onCancel={() => (picking = null)}
+          />
+        {/if}
+
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="w-20 text-[10px] font-semibold uppercase tracking-wide text-accent"
+            >{$t("levelCap.editor.shards")}</span
+          >
+          {#each Array.from({ length: SHARD_SOCKETS }, (_, i) => i) as socket (socket)}
+            {@const shard = item.shards?.[socket] ?? null}
+            {@const parsed = shard
+              ? parseArchonShardSlot({ Color: shard.color, UpgradeType: shard.type }, socket)
+              : null}
+            {@const icon = parsed
+              ? archonShardIconUrl($itemDb, parsed.color, parsed.tauforged)
+              : null}
+            {#if shard || socket === (item.shards?.length ?? 0)}
+              <button
+                type="button"
+                class="flex max-w-56 cursor-pointer items-center gap-1.5 rounded-[var(--radius-md)] border px-2 py-1 text-left {picking ===
+                `shard:${socket}`
+                  ? 'border-info'
+                  : shard
+                    ? 'border-border'
+                    : 'border-dashed border-border text-text-muted'} hover:border-info"
+                title={shard ? shardEffect(shard.type) : undefined}
+                onclick={() => toggle(`shard:${socket}`)}
+                data-level-cap-shard={socket}
               >
-                {#if !effects.some((s) => s.type === shard.type)}
-                  <option value={shard.type}>{archonShardUpgradeLabel(shard.type) || "?"}</option>
-                {/if}
-                {#each effects as effect (effect.type)}
-                  <option value={effect.type}>{archonShardUpgradeLabel(effect.type)}</option>
-                {/each}
-              </select>
+                {#if icon}<img src={icon} alt="" class="h-5 w-5 shrink-0 object-contain" />{/if}
+                <span class="truncate"
+                  >{shard ? shardEffect(shard.type) : `+ ${$t("levelCap.editor.addShard")}`}</span
+                >
+              </button>
+            {/if}
+          {/each}
+        </div>
+        {#if typeof picking === "string" && picking.startsWith("shard:")}
+          {@const socket = Number(picking.slice(6))}
+          <div class="flex flex-col gap-1">
+            <LevelCapPicker
+              options={shardOptions}
+              placeholder={$t("levelCap.editor.searchShard")}
+              onPick={(value) => setShard(socket, value)}
+              onCancel={() => (picking = null)}
+            />
+            {#if item.shards?.[socket]}
+              <button
+                type="button"
+                class="cursor-pointer self-start text-xs text-text-muted hover:text-danger"
+                onclick={() => setShard(socket, null)}>{$t("levelCap.editor.removeShard")}</button
+              >
             {/if}
           </div>
-        {/each}
-        <span class="text-[10px] text-text-muted">{$t("levelCap.editor.shardsHint")}</span>
-      </div>
-    {/if}
+        {/if}
+      {/if}
 
-    {#if item.weapon}
-      <span class="text-xs text-text-muted"
-        >{$t("levelCap.editor.companionWeapon", { name: nameOf(item.weapon.type) })}</span
-      >
-    {/if}
+      {#if item.weapon}
+        <span class="text-xs text-text-muted"
+          >{$t("levelCap.editor.companionWeapon", { name: nameOf(item.weapon.type) })}</span
+        >
+      {/if}
+    </div>
   {/if}
 </div>

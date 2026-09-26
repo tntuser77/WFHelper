@@ -198,7 +198,7 @@
   </div>
 
   {#if catalog}
-    <div class="grid grid-cols-1 gap-2 lg:grid-cols-2">
+    <div class="flex flex-col gap-2">
       <LevelCapSlotEditor
         kind="suit"
         label="profile.warframe"
@@ -207,6 +207,7 @@
         itemOptions={suitOptions}
         {abilityNames}
         removable={false}
+        open
         onChange={(item) => setSlot("suit", item)}
       />
       {#each SLOTS as slot (slot.kind)}

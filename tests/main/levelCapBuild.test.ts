@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   ownedSuitTypes,
+  rivensByWeapon,
   snapshotBuildForFrame,
   snapshotEquippedBuild,
+  snapshotItemConfigs,
   suitTypeForId,
 } from "../../services/levelCapBuild";
 import { DANTE_SUIT_ID, levelCapInventory } from "../fixtures/levelcap/inventory";
@@ -74,6 +76,43 @@ describe("levelCapBuild", () => {
       "/Lotus/Powersuits/Pagemaster/Pagemaster",
     );
     expect(ownedSuitTypes(levelCapInventory())).toHaveLength(3);
+  });
+
+  it("freezes a slotted riven's rolled stats into the build", () => {
+    const inventory = levelCapInventory();
+    const rivenId = "f1".padStart(24, "0");
+    const roll = 0x3fffffff;
+    (inventory.Upgrades as unknown[]).push({
+      ItemId: { $oid: rivenId },
+      ItemType: "/Lotus/Upgrades/Mods/Randomized/LotusRifleRandomModRare",
+      UpgradeFingerprint: JSON.stringify({
+        compat: "/Lotus/Weapons/Tenno/Rifle/Rifle",
+        lvl: 8,
+        buffs: [{ Tag: "WeaponFireDamageMod", Value: Math.round(roll * 0.72) }],
+        curses: [{ Tag: "WeaponFireRateMod", Value: Math.round(roll * 0.3) }],
+      }),
+    });
+    const akarius = (inventory.Pistols as Array<{ Configs: Array<{ Upgrades: string[] }> }>)[0];
+    akarius.Configs[0].Upgrades.push(rivenId);
+
+    const riven = snapshotEquippedBuild(inventory)?.secondary?.upgrades.find((u) => u.riven)?.riven;
+    expect(riven?.name).toMatch(/^Braton /);
+    expect(riven?.stats.map((s) => s.positive)).toEqual([true, false]);
+    expect([...rivensByWeapon(inventory).keys()]).toEqual(["braton"]);
+  });
+
+  it("reads every mod config of an owned item for the build editor", () => {
+    const configs = snapshotItemConfigs(
+      levelCapInventory(),
+      "suit",
+      "/Lotus/Powersuits/Pagemaster/Pagemaster",
+    );
+    expect(configs.map((c) => c.config)).toEqual([0, 1]);
+    expect(configs[1].configName).toBe("Cap");
+    expect(configs[1].upgrades.length).toBeGreaterThan(configs[0].upgrades.length);
+    expect(snapshotItemConfigs(levelCapInventory(), "primary", "/Lotus/Weapons/Unowned")).toEqual(
+      [],
+    );
   });
 
   it("tolerates missing or malformed inventory", () => {

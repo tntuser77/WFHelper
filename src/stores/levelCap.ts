@@ -1,7 +1,12 @@
 import { writable } from "svelte/store";
 
 import { invoke, on } from "../lib/ipc.js";
-import type { LevelCapBuildPatch, LevelCapBuildSource } from "../../config/shared/levelCapTypes.js";
+import type {
+  LevelCapBuildPatch,
+  LevelCapBuildSource,
+  LevelCapItem,
+  LevelCapSlotKind,
+} from "../../config/shared/levelCapTypes.js";
 import type {
   LevelCapCatalog,
   LevelCapPayload,
@@ -91,4 +96,12 @@ export async function updateLevelCapSettings(patch: Partial<LevelCapSettings>): 
 
 export async function pickLevelCapFolder(kind: "screenshotDir" | "backupDir"): Promise<void> {
   levelCap.set(await invoke("pickLevelCapFolder", kind));
+}
+
+/** The owned item's mod configs (A, B, C...) from the inventory; empty when not owned. */
+export function loadLevelCapItemConfigs(
+  kind: LevelCapSlotKind,
+  type: string,
+): Promise<LevelCapItem[]> {
+  return invoke("getLevelCapItemConfigs", kind, type);
 }

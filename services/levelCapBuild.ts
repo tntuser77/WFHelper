@@ -1,10 +1,13 @@
 import { unwrapInventoryPayload } from "../config/shared/inventoryPayload";
 import { asRecord } from "../config/shared/objectValidation";
 import { toNonEmptyString } from "../config/shared/stringValidation";
+import { decodeRivenUpgrade } from "./rivenFingerprint";
+import { isLevelCapRivenType } from "../config/shared/levelCapBuild";
 import type {
   LevelCapBuild,
   LevelCapFocusSchool,
   LevelCapItem,
+  LevelCapRiven,
   LevelCapSlotKind,
   LevelCapUpgrade,
 } from "../config/shared/levelCapTypes";
@@ -64,16 +67,62 @@ function upgradeRank(fingerprint: unknown): number | null {
   }
 }
 
+function decodeRiven(type: string | null, fingerprint: unknown) {
+  if (!type || !isLevelCapRivenType(type) || typeof fingerprint !== "string") return null;
+  return decodeRivenUpgrade({ ItemType: type, UpgradeFingerprint: fingerprint });
+}
+
+/** A riven's rolled stats from its inventory entry, for freezing into the build. */
+function rivenOf(type: string | null, fingerprint: unknown): LevelCapRiven | undefined {
+  const decoded = decodeRiven(type, fingerprint);
+  if (!decoded) return undefined;
+  return {
+    // The decoder's name usually leads with the weapon already ("Akarius Ignipha").
+    name: decoded.rivenName.startsWith(decoded.weaponName)
+      ? decoded.rivenName
+      : `${decoded.weaponName} ${decoded.rivenName}`,
+    stats: decoded.stats.map((stat) => ({
+      name: stat.name,
+      value: stat.displayValue,
+      positive: stat.positive,
+      multiplier: stat.multiplier,
+    })),
+  };
+}
+
+/** Every unveiled riven in the inventory, keyed by the lower-cased weapon family it
+ * rolled for ("akarius" also covers Akarius Prime). */
+export function rivensByWeapon(payload: unknown): Map<string, LevelCapRiven[]> {
+  const inventory = asRecord(unwrapInventoryPayload(payload)) ?? {};
+  const out = new Map<string, LevelCapRiven[]>();
+  for (const entry of array(inventory.Upgrades).slice(0, 100_000)) {
+    const upgrade = asRecord(entry);
+    const type = lotusPath(upgrade?.ItemType);
+    const decoded = decodeRiven(type, upgrade?.UpgradeFingerprint);
+    const riven = rivenOf(type, upgrade?.UpgradeFingerprint);
+    if (!decoded || !riven) continue;
+    const key = decoded.weaponName.toLowerCase();
+    out.set(key, [...(out.get(key) ?? []), riven]);
+  }
+  return out;
+}
+
 /** Indexes built once per inventory so each item lookup is a map hit. */
 function indexInventory(inventory: Json) {
-  const upgrades = new Map<string, { type: string | null; rank: number | null }>();
+  const upgrades = new Map<
+    string,
+    { type: string | null; rank: number | null; riven?: LevelCapRiven }
+  >();
   for (const entry of array(inventory.Upgrades).slice(0, 100_000)) {
     const upgrade = asRecord(entry);
     const id = oid(upgrade?.ItemId);
     if (id && upgrade) {
+      const type = lotusPath(upgrade.ItemType);
+      const riven = rivenOf(type, upgrade.UpgradeFingerprint);
       upgrades.set(id, {
-        type: lotusPath(upgrade.ItemType),
+        type,
         rank: upgradeRank(upgrade.UpgradeFingerprint),
+        ...(riven ? { riven } : {}),
       });
     }
   }
@@ -266,4 +315,38 @@ export function ownedSuitTypes(payload: unknown): string[] {
     const type = lotusPath(asRecord(entry)?.ItemType);
     return type ? [type] : [];
   });
+}
+
+const CATEGORIES_BY_KIND: Record<LevelCapSlotKind, readonly string[]> = {
+  ...(Object.fromEntries(NORMAL_SLOTS.map((s) => [s.kind, [s.category]])) as Record<
+    Exclude<LevelCapSlotKind, "companion">,
+    string[]
+  >),
+  companion: COMPANION_CATEGORIES,
+};
+
+/** Every mod config (A, B, C...) of an owned item, as the build editor offers them.
+ * With several copies of one item, the copy carrying the most mods wins. Empty when
+ * the item is not owned. */
+export function snapshotItemConfigs(
+  payload: unknown,
+  kind: LevelCapSlotKind,
+  type: string,
+): LevelCapItem[] {
+  const inventory = inventoryRecord(payload);
+  if (!inventory) return [];
+  const index = indexInventory(inventory);
+  const copies = CATEGORIES_BY_KIND[kind].flatMap((category) =>
+    array(inventory[category]).flatMap((entry) => {
+      const raw = asRecord(entry);
+      return raw && lotusPath(raw.ItemType) === type ? [raw] : [];
+    }),
+  );
+  const configsOf = (raw: Json) =>
+    array(raw.Configs).flatMap((_, config) => readItem(index, kind, raw, config) ?? []);
+  const slotted = (items: LevelCapItem[]) =>
+    items.reduce((sum, item) => sum + item.upgrades.length, 0);
+  return copies
+    .map(configsOf)
+    .reduce<LevelCapItem[]>((best, next) => (slotted(next) > slotted(best) ? next : best), []);
 }

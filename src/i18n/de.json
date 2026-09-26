@@ -2612,7 +2612,6 @@
   "levelCap.confirmDelete": "Diesen Run löschen? Der Screenshot bleibt erhalten.",
   "levelCap.status.liveRound": "In einer Void-Kaskade: Runde {round}",
   "levelCap.legacyTagsHint": "Tags aus der Zeit vor den Builds. Sie wandern zum Build, sobald du diesen Run bestätigst.",
-  "levelCap.role.mod": "Mod",
   "levelCap.role.arcane": "Arkana",
   "levelCap.builds.edit": "Build bearbeiten",
   "levelCap.builds.filterHint": "Nur die Runs dieses Builds zeigen",
@@ -2648,7 +2647,14 @@
   "levelCap.editor.replaces": "Ersetzt Fähigkeit {n}",
   "levelCap.editor.pickAbility": "Fähigkeit wählen",
   "levelCap.editor.shards": "Archon-Scherben",
-  "levelCap.editor.emptySocket": "Leerer Sockel",
-  "levelCap.editor.shardsHint": "Angeboten werden die Effekte, die auf einem deiner Warframes gesockelt sind.",
-  "levelCap.editor.companionWeapon": "Begleiterwaffe: {name}"
+  "levelCap.editor.companionWeapon": "Begleiterwaffe: {name}",
+  "levelCap.editor.underRanked": "Rang {rank} von {max}",
+  "levelCap.editor.rivenUnknown": "Werte nicht erfasst",
+  "levelCap.editor.rivenHint": "Riven-Werte stammen aus deinem Inventar. \"Aus Ausrüstung übernehmen\" erfasst sie neu.",
+  "levelCap.editor.filled": "{count} belegt",
+  "levelCap.editor.replacing": "ersetzt",
+  "levelCap.editor.addShard": "Scherbe hinzufügen",
+  "levelCap.editor.searchShard": "Effekt suchen, z. B. Zaubergeschwindigkeit",
+  "levelCap.editor.removeShard": "Diese Scherbe entfernen",
+  "levelCap.editor.configsHint": "Deine Mod-Konfigurationen im Spiel für diesen Gegenstand. Klicke eine an, um ihre Mods zu laden."
 }

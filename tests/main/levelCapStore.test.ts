@@ -152,6 +152,31 @@ describe("levelCapStore", () => {
     expect(legacy.schemaVersion).toBe(1);
   });
 
+  it("fills in riven stats on builds saved before rivens were captured", async () => {
+    const store = await freshStore();
+    const RIVEN = "/Lotus/Upgrades/Mods/Randomized/LotusPistolRandomModRare";
+    const AKARIUS = "/Lotus/Weapons/Tenno/Pistols/PrimeAkarius/PrimeAkariusWeapon";
+    const withRiven: LevelCapBuild = {
+      ...BUILD,
+      secondary: {
+        kind: "secondary",
+        type: AKARIUS,
+        config: 0,
+        upgrades: [{ slot: 1, type: RIVEN, rank: 8 }],
+      },
+    };
+    store.addRun(run({ build: withRiven }));
+    const riven = {
+      name: "Akarius Critacan",
+      stats: [{ name: "Critical Chance", value: 120, positive: true, multiplier: false }],
+    };
+    expect(store.backfillRivens((type) => (type === AKARIUS ? riven : null))).toBe(true);
+    expect(store.getBuilds()[0].build.secondary?.upgrades[0].riven).toEqual(riven);
+    expect(store.getRuns()[0].build?.secondary?.upgrades[0].riven).toEqual(riven);
+    // Already filled, so a second pass changes nothing.
+    expect(store.backfillRivens(() => riven)).toBe(false);
+  });
+
   it("deleting a build sends its runs back to needing one", async () => {
     const store = await freshStore();
     const a = store.addRun(run({ build: BUILD }));

@@ -2632,7 +2632,6 @@
   "levelCap.confirmDelete": "Delete this run? The screenshot stays on disk.",
   "levelCap.status.liveRound": "In a Void Cascade: round {round}",
   "levelCap.legacyTagsHint": "Tags from before builds had them. They move onto the build when you confirm this run.",
-  "levelCap.role.mod": "Mod",
   "levelCap.role.arcane": "Arcane",
   "levelCap.builds.edit": "Edit build",
   "levelCap.builds.filterHint": "Show only this build's runs",
@@ -2668,7 +2667,14 @@
   "levelCap.editor.replaces": "Replaces ability {n}",
   "levelCap.editor.pickAbility": "Pick an ability",
   "levelCap.editor.shards": "Archon shards",
-  "levelCap.editor.emptySocket": "Empty socket",
-  "levelCap.editor.shardsHint": "Effects listed are the ones socketed on any of your frames.",
-  "levelCap.editor.companionWeapon": "Companion weapon: {name}"
+  "levelCap.editor.companionWeapon": "Companion weapon: {name}",
+  "levelCap.editor.underRanked": "Rank {rank} of {max}",
+  "levelCap.editor.rivenUnknown": "Stats not recorded",
+  "levelCap.editor.rivenHint": "Riven stats come from your inventory. Use \"Update from equipped\" to capture them again.",
+  "levelCap.editor.filled": "{count} slotted",
+  "levelCap.editor.replacing": "replacing",
+  "levelCap.editor.addShard": "Add shard",
+  "levelCap.editor.searchShard": "Search an effect, e.g. casting speed",
+  "levelCap.editor.removeShard": "Remove this shard",
+  "levelCap.editor.configsHint": "Your in-game mod configs for this item. Click one to load its mods."
 }

@@ -5,11 +5,26 @@ export type LevelCapFocusSchool = "madurai" | "vazarin" | "naramon" | "zenurik" 
 
 export type LevelCapSlotKind = "suit" | "primary" | "secondary" | "melee" | "archgun" | "companion";
 
+interface LevelCapRivenStat {
+  name: string;
+  /** At the riven's rank when captured; a multiplier stat reads as xN. */
+  value: number;
+  positive: boolean;
+  multiplier: boolean;
+}
+
+/** The rolled stats of a riven in a slot, frozen with the build. */
+export interface LevelCapRiven {
+  name: string;
+  stats: LevelCapRivenStat[];
+}
+
 export interface LevelCapUpgrade {
   slot: number;
   /** `/Lotus/...` path of the mod or arcane; null when the reference did not resolve. */
   type: string | null;
   rank: number | null;
+  riven?: LevelCapRiven;
 }
 
 export interface LevelCapItem {
@@ -118,12 +133,12 @@ export interface LevelCapCatalog {
   archgun: LevelCapCatalogEntry[];
   companion: LevelCapCatalogEntry[];
   /** `compat` is the export's mod type, e.g. "WARFRAME", "AURA", "STANCE". */
-  mods: Array<LevelCapCatalogEntry & { compat: string; maxRank: number }>;
-  arcanes: Array<LevelCapCatalogEntry & { maxRank: number }>;
+  mods: Array<LevelCapCatalogEntry & { compat: string; maxRank: number; rarity: string }>;
+  arcanes: Array<LevelCapCatalogEntry & { maxRank: number; rarity: string }>;
+  /** What the Helminth can graft: one ability per frame plus its own. */
   abilities: LevelCapCatalogEntry[];
-  /** Shard effects seen in the inventory or saved builds; the export does not list them. */
-  shards: Array<{ color: string; type: string }>;
 }
+
 export interface LevelCapSettings {
   /** Electron accelerator for "finish run"; empty disables the hotkey. */
   hotkey: string;

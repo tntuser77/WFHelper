@@ -5,7 +5,11 @@ import type {
   LevelCapItem,
   LevelCapRun,
 } from "../../../config/shared/levelCapTypes.js";
-import { levelCapBuildKey, nextLevelCapBuildName } from "../../../config/shared/levelCapBuild.js";
+import {
+  levelCapBuildKey,
+  nextLevelCapBuildName,
+  normalizeLevelCapBuild,
+} from "../../../config/shared/levelCapBuild.js";
 import {
   formatLevelCapDuration,
   levelCapFrames,
@@ -76,6 +80,24 @@ describe("levelCap helpers", () => {
     const other = { ...SUIT, upgrades: [] };
     expect(levelCapBuildKey(build(reranked))).toBe(levelCapBuildKey(build(SUIT)));
     expect(levelCapBuildKey(build(other))).not.toBe(levelCapBuildKey(build(SUIT)));
+  });
+
+  it("keeps riven stats and repairs a doubled weapon name", () => {
+    const riven = (name: string) => ({
+      name,
+      stats: [{ name: "Toxin", value: 154.1, positive: true, multiplier: false }],
+    });
+    const withRiven = (name: string) =>
+      normalizeLevelCapBuild({
+        ...build(null),
+        melee: {
+          type: "/Melee/Magistar",
+          upgrades: [{ slot: 1, type: "/Mods/Randomized/X", rank: 8, riven: riven(name) }],
+        },
+      })?.melee?.upgrades[0].riven;
+    expect(withRiven("Magistar Magistar Toxicron")).toEqual(riven("Magistar Toxicron"));
+    expect(withRiven("Dark Split-Sword Dark Split-Sword Acri")?.name).toBe("Dark Split-Sword Acri");
+    expect(withRiven("Magistar Toxicron")?.name).toBe("Magistar Toxicron");
   });
 
   it("names a new build with the first free letter", () => {

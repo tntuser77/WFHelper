@@ -3,6 +3,7 @@ import type {
   LevelCapBuild,
   LevelCapFocusSchool,
   LevelCapItem,
+  LevelCapRiven,
   LevelCapSlotKind,
   LevelCapUpgrade,
 } from "./levelCapTypes";
@@ -58,11 +59,43 @@ function int(value: unknown, min: number, max: number): number | null {
     : null;
 }
 
+// An early capture doubled the weapon: "Magistar Magistar Toxicron".
+const DOUBLED_WEAPON_RE = /^((?:\S+ ){0,2}\S+) \1 /;
+
+function riven(raw: unknown): LevelCapRiven | null {
+  const value = asRecord(raw);
+  const name = text(value?.name, 120)?.replace(DOUBLED_WEAPON_RE, "$1 ");
+  if (!value || !name || !Array.isArray(value.stats)) return null;
+  const stats = value.stats.slice(0, 4).flatMap((entry) => {
+    const stat = asRecord(entry);
+    const statName = text(stat?.name, 80);
+    const amount = stat?.value;
+    if (!statName || typeof amount !== "number" || !Number.isFinite(amount)) return [];
+    return [
+      {
+        name: statName,
+        value: amount,
+        positive: stat?.positive !== false,
+        multiplier: stat?.multiplier === true,
+      },
+    ];
+  });
+  return { name, stats };
+}
+
 function upgrade(raw: unknown): LevelCapUpgrade | null {
   const value = asRecord(raw);
   const slot = int(value?.slot, 0, 31);
   if (!value || slot === null) return null;
-  return { slot, type: text(value.type), rank: int(value.rank, 0, 30) };
+  const out: LevelCapUpgrade = { slot, type: text(value.type), rank: int(value.rank, 0, 30) };
+  const rolled = riven(value.riven);
+  if (rolled) out.riven = rolled;
+  return out;
+}
+
+/** Riven upgrade paths; the stats live on the owned copy, not the type. */
+export function isLevelCapRivenType(type: string | null): boolean {
+  return !!type && type.includes("/Mods/Randomized/");
 }
 
 function item(raw: unknown, kind: LevelCapSlotKind, depth = 0): LevelCapItem | null {

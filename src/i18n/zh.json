@@ -2612,7 +2612,6 @@
   "levelCap.confirmDelete": "删除这条记录？截图会保留。",
   "levelCap.status.liveRound": "虚空覆涌进行中：第 {round} 轮",
   "levelCap.legacyTagsHint": "构建出现之前的标签。确认此运行后，它们会移到构建上。",
-  "levelCap.role.mod": "MOD",
   "levelCap.role.arcane": "赋能",
   "levelCap.builds.edit": "编辑构建",
   "levelCap.builds.filterHint": "只显示此构建的运行",
@@ -2648,7 +2647,14 @@
   "levelCap.editor.replaces": "替换技能 {n}",
   "levelCap.editor.pickAbility": "选择技能",
   "levelCap.editor.shards": "执刑官碎片",
-  "levelCap.editor.emptySocket": "空槽",
-  "levelCap.editor.shardsHint": "可选效果来自你任意战甲上已镶嵌的碎片。",
-  "levelCap.editor.companionWeapon": "同伴武器：{name}"
+  "levelCap.editor.companionWeapon": "同伴武器：{name}",
+  "levelCap.editor.underRanked": "等级 {rank} / {max}",
+  "levelCap.editor.rivenUnknown": "未记录属性",
+  "levelCap.editor.rivenHint": "裂罅 MOD 属性来自你的库存。使用“从当前装备更新”重新获取。",
+  "levelCap.editor.filled": "已装 {count}",
+  "levelCap.editor.replacing": "替换",
+  "levelCap.editor.addShard": "添加碎片",
+  "levelCap.editor.searchShard": "搜索效果，例如施放速度",
+  "levelCap.editor.removeShard": "移除此碎片",
+  "levelCap.editor.configsHint": "此物品在游戏中的 MOD 配置。点击即可载入其 MOD。"
 }

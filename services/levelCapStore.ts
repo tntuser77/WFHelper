@@ -9,6 +9,7 @@ import { normalizeRunNotes, normalizeRunTags } from "./runAnnotations";
 import { withScope } from "./logger";
 import { normalizeErrorMessage } from "../config/shared/errors";
 import {
+  isLevelCapRivenType,
   levelCapBuildKey,
   nextLevelCapBuildName,
   normalizeLevelCapBuild,
@@ -17,7 +18,9 @@ import type {
   LevelCapBuild,
   LevelCapBuildPatch,
   LevelCapImportResult,
+  LevelCapItem,
   LevelCapNamedBuild,
+  LevelCapRiven,
   LevelCapRun,
   LevelCapSettings,
 } from "../config/shared/levelCapTypes";
@@ -368,6 +371,40 @@ export function updateBuild(id: string, patch: LevelCapBuildPatch): LevelCapName
   }
   save();
   return record;
+}
+
+function itemsOf(build: LevelCapBuild | null): LevelCapItem[] {
+  if (!build) return [];
+  const items = [
+    build.suit,
+    build.primary,
+    build.secondary,
+    build.melee,
+    build.archgun,
+    build.companion,
+    build.companion?.weapon ?? null,
+  ];
+  return items.filter((item): item is LevelCapItem => item !== null);
+}
+
+/** Builds from before rivens were captured name the riven but not its stats; fill
+ * them from the inventory when the lookup is sure which riven it was. */
+export function backfillRivens(find: (weaponType: string) => LevelCapRiven | null): boolean {
+  ensureLoaded();
+  let changed = false;
+  for (const build of [..._builds.map((b) => b.build), ..._runs.map((r) => r.build)]) {
+    for (const item of itemsOf(build)) {
+      for (const upgrade of item.upgrades) {
+        if (upgrade.riven || !isLevelCapRivenType(upgrade.type)) continue;
+        const riven = find(item.type);
+        if (!riven) continue;
+        upgrade.riven = structuredClone(riven);
+        changed = true;
+      }
+    }
+  }
+  if (changed) save();
+  return changed;
 }
 
 /** The runs keep their last copy of the loadout and go back to needing a build. */

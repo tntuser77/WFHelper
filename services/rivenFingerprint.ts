@@ -406,6 +406,14 @@ function decodeSingleRiven(entry: {
   };
 }
 
+/** One owned riven from its inventory Upgrades entry; null when veiled or unknown. */
+export function decodeRivenUpgrade(entry: {
+  UpgradeFingerprint?: string;
+  ItemType: string;
+}): DecodedRiven | null {
+  return decodeSingleRiven(entry);
+}
+
 export function decodeAllRivens(inventory: Record<string, unknown>): {
   unveiled: DecodedRiven[];
   veiled: VeiledRivenEntry[];

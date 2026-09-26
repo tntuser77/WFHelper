@@ -166,7 +166,7 @@
   </div>
 
   {#if items.length}
-    <div class="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+    <div class="flex flex-col gap-2">
       {#each items as { item, label } (label)}
         <LevelCapItemCard {item} {label} {abilityNames} />
       {/each}
