@@ -2688,5 +2688,6 @@
   "overlay.levelCap.failedDetail": "Could not capture the game window",
   "levelCap.exo": "exo",
   "levelCap.dateAt": "{date} at {time}",
-  "levelCap.builds.editHint": "Click to show only this build's runs, double-click to edit it"
+  "levelCap.builds.editHint": "Click to show only this build's runs, double-click to edit it",
+  "levelCap.tags.acceptHint": "Tab or Enter accepts the suggested tag"
 }

@@ -71,6 +71,33 @@
     draft = { ...draft, [kind]: item };
   }
 
+  /** The best unused tag starting with the draft; its tail shows faded after the text. */
+  const tagMatch = $derived.by(() => {
+    const draft = tagDraft.trimStart().toLowerCase();
+    if (!draft) return null;
+    const used = new Set(tags.map((tag) => tag.toLowerCase()));
+    return (
+      tagSuggestions.find(
+        (tag) => !used.has(tag.toLowerCase()) && tag.toLowerCase().startsWith(draft),
+      ) ?? null
+    );
+  });
+  const tagCompletion = $derived(tagMatch ? tagMatch.slice(tagDraft.trimStart().length) : "");
+
+  /** Tab and Enter take the suggestion; with none, Enter adds what was typed. */
+  function onTagKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape" && tagDraft) {
+      e.preventDefault();
+      e.stopPropagation();
+      tagDraft = "";
+      return;
+    }
+    if (e.key !== "Enter" && !(e.key === "Tab" && tagMatch)) return;
+    e.preventDefault();
+    if (tagMatch) tagDraft = tagMatch;
+    addTag();
+  }
+
   function addTag(): void {
     const value = tagDraft.trim();
     tagDraft = "";
@@ -175,26 +202,28 @@
         >
       </span>
     {/each}
-    <input
-      class="w-40 rounded border border-border bg-bg-raised px-2 py-0.5 text-xs text-text-primary outline-none focus:border-info"
-      type="text"
-      maxlength="32"
-      list="level-cap-build-tags"
-      placeholder={$t("arbi.tags.add")}
-      bind:value={tagDraft}
-      onkeydown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          addTag();
-        }
-      }}
-      onblur={addTag}
-    />
-    <datalist id="level-cap-build-tags">
-      {#each tagSuggestions.filter((tag) => !tags.includes(tag)) as tag (tag)}
-        <option value={tag}></option>
-      {/each}
-    </datalist>
+    <span
+      class="relative inline-block w-44 rounded border border-border bg-bg-raised focus-within:border-info"
+      data-level-cap-tag-input
+    >
+      <span
+        class="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre px-2 py-0.5 text-xs"
+        aria-hidden="true"
+        ><span class="invisible">{tagDraft}</span><span class="text-text-muted"
+          >{tagCompletion}</span
+        ></span
+      >
+      <input
+        class="relative w-full bg-transparent px-2 py-0.5 text-xs text-text-primary outline-none"
+        type="text"
+        maxlength="32"
+        placeholder={$t("arbi.tags.add")}
+        title={$t("levelCap.tags.acceptHint")}
+        bind:value={tagDraft}
+        onkeydown={onTagKeydown}
+        onblur={addTag}
+      />
+    </span>
   </div>
 
   {#if catalog}
