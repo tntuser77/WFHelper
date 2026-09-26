@@ -72,7 +72,7 @@ function abilityStem(type: string): string {
 }
 
 /** The ability an augment changes, by the card text first and the path second. */
-export function levelCapAugmentAbility(
+function levelCapAugmentAbility(
   type: string,
   stats: string,
   abilities: ReadonlyArray<{ type: string; name: string }>,
@@ -90,11 +90,7 @@ export function levelCapAugmentAbility(
 
 /** Mods that share a family cannot sit on one item together: Continuity, Primed
  *  Continuity and Archon Continuity are all "WARFRAME|Continuity". */
-export function levelCapModFamily(
-  name: string,
-  compat: string,
-  known: ReadonlySet<string>,
-): string {
+function levelCapModFamily(name: string, compat: string, known: ReadonlySet<string>): string {
   const alias = VARIANT_BASES[name];
   if (alias) return `${compat}|${alias}`;
   const base = name.replace(VARIANT_PREFIX_RE, "");
