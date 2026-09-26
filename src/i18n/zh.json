@@ -2657,5 +2657,15 @@
   "levelCap.editor.addShard": "添加碎片",
   "levelCap.editor.searchShard": "搜索效果，例如施放速度",
   "levelCap.editor.removeShard": "移除此碎片",
-  "levelCap.editor.configsHint": "此物品在游戏中的 MOD 配置。点击即可载入其 MOD。"
+  "levelCap.editor.configsHint": "此物品在游戏中的 MOD 配置。点击即可载入其 MOD。",
+  "overlay.levelCap.title": "等级上限",
+  "overlay.levelCap.logged": "等级上限已记录",
+  "overlay.levelCap.replaced": "截图已替换",
+  "overlay.levelCap.below": "未记录此局",
+  "overlay.levelCap.failed": "截图失败",
+  "overlay.levelCap.runNumber": "第 {count} 局",
+  "overlay.levelCap.exolizers": "{count} 个 Exolizer",
+  "overlay.levelCap.belowTarget": "{count} / {target} 个 Exolizer",
+  "overlay.levelCap.failedDetail": "无法截取游戏窗口",
+  "levelCap.exo": "Exo"
 }

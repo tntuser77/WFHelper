@@ -4,6 +4,7 @@ import { dialog, nativeImage, shell } from "electron";
 import { assertMainRendererSender, handleAuthorized } from "./ipcSecurity";
 import ctx from "./context";
 import { broadcastToRenderers } from "./popoutIpc";
+import { showLevelCapNotification, type LevelCapToastCard } from "./tradeNotificationIpc";
 import { registerTransientHotkey, unregisterTransientHotkey } from "./hotkeyRegistry";
 import { asRunId } from "./runTrackerIpc";
 import { addInventoryListener } from "./inventoryIpc";
@@ -41,9 +42,11 @@ import {
   LEVEL_CAP_UPDATED,
   LEVEL_CAP_UPDATE_SETTINGS,
 } from "../config/shared/ipcChannels";
+import { LEVEL_CAP_EXOLIZER_TARGET } from "../config/shared/levelCapTypes";
 import type {
   LevelCapBuild,
   LevelCapBuildPatch,
+  LevelCapHotkeyOutcome,
   LevelCapPayload,
   LevelCapRiven,
   LevelCapSettings,
@@ -192,6 +195,31 @@ function frameForFolder(folder: string): { frame: string; frameType: string | nu
     : { frame: folder, frameType: null };
 }
 
+function toastCard(outcome: LevelCapHotkeyOutcome): LevelCapToastCard {
+  const card: LevelCapToastCard = {
+    status: "failed",
+    frame: "",
+    thumb: null,
+    runNumber: null,
+    exolizers: null,
+    target: LEVEL_CAP_EXOLIZER_TARGET,
+    durationSec: null,
+  };
+  if (outcome.type === "below-target")
+    return { ...card, status: "below", exolizers: outcome.exolizers };
+  if (outcome.type === "capture-failed") return card;
+  const { run } = outcome;
+  return {
+    ...card,
+    status: outcome.type === "logged" ? "logged" : "replaced",
+    frame: run.frame,
+    thumb: run.frameType ? (itemDb.lookupItem(run.frameType)?.imageUrl ?? null) : null,
+    runNumber: outcome.type === "logged" ? outcome.frameRuns : null,
+    exolizers: run.exolizers,
+    durationSec: run.durationSec,
+  };
+}
+
 function isSettingsPatch(raw: unknown): raw is Partial<LevelCapSettings> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
   const value = raw as Record<string, unknown>;
@@ -212,7 +240,10 @@ function register(): void {
       return shot && !shot.image.isEmpty() ? shot.image.toPNG() : null;
     },
     onChanged: pushUpdate,
-    onHotkey: (outcome) => broadcastToRenderers(LEVEL_CAP_HOTKEY, outcome),
+    onHotkey: (outcome) => {
+      broadcastToRenderers(LEVEL_CAP_HOTKEY, outcome);
+      showLevelCapNotification(toastCard(outcome));
+    },
   });
   bindHotkey();
 

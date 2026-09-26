@@ -56,7 +56,64 @@
     }, visibleMs);
   }
 
+  const LEVEL_CAP_LABELS = {
+    logged: { key: "overlay.levelCap.logged", cls: "closed" },
+    replaced: { key: "overlay.levelCap.replaced", cls: "closed" },
+    below: { key: "overlay.levelCap.below", cls: "unmatched" },
+    failed: { key: "overlay.levelCap.failed", cls: "unmatched" },
+  };
+
+  function formatDuration(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    const mm = String(m).padStart(2, "0");
+    const ss = String(s).padStart(2, "0");
+    return h > 0 ? h + ":" + mm + ":" + ss : m + ":" + ss;
+  }
+
+  function renderLevelCap(card) {
+    itemThumb.src = card.thumb || "";
+    itemThumb.style.display = card.thumb ? "block" : "none";
+
+    const label = LEVEL_CAP_LABELS[card.status] || LEVEL_CAP_LABELS.failed;
+    tradeLabel.textContent = t(label.key);
+    tradeLabel.className = label.cls;
+
+    tradeBadge.textContent = card.runNumber
+      ? t("overlay.levelCap.runNumber", { count: String(card.runNumber) })
+      : "";
+    tradeBadge.className = card.runNumber ? "sale" : "";
+
+    itemQuantity.textContent = "";
+    itemQuantity.hidden = true;
+    itemName.textContent = card.frame || t("overlay.levelCap.title");
+    platAmount.hidden = true;
+
+    const facts = [];
+    if (card.exolizers != null) {
+      facts.push(
+        card.status === "below"
+          ? t("overlay.levelCap.belowTarget", {
+              count: String(card.exolizers),
+              target: String(card.target),
+            })
+          : t("overlay.levelCap.exolizers", { count: String(card.exolizers) }),
+      );
+    }
+    if (card.durationSec != null) facts.push(formatDuration(card.durationSec));
+    if (card.status === "failed") facts.push(t("overlay.levelCap.failedDetail"));
+    partnerName.textContent = facts.join(" · ");
+
+    repLine.textContent = "";
+    repLine.hidden = true;
+  }
+
   function renderNotification(payload) {
+    if (payload.levelCap) {
+      renderLevelCap(payload.levelCap);
+      return;
+    }
     const match = payload.match;
 
     if (match.itemThumb) {
@@ -113,7 +170,7 @@
   }
 
   function showNotification(payload) {
-    if (!payload || !payload.match) return;
+    if (!payload || (!payload.match && !payload.levelCap)) return;
 
     lastNotification = payload;
     lastRepResult = null;

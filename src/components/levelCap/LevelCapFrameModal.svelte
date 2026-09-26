@@ -96,6 +96,10 @@
     checked.clear();
   }
 
+  function tileLabel(run: LevelCapRun): string {
+    return run.tile?.rooms.map((room) => room.name ?? `#${room.fingerprint}`).join(" · ") ?? "";
+  }
+
   function squadLabel(run: LevelCapRun): string {
     if (run.squadSize === null) return "";
     return run.squadSize <= 1
@@ -297,66 +301,94 @@
           {#each shownRuns as run (run.id)}
             {@const open = expanded.has(run.id)}
             <li class="border-b border-border/50 last:border-b-0">
-              <div class="flex items-center gap-3 px-3 py-2 text-sm">
+              <div class="flex min-h-[3.75rem] items-center gap-4 px-3 py-2.5 text-sm">
                 <input
                   type="checkbox"
                   checked={checked.has(run.id)}
                   onchange={() => toggle(checked, run.id)}
                 />
+                <div class="flex w-[22rem] shrink-0 items-center gap-2">
+                  <div class="flex shrink-0 items-center gap-1">
+                    {#each GEAR as slot (slot)}
+                      {@const type = run.build?.[slot]?.type}
+                      <div
+                        class="flex h-9 w-9 items-center justify-center rounded bg-bg-raised {type
+                          ? ''
+                          : 'border border-dashed border-border'}"
+                        title={type ? ($itemDb[type]?.name ?? "") : ""}
+                      >
+                        {#if type && $itemDb[type]?.imageUrl}
+                          <img
+                            src={$itemDb[type].imageUrl ?? ""}
+                            alt=""
+                            class="h-4/5 w-4/5 object-contain"
+                          />
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                  <select
+                    class="min-w-0 flex-1 truncate rounded border px-2 py-1 text-sm font-bold {run.buildUnverified ||
+                    !run.buildId
+                      ? 'border-warning/60 bg-warning/5 text-warning'
+                      : 'border-border bg-bg-raised text-text-primary'}"
+                    title={run.buildUnverified
+                      ? $t("levelCap.unverified")
+                      : $t("levelCap.builds.runBuild")}
+                    value={run.buildId ?? ""}
+                    onchange={(e) => assign([run.id], e.currentTarget.value)}
+                  >
+                    {#if !run.buildId}
+                      <option value="" disabled>{$t("levelCap.builds.pick")}</option>
+                    {/if}
+                    {#each builds as build (build.id)}
+                      <option value={build.id}>{build.name}</option>
+                    {/each}
+                  </select>
+                  {#if run.buildUnverified && run.buildId}
+                    <button
+                      type="button"
+                      class="shrink-0 cursor-pointer rounded border border-warning/60 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-warning hover:bg-warning/10"
+                      title={$t("levelCap.builds.confirmHint", { name: buildName(run.buildId) })}
+                      onclick={() => assign([run.id], run.buildId ?? "")}
+                      >✓ {$t("common.confirm")}</button
+                    >
+                  {/if}
+                </div>
                 <button
                   type="button"
-                  class="flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 text-left"
+                  class="grid min-w-0 flex-1 cursor-pointer grid-cols-[4.5rem_6.5rem_minmax(0,1fr)_auto] items-center gap-4 text-left"
                   onclick={() => toggle(expanded, run.id)}
                 >
-                  <span class="w-40 shrink-0 font-mono text-text-primary"
-                    >{formatRunDate(run.completedAt)}</span
-                  >
                   <span
-                    class="w-16 font-mono text-text-secondary"
+                    class="font-mono text-base font-semibold text-text-primary"
                     title={$t("levelCap.col.duration")}
                     >{formatLevelCapDuration(run.durationSec)}</span
                   >
-                  <span class="w-20 text-text-secondary" title={$t("relics.squadLabel")}
-                    >{squadLabel(run)}</span
-                  >
                   {#if run.exolizers === null && run.rounds != null}
-                    <span class="w-16 text-text-secondary"
+                    <span class="text-text-secondary"
                       >{$t("arbi.rotations.round", { n: String(run.rounds) })}</span
                     >
                   {:else}
-                    <span
-                      class="w-16 font-mono text-text-secondary"
-                      title={$t("levelCap.col.exolizers")}>{run.exolizers ?? ""}</span
-                    >
+                    <span class="flex items-baseline gap-1" title={$t("levelCap.col.exolizers")}>
+                      <span class="font-mono text-base font-bold text-accent"
+                        >{run.exolizers ?? ""}</span
+                      >
+                      {#if run.exolizers !== null}
+                        <span class="text-[10px] uppercase tracking-wide text-text-muted"
+                          >{$t("levelCap.exo")}</span
+                        >
+                      {/if}
+                    </span>
                   {/if}
-                </button>
-                <select
-                  class="w-36 rounded border px-1.5 py-0.5 text-xs {run.buildUnverified ||
-                  !run.buildId
-                    ? 'border-warning/60 bg-warning/5 text-warning'
-                    : 'border-border bg-bg-raised text-text-primary'}"
-                  title={run.buildUnverified
-                    ? $t("levelCap.unverified")
-                    : $t("levelCap.builds.runBuild")}
-                  value={run.buildId ?? ""}
-                  onchange={(e) => assign([run.id], e.currentTarget.value)}
-                >
-                  {#if !run.buildId}
-                    <option value="" disabled>{$t("levelCap.builds.pick")}</option>
-                  {/if}
-                  {#each builds as build (build.id)}
-                    <option value={build.id}>{build.name}</option>
-                  {/each}
-                </select>
-                {#if run.buildUnverified && run.buildId}
-                  <button
-                    type="button"
-                    class="cursor-pointer rounded border border-warning/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning hover:bg-warning/10"
-                    title={$t("levelCap.builds.confirmHint", { name: buildName(run.buildId) })}
-                    onclick={() => assign([run.id], run.buildId ?? "")}
-                    >✓ {$t("common.confirm")}</button
+                  <span class="truncate text-text-secondary" title={tileLabel(run)}
+                    >{tileLabel(run)}</span
                   >
-                {/if}
+                  <span class="flex flex-col items-end text-xs text-text-muted">
+                    <span class="font-mono">{formatRunDate(run.completedAt)}</span>
+                    <span>{squadLabel(run)}</span>
+                  </span>
+                </button>
                 <button
                   type="button"
                   class="cursor-pointer text-text-muted"

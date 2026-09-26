@@ -85,6 +85,15 @@
 </script>
 
 <div class="flex flex-col gap-3 px-3 pb-3" data-level-cap-detail>
+  {#if items.length}
+    <div class="flex flex-col gap-2">
+      {#each items as { item, label } (label)}
+        <LevelCapItemCard {item} {label} {abilityNames} />
+      {/each}
+    </div>
+  {:else}
+    <span class="text-xs text-text-muted">{$t("levelCap.build.none")}</span>
+  {/if}
   <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,420px)_1fr]">
     <div class="flex flex-col gap-1">
       {#if thumbnail}
@@ -164,14 +173,4 @@
       </div>
     </div>
   </div>
-
-  {#if items.length}
-    <div class="flex flex-col gap-2">
-      {#each items as { item, label } (label)}
-        <LevelCapItemCard {item} {label} {abilityNames} />
-      {/each}
-    </div>
-  {:else}
-    <span class="text-xs text-text-muted">{$t("levelCap.build.none")}</span>
-  {/if}
 </div>

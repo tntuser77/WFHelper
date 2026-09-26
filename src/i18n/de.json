@@ -2657,5 +2657,15 @@
   "levelCap.editor.addShard": "Scherbe hinzufügen",
   "levelCap.editor.searchShard": "Effekt suchen, z. B. Zaubergeschwindigkeit",
   "levelCap.editor.removeShard": "Diese Scherbe entfernen",
-  "levelCap.editor.configsHint": "Deine Mod-Konfigurationen im Spiel für diesen Gegenstand. Klicke eine an, um ihre Mods zu laden."
+  "levelCap.editor.configsHint": "Deine Mod-Konfigurationen im Spiel für diesen Gegenstand. Klicke eine an, um ihre Mods zu laden.",
+  "overlay.levelCap.title": "Level-Cap",
+  "overlay.levelCap.logged": "Level-Cap erfasst",
+  "overlay.levelCap.replaced": "Screenshot ersetzt",
+  "overlay.levelCap.below": "Run nicht erfasst",
+  "overlay.levelCap.failed": "Aufnahme fehlgeschlagen",
+  "overlay.levelCap.runNumber": "Run #{count}",
+  "overlay.levelCap.exolizers": "{count} Exolizer",
+  "overlay.levelCap.belowTarget": "{count} / {target} Exolizer",
+  "overlay.levelCap.failedDetail": "Spielfenster konnte nicht aufgenommen werden",
+  "levelCap.exo": "Exo"
 }

@@ -2677,5 +2677,15 @@
   "levelCap.editor.addShard": "Add shard",
   "levelCap.editor.searchShard": "Search an effect, e.g. casting speed",
   "levelCap.editor.removeShard": "Remove this shard",
-  "levelCap.editor.configsHint": "Your in-game mod configs for this item. Click one to load its mods."
+  "levelCap.editor.configsHint": "Your in-game mod configs for this item. Click one to load its mods.",
+  "overlay.levelCap.title": "Level Cap",
+  "overlay.levelCap.logged": "Level Cap Logged",
+  "overlay.levelCap.replaced": "Screenshot Replaced",
+  "overlay.levelCap.below": "Run Not Logged",
+  "overlay.levelCap.failed": "Capture Failed",
+  "overlay.levelCap.runNumber": "Run #{count}",
+  "overlay.levelCap.exolizers": "{count} Exolizers",
+  "overlay.levelCap.belowTarget": "{count} / {target} Exolizers",
+  "overlay.levelCap.failedDetail": "Could not capture the game window",
+  "levelCap.exo": "exo"
 }
