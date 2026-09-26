@@ -353,12 +353,7 @@ function register(): void {
       const fitted = Array.isArray(parts)
         ? parts.filter((p): p is string => typeof p === "string" && p.length <= 512).slice(0, 8)
         : undefined;
-      return snapshotItemConfigs(
-        ctx.currentInventoryData,
-        kind as LevelCapSlotKind,
-        type,
-        fitted,
-      );
+      return snapshotItemConfigs(ctx.currentInventoryData, kind as LevelCapSlotKind, type, fitted);
     },
   );
 
