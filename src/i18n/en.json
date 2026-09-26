@@ -2687,5 +2687,6 @@
   "overlay.levelCap.exolizers": "{count} Exolizers",
   "overlay.levelCap.belowTarget": "{count} / {target} Exolizers",
   "overlay.levelCap.failedDetail": "Could not capture the game window",
-  "levelCap.exo": "exo"
+  "levelCap.exo": "exo",
+  "levelCap.dateAt": "{date} at {time}"
 }

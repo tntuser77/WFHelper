@@ -2,8 +2,7 @@
   import { SvelteSet } from "svelte/reactivity";
 
   import type { LevelCapNamedBuild, LevelCapRun } from "../../types/ipc.js";
-  import { tr as t } from "../../lib/i18n.js";
-  import { formatRunDate } from "../../lib/arbi/arbiChartData.js";
+  import { locale, tr as t } from "../../lib/i18n.js";
   import { formatLevelCapDuration, type LevelCapFrameRow } from "../../lib/levelCap.js";
   import { assignLevelCapBuild, createLevelCapBuild } from "../../stores/levelCap.js";
   import { itemDb } from "../../stores/data.js";
@@ -96,8 +95,16 @@
     checked.clear();
   }
 
-  function tileLabel(run: LevelCapRun): string {
-    return run.tile?.rooms.map((room) => room.name ?? `#${room.fingerprint}`).join(" · ") ?? "";
+  function tileRooms(run: LevelCapRun): string[] {
+    return run.tile?.rooms.map((room) => room.name ?? `#${room.fingerprint}`) ?? [];
+  }
+
+  function runDate(ms: number): string {
+    const d = new Date(ms);
+    return $t("levelCap.dateAt", {
+      date: d.toLocaleDateString($locale, { year: "numeric", month: "short", day: "numeric" }),
+      time: d.toLocaleTimeString($locale, { hour: "numeric", minute: "2-digit" }),
+    });
   }
 
   function squadLabel(run: LevelCapRun): string {
@@ -381,11 +388,16 @@
                       {/if}
                     </span>
                   {/if}
-                  <span class="truncate text-text-secondary" title={tileLabel(run)}
-                    >{tileLabel(run)}</span
+                  <span
+                    class="flex min-w-0 flex-col text-xs leading-snug text-text-secondary"
+                    title={tileRooms(run).join(" · ")}
                   >
+                    {#each tileRooms(run) as room, i (i)}
+                      <span class="truncate">{room}</span>
+                    {/each}
+                  </span>
                   <span class="flex flex-col items-end text-xs text-text-muted">
-                    <span class="font-mono">{formatRunDate(run.completedAt)}</span>
+                    <span class="whitespace-nowrap">{runDate(run.completedAt)}</span>
                     <span>{squadLabel(run)}</span>
                   </span>
                 </button>

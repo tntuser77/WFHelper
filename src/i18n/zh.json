@@ -2667,5 +2667,6 @@
   "overlay.levelCap.exolizers": "{count} 个 Exolizer",
   "overlay.levelCap.belowTarget": "{count} / {target} 个 Exolizer",
   "overlay.levelCap.failedDetail": "无法截取游戏窗口",
-  "levelCap.exo": "Exo"
+  "levelCap.exo": "Exo",
+  "levelCap.dateAt": "{date} {time}"
 }
