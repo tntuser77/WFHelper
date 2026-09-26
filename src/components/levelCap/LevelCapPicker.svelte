@@ -24,6 +24,15 @@
   } = $props();
 
   const LIMIT = 60;
+  // Shorthand players type for mod stats; each stands for the whole phrase.
+  const ALIASES: Record<string, string> = {
+    pv: "parkour velocity",
+    as: "attack speed",
+    cc: "critical chance",
+    cd: "critical damage",
+    sc: "status chance",
+    sd: "status damage",
+  };
 
   let query = $state("");
   let active = $state(0);
@@ -42,7 +51,12 @@
   }
 
   const results = $derived.by(() => {
-    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const words = query
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word) => ALIASES[word] ?? word);
     const own = search(options, words);
     return (own.length || !words.length ? own : search(fallback, words)).slice(0, LIMIT);
   });
