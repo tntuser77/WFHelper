@@ -6,13 +6,40 @@ import type {
 } from "../../config/shared/levelCapTypes.js";
 import type { LevelCapRun } from "../types/ipc.js";
 
-interface LevelCapFrameRow {
+export interface LevelCapFrameRow {
   frame: string;
   count: number;
   latest: number;
   /** Frame path of the most recent run, for the portrait. */
   frameType: string | null;
   unverified: number;
+}
+
+/** The card's gear strip, in display order. */
+export const LEVEL_CAP_CARD_SLOTS = ["primary", "secondary", "melee", "companion"] as const;
+
+type LevelCapCardSlot = (typeof LEVEL_CAP_CARD_SLOTS)[number];
+
+export interface LevelCapGearUse {
+  slot: LevelCapCardSlot;
+  /** Every item run in this slot, most-used first; empty when the slot was never filled. */
+  items: Array<{ type: string; count: number }>;
+}
+
+/** What a frame's runs carried in each card slot. A frame run with several
+ * setups shows its most-used item per slot, the rest counted behind it. */
+export function levelCapGearUse(runs: readonly LevelCapRun[]): LevelCapGearUse[] {
+  return LEVEL_CAP_CARD_SLOTS.map((slot) => {
+    const counts = new Map<string, number>();
+    for (const run of runs) {
+      const type = run.build?.[slot]?.type;
+      if (type) counts.set(type, (counts.get(type) ?? 0) + 1);
+    }
+    const items = [...counts]
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
+    return { slot, items };
+  });
 }
 
 /** One row per frame with at least one run, most-run first. */
