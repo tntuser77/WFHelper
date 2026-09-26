@@ -45,7 +45,7 @@ const feed = (tracker: Tracker, lines: string[]) =>
 
 const START = [
   "10.0 Script [Info]: ThemedSquadOverlay.lua: Mission name: Tuvul Commons (Zariman) - THE STEEL PATH",
-  "11.0 Game [Info]: Player1 loadout loader finished.",
+  "11.0 Game [Info]: Player1\uE000 loadout loader finished.",
   "12.0 Game [Info]: OnStateStarted, mission type=MT_VOID_CASCADE",
 ];
 const exo = (ts: number, n: number) =>
@@ -104,7 +104,12 @@ describe("levelCapTracker", () => {
     expect(logged.frame).toBe("Dante");
     expect(logged.build?.loadoutName).toBe("Cap Dante");
     expect(logged.screenshot && fs.readFileSync(logged.screenshot, "utf8")).toBe("png");
-    expect(tracker.getStatus()).toEqual({ inCascade: true, exolizers: 108, runId: logged.id });
+    expect(tracker.getStatus()).toEqual({
+      inCascade: true,
+      exolizers: 108,
+      rounds: null,
+      runId: logged.id,
+    });
 
     feed(tracker, [exo(4100, 110), ...END(4212, true)]);
     const [done] = store.getRuns();
@@ -153,6 +158,39 @@ describe("levelCapTracker", () => {
     const { tracker, store } = await setup();
     feed(tracker, [...START, exo(400, 12), ...END(500, false)]);
     expect(store.getRuns()).toEqual([]);
+  });
+
+  it("catches up on a Void Cascade that started before the app", async () => {
+    const { tracker, store } = await setup();
+    const log = path.join(tmpDir, "EE.log");
+    fs.writeFileSync(log, [...START, exo(4000, 108), ""].join("\r\n"));
+    tracker.primeLevelCapFromLog(log, fs.statSync(log).size);
+    expect(tracker.getStatus()).toMatchObject({ inCascade: true, exolizers: 108 });
+    tracker.onLevelCapHotkey();
+    await settle();
+    expect(outcomes[0]?.type).toBe("logged");
+    expect(store.getRuns()).toHaveLength(1);
+  });
+
+  it("does not revive or re-log a mission that ended before the app started", async () => {
+    const { tracker, store } = await setup();
+    const log = path.join(tmpDir, "EE.log");
+    fs.writeFileSync(log, [...START, exo(4000, 108), ...END(4100, false), ""].join("\n"));
+    tracker.primeLevelCapFromLog(log, fs.statSync(log).size);
+    expect(tracker.getStatus().inCascade).toBe(false);
+    expect(store.getRuns()).toEqual([]);
+  });
+
+  it("logs a squad client's run, which has rounds but no Exolizer count", async () => {
+    const { tracker, store } = await setup();
+    feed(tracker, [
+      ...START,
+      "5994.0 Script [Info]: ZarimanSurvivalMission.lua: Gave reward tier 27 at 0",
+    ]);
+    tracker.onLevelCapHotkey();
+    await settle();
+    expect(outcomes[0]?.type).toBe("logged");
+    expect(store.getRuns()[0]).toMatchObject({ exolizers: null, rounds: 27 });
   });
 
   it("groups a Prime under its base frame", async () => {

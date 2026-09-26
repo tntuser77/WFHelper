@@ -2634,5 +2634,6 @@
   "levelCap.toast.replaced": "Screenshot replaced for {frame}",
   "levelCap.toast.below": "Not logged: {count} / {target} Exolizers",
   "levelCap.toast.captureFailed": "Could not capture the game window, so the run was not logged.",
-  "levelCap.confirmDelete": "Delete this run? The screenshot stays on disk."
+  "levelCap.confirmDelete": "Delete this run? The screenshot stays on disk.",
+  "levelCap.status.liveRound": "In a Void Cascade: round {round}"
 }

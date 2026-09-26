@@ -64,6 +64,8 @@ export interface LevelCapRun {
   frameType: string | null;
   source: LevelCapRunSource;
   exolizers: number | null;
+  /** Rounds completed; the only progress a squad client's log carries. */
+  rounds?: number | null;
   durationSec: number | null;
   /** Players in the mission including you; null when the log never said. */
   squadSize: number | null;
@@ -93,6 +95,7 @@ export interface LevelCapSettings {
 export interface LevelCapStatus {
   inCascade: boolean;
   exolizers: number | null;
+  rounds: number | null;
   /** Id of the run F12 already logged for this mission, if any. */
   runId: string | null;
 }

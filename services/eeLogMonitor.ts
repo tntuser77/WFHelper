@@ -32,7 +32,11 @@ import {
   shutdownPtTracker,
   setPtCallbacks,
 } from "./profitTakerTracker";
-import { processLevelCapLine, notifyLevelCapEeLogReset } from "./levelCapTracker";
+import {
+  processLevelCapLine,
+  notifyLevelCapEeLogReset,
+  primeLevelCapFromLog,
+} from "./levelCapTracker";
 import type { ArbiRunRecord } from "../config/shared/arbiTypes";
 import type { PtRunRecord } from "../config/shared/profitTakerTypes";
 import { normalizeErrorMessage } from "../config/shared/errors";
@@ -749,6 +753,9 @@ export function startWatching(
     lastSize = 0;
   }
   lineRemainder = "";
+  // Live reading starts at the end, so a Void Cascade that began before the
+  // app did would otherwise go unseen.
+  primeLevelCapFromLog(EE_LOG_PATH, lastSize);
 
   if (watcher) {
     watcher.close();

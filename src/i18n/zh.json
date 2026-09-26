@@ -2614,5 +2614,6 @@
   "levelCap.toast.replaced": "已替换 {frame} 的截图",
   "levelCap.toast.below": "未记录：{count} / {target} 个无垢装置",
   "levelCap.toast.captureFailed": "无法截取游戏窗口，本局未记录。",
-  "levelCap.confirmDelete": "删除这条记录？截图会保留。"
+  "levelCap.confirmDelete": "删除这条记录？截图会保留。",
+  "levelCap.status.liveRound": "虚空覆涌进行中：第 {round} 轮"
 }

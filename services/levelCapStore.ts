@@ -64,6 +64,7 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
     ...run,
     frameType: typeof run.frameType === "string" ? run.frameType : null,
     exolizers: typeof run.exolizers === "number" ? run.exolizers : null,
+    rounds: typeof run.rounds === "number" ? run.rounds : null,
     durationSec: typeof run.durationSec === "number" ? run.durationSec : null,
     squadSize: typeof run.squadSize === "number" ? run.squadSize : null,
     tile: run.tile ?? null,

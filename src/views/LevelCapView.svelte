@@ -124,9 +124,13 @@
     if (!settings) return "";
     if (status?.inCascade) {
       if (status.runId) return $t("levelCap.status.logged", { key: settings.hotkey });
-      return status.exolizers === null
-        ? $t("levelCap.status.liveUnknown")
-        : $t("levelCap.status.live", { count: String(status.exolizers), target });
+      // A squad client's log has rounds but never the Exolizer count.
+      if (status.exolizers !== null) {
+        return $t("levelCap.status.live", { count: String(status.exolizers), target });
+      }
+      return status.rounds !== null
+        ? $t("levelCap.status.liveRound", { round: String(status.rounds) })
+        : $t("levelCap.status.liveUnknown");
     }
     return settings.hotkey
       ? $t("levelCap.status.idle", { key: settings.hotkey })
@@ -292,10 +296,16 @@
                         <span class="w-20 text-text-secondary" title={$t("relics.squadLabel")}
                           >{squadLabel(run)}</span
                         >
-                        <span
-                          class="w-16 font-mono text-text-secondary"
-                          title={$t("levelCap.col.exolizers")}>{run.exolizers ?? ""}</span
-                        >
+                        {#if run.exolizers === null && run.rounds != null}
+                          <span class="w-16 text-text-secondary"
+                            >{$t("arbi.rotations.round", { n: String(run.rounds) })}</span
+                          >
+                        {:else}
+                          <span
+                            class="w-16 font-mono text-text-secondary"
+                            title={$t("levelCap.col.exolizers")}>{run.exolizers ?? ""}</span
+                          >
+                        {/if}
                         {#if label}
                           <span
                             class="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted"

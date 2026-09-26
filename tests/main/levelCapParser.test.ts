@@ -2,7 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { createLevelCapParser, type LevelCapMission } from "../../services/levelCapParser";
+import {
+  createLevelCapParser,
+  isLevelCapLine,
+  type LevelCapMission,
+} from "../../services/levelCapParser";
 
 // Two solo Void Cascades and an Extermination between them, cut from a real
 // EE.log: the first summoned an archgun, the second retired two Exolizers.
@@ -85,5 +89,40 @@ describe("levelCapParser", () => {
     parser.feedLine("3.0 Game [Info]: OnStateStarted, mission type=MT_VOID_CASCADE");
     expect(parser.flush()?.startSec).toBe(3);
     expect(parser.flush()).toBeNull();
+  });
+
+  // The PC platform glyph the game appends to player names.
+  const GLYPH = String.fromCharCode(0xe000);
+  // Lines a squad client logs: a late join, rounds, but no Exolizer count.
+  const CLIENT = [
+    "1790.200 Sys [Info]: HighLevelGraph setup 226 implicit bridges for zone 2 in 5.06e-05s total 157",
+    "1790.200 Sys [Info]: HighLevelGraph setup 402 implicit bridges for zone 6 in 5.94e-05s total 541",
+    "1790.200 Sys [Info]: HighLevelGraph setup 493 implicit bridges for zone 8 in 7.29e-05s total 917",
+    "1790.409 Sys [Info]: GameRulesImpl::OnStateStarted when WaitingForPlayers; assuming late join and starting session",
+    "1790.410 Game [Info]: OnStateStarted, mission type=MT_VOID_CASCADE",
+    `1791.000 Game [Info]: Player1${GLYPH} loadout loader finished.`,
+    `1792.000 Game [Info]: Player2${GLYPH} loadout loader finished.`,
+    "5848.140 Script [Info]: ZarimanSurvivalMission.lua: Zariman Survival (Void Cascade): Client: trying to catch up with new reward count= 26, current=25",
+    "5848.140 Script [Info]: ZarimanSurvivalMission.lua: Gave reward tier 26 at 0",
+    "5994.030 Script [Info]: ZarimanSurvivalMission.lua: Gave reward tier 27 at 0",
+  ];
+
+  it("follows a squad client's run by rounds", () => {
+    const parser = createLevelCapParser();
+    for (const line of CLIENT) parser.feedLine(line);
+    const mission = parser.current();
+    expect(mission?.rounds).toBe(27);
+    expect(mission?.exolizers).toBeNull();
+    expect(mission?.players).toEqual(["Player1", "Player2"]);
+    expect(mission?.tile?.rooms.map((r) => r.name)).toEqual([
+      "Albrecht's Park",
+      "Hangar",
+      "Schoolyard",
+    ]);
+  });
+
+  it("flags only the lines the parser reads", () => {
+    expect(CLIENT.every((line) => isLevelCapLine(line) || line.includes("late join"))).toBe(true);
+    expect(isLevelCapLine("12.0 Net [Info]: NAT bound for client")).toBe(false);
   });
 });

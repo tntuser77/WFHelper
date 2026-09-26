@@ -2614,5 +2614,6 @@
   "levelCap.toast.replaced": "Screenshot für {frame} ersetzt",
   "levelCap.toast.below": "Nicht gespeichert: {count} / {target} Exolizer",
   "levelCap.toast.captureFailed": "Das Spielfenster konnte nicht aufgenommen werden, der Run wurde nicht gespeichert.",
-  "levelCap.confirmDelete": "Diesen Run löschen? Der Screenshot bleibt erhalten."
+  "levelCap.confirmDelete": "Diesen Run löschen? Der Screenshot bleibt erhalten.",
+  "levelCap.status.liveRound": "In einer Void-Kaskade: Runde {round}"
 }

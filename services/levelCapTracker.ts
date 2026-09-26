@@ -1,5 +1,7 @@
+import fs from "node:fs";
+
 import { withScope } from "./logger";
-import { createLevelCapParser, type LevelCapMission } from "./levelCapParser";
+import { createLevelCapParser, isLevelCapLine, type LevelCapMission } from "./levelCapParser";
 import { snapshotBuildForFrame, snapshotEquippedBuild, suitTypeForId } from "./levelCapBuild";
 import * as store from "./levelCapStore";
 import { normalizeErrorMessage } from "../config/shared/errors";
@@ -52,6 +54,7 @@ export function getStatus(): LevelCapStatus {
   return {
     inCascade: mission !== null,
     exolizers: mission?.exolizers ?? null,
+    rounds: mission?.rounds ?? null,
     runId: mission ? _missionRunId : null,
   };
 }
@@ -74,6 +77,7 @@ function finishMission(mission: LevelCapMission): void {
   if (runId) {
     store.updateRun(runId, (run) => {
       run.exolizers = mission.exolizers ?? run.exolizers;
+      run.rounds = mission.rounds ?? run.rounds ?? null;
       run.durationSec = durationSec;
       run.squadSize = squadSize(mission) ?? run.squadSize;
       run.tile = mission.tile ?? run.tile;
@@ -100,6 +104,7 @@ function finishMission(mission: LevelCapMission): void {
     ...frameOf(build),
     source: "mission-end",
     exolizers: mission.exolizers,
+    rounds: mission.rounds,
     durationSec,
     squadSize: squadSize(mission),
     tile: mission.tile,
@@ -123,8 +128,43 @@ export function processLevelCapLine(line: string, source: "dbwin" | "file"): voi
       finishMission(event.mission);
     }
   }
-  // Exolizer ticks update the live counter in the tab.
-  if (changed || line.includes("Pillars used increased to")) _deps?.onChanged();
+  // Exolizer and round ticks update the live counter in the tab.
+  if (changed || line.includes("Pillars used increased to") || line.includes("Gave reward tier")) {
+    _deps?.onChanged();
+  }
+}
+
+/** EE.log bytes the monitor skips at startup still say whether a Void Cascade
+ * is under way, so replay them into a fresh parser. Ended missions are dropped
+ * rather than finished: they may already be logged, and a restart must not
+ * log them twice. `size` is where live reading starts, so no line is fed twice. */
+export function primeLevelCapFromLog(filePath: string, size: number): void {
+  if (size <= 0) return;
+  let text: string;
+  try {
+    const fd = fs.openSync(filePath, "r");
+    try {
+      const buffer = Buffer.alloc(size);
+      const read = fs.readSync(fd, buffer, 0, size, 0);
+      text = buffer.toString("utf8", 0, read);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (err) {
+    log.warn("[LevelCap] could not read EE.log to catch up:", normalizeErrorMessage(err));
+    return;
+  }
+  const parser = createLevelCapParser();
+  for (const line of text.split("\n")) {
+    if (isLevelCapLine(line)) parser.feedLine(line.replace(/\r$/, ""));
+  }
+  const mission = parser.current();
+  if (!mission) return;
+  _parser = parser;
+  _missionRunId = null;
+  log.info(
+    `[LevelCap] joined a Void Cascade already in progress (${mission.exolizers ?? "?"} Exolizers, round ${mission.rounds ?? "?"})`,
+  );
 }
 
 /** EE.log was truncated (game restart): whatever was open has ended. */
@@ -136,7 +176,10 @@ export function notifyLevelCapEeLogReset(): void {
 
 async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome | null> {
   const mission = _parser.current();
-  if (!mission) return null;
+  if (!mission) {
+    log.info("[LevelCap] finish-run key pressed outside a Void Cascade; ignored");
+    return null;
+  }
   if (mission.exolizers !== null && mission.exolizers < LEVEL_CAP_EXOLIZER_TARGET) {
     return { type: "below-target", exolizers: mission.exolizers };
   }
@@ -162,6 +205,7 @@ async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome |
     frameType,
     source: "hotkey",
     exolizers: mission.exolizers,
+    rounds: mission.rounds,
     durationSec: null,
     squadSize: squadSize(mission),
     tile: mission.tile,

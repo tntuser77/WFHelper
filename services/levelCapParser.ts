@@ -7,7 +7,10 @@ const STATE_STARTED = /Game \[Info\]: OnStateStarted, mission type=(MT_[A-Z_]+)/
 const BRIDGES = /HighLevelGraph setup (\d+) implicit bridges for zone (\d+)/;
 // Every squad member logs one of these while loading into the mission.
 const LOADOUT_LOADED = /Game \[Info\]: (.+?) loadout loader finished/;
+// Host only: a squad client never logs the Exolizer count.
 const EXOLIZERS = /Void Cascade\): Pillars used increased to: (\d+)/;
+// One reward tier per completed round; clients log it too.
+const ROUND = /ZarimanSurvivalMission\.lua: Gave reward tier (\d+) at/;
 const ABORT = /TopMenu\.lua: Abort:/;
 const EOM = /Sys \[Info\]: EOM missionLocationUnlocked=/;
 // Logged right after EOM, once per piece of gear that got kills this mission.
@@ -19,6 +22,7 @@ export interface LevelCapMission {
   startSec: number;
   endSec: number | null;
   exolizers: number | null;
+  rounds: number | null;
   players: string[];
   tile: LevelCapTile | null;
   /** Loadout slot -> item id for every slot that gained XP at mission end. */
@@ -39,12 +43,31 @@ interface Active {
   startSec: number;
   endSec: number | null;
   exolizers: number | null;
+  rounds: number | null;
   players: Set<string>;
   tile: LevelCapTile | null;
   gearXp: Record<string, string>;
 }
 
 const NO_EVENTS: readonly LevelCapParserEvent[] = [];
+
+// Every pattern above carries one of these; the rest of EE.log can be skipped
+// when catching up on a long log without running each regex on it.
+const LINE_HINTS = [
+  "ThemedSquadOverlay.lua",
+  "OnStateStarted",
+  "implicit bridges",
+  "loadout loader finished",
+  "ZarimanSurvivalMission.lua",
+  "TopMenu.lua: Abort",
+  "EOM missionLocationUnlocked",
+  "Weapon in slot",
+];
+
+/** False for lines the parser would ignore anyway. */
+export function isLevelCapLine(line: string): boolean {
+  return LINE_HINTS.some((hint) => line.includes(hint));
+}
 
 function freshPrelude(): Prelude {
   return { bridges: new Map(), lastZone: -1, players: new Set() };
@@ -55,6 +78,7 @@ function snapshot(active: Active): LevelCapMission {
     startSec: active.startSec,
     endSec: active.endSec,
     exolizers: active.exolizers,
+    rounds: active.rounds,
     players: [...active.players],
     tile: active.tile,
     gearXp: { ...active.gearXp },
@@ -112,7 +136,7 @@ export function createLevelCapParser() {
     const loaded = line.match(LOADOUT_LOADED);
     if (loaded) {
       // Names end in a private-use platform glyph (U+E000 for PC).
-      const name = loaded[1].replace(/[-]/g, "").trim();
+      const name = loaded[1].replace(/[\uE000-\uF8FF]/g, "").trim();
       if (name) (active && active.endSec == null ? active.players : prelude.players).add(name);
       return events ?? NO_EVENTS;
     }
@@ -125,6 +149,7 @@ export function createLevelCapParser() {
           startSec: ts ?? 0,
           endSec: null,
           exolizers: null,
+          rounds: null,
           players: new Set(prelude.players),
           tile: decodeLevelCapTile(prelude.bridges),
           gearXp: {},
@@ -139,6 +164,12 @@ export function createLevelCapParser() {
     const exo = line.match(EXOLIZERS);
     if (exo) {
       active.exolizers = Math.max(active.exolizers ?? 0, Number(exo[1]));
+      return NO_EVENTS;
+    }
+
+    const round = line.match(ROUND);
+    if (round) {
+      active.rounds = Math.max(active.rounds ?? 0, Number(round[1]));
       return NO_EVENTS;
     }
 
