@@ -2584,7 +2584,7 @@
   "levelCap.settings.change": "Ändern",
   "levelCap.settings.clear": "Entfernen",
   "levelCap.empty": "Noch keine Runs. Importiere deine Screenshot-Ordner oder beende einen Run mit dem Hotkey.",
-  "levelCap.searchFrames": "Warframes oder Tags suchen, z. B. Melee, Influence",
+  "levelCap.searchFrames": "Warframes oder Tags suchen, z. B. Nahkampf, Influence",
   "levelCap.tagHint": "Klicken, um diesen Tag zur Suche hinzuzufügen, Rechtsklick zum Entfernen",
   "levelCap.unverifiedCount": "{count} ungeprüft",
   "levelCap.col.duration": "Laufzeit",

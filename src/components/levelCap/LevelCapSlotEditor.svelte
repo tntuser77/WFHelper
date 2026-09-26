@@ -155,10 +155,20 @@
     onChange({ ...item, upgrades: upgrades.sort((a, b) => a.slot - b.slot) });
   }
 
+  const modFamilies = $derived(new Map(catalog.mods.map((mod) => [mod.type, mod.family])));
+
+  /** The game will not equip two of a family, so Archon Stretch evicts Stretch. */
   function pickUpgrade(slot: number, type: string): void {
     picking = null;
+    if (!item) return;
+    const family = modFamilies.get(type) ?? type;
+    const kept = item.upgrades.filter(
+      (u) => u.slot === slot || !u.type || (modFamilies.get(u.type) ?? u.type) !== family,
+    );
+    const rest = kept.filter((u) => u.slot !== slot);
     // Nearly everything runs at max rank; the slot panel can lower it.
-    setUpgrade(slot, type, upgradeInfo.get(type)?.maxRank ?? null);
+    const upgrades = [...rest, { slot, type, rank: upgradeInfo.get(type)?.maxRank ?? null }];
+    onChange({ ...item, upgrades: upgrades.sort((a, b) => a.slot - b.slot) });
   }
 
   function setRank(slot: number, value: string): void {

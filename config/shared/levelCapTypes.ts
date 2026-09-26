@@ -132,9 +132,18 @@ export interface LevelCapCatalog {
   melee: LevelCapCatalogEntry[];
   archgun: LevelCapCatalogEntry[];
   companion: LevelCapCatalogEntry[];
-  /** `compat` is the export's mod type, e.g. "WARFRAME", "AURA", "STANCE". */
-  mods: Array<LevelCapCatalogEntry & { compat: string; maxRank: number; rarity: string }>;
-  arcanes: Array<LevelCapCatalogEntry & { maxRank: number; rarity: string }>;
+  /** `compat` is the export's mod type, e.g. "WARFRAME", "AURA", "STANCE"; one item
+   *  holds one mod per `family`; `stats` is the max-rank card text. */
+  mods: Array<
+    LevelCapCatalogEntry & {
+      compat: string;
+      maxRank: number;
+      rarity: string;
+      family: string;
+      stats: string;
+    }
+  >;
+  arcanes: Array<LevelCapCatalogEntry & { maxRank: number; rarity: string; stats: string }>;
   /** What the Helminth can graft: one ability per frame plus its own. */
   abilities: LevelCapCatalogEntry[];
 }

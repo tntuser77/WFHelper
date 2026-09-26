@@ -22,6 +22,26 @@ describe("levelCapCatalog", () => {
     expect(catalog.mods.filter((m) => m.name === "Streamline")).toHaveLength(1);
   });
 
+  it("carries each mod's card text so a search can find it by effect", () => {
+    const mod = (name: string) => catalog.mods.find((m) => m.name === name);
+    expect(mod("Primed Continuity")?.stats).toContain("Ability Duration");
+    expect(mod("Archon Stretch")?.stats).not.toMatch(/<|\n/);
+    expect(catalog.arcanes.find((a) => a.name === "Arcane Energize")?.stats).toContain("Energy");
+  });
+
+  it("puts mods the game will not equip together in one family", () => {
+    const family = (name: string) => catalog.mods.find((m) => m.name === name)?.family;
+    expect(family("Primed Continuity")).toBe(family("Continuity"));
+    expect(family("Archon Continuity")).toBe(family("Continuity"));
+    expect(family("Archon Stretch")).toBe(family("Stretch"));
+    expect(family("Umbral Fiber")).toBe(family("Steel Fiber"));
+    expect(family("Galvanized Chamber")).toBe(family("Split Chamber"));
+    // Amalgam mods stack with their namesakes, and Primed Chamber has no base.
+    expect(family("Amalgam Serration")).not.toBe(family("Serration"));
+    expect(family("Primed Chamber")).not.toBe(family("Split Chamber"));
+    expect(family("Overextended")).not.toBe(family("Stretch"));
+  });
+
   it("offers only what the Helminth can graft, once each", () => {
     expect(has(catalog.abilities, "Roar")).toBe(true);
     expect(has(catalog.abilities, "Radial Blind")).toBe(true);

@@ -4,6 +4,8 @@
   interface Option {
     type: string;
     name: string;
+    /** Card text, e.g. "+55% Ability Duration"; searched after the name. */
+    stats?: string;
   }
 
   let {
@@ -28,14 +30,15 @@
   let input = $state<HTMLInputElement | null>(null);
 
   function search(list: readonly Option[], words: string[]): Option[] {
-    const hits = list.filter((o) => words.every((w) => o.name.toLowerCase().includes(w)));
-    // Names starting with the query first: "prim" finds Primed mods before Reaper Prime.
+    const inName = (o: Option) => words.every((w) => o.name.toLowerCase().includes(w));
+    const inText = (o: Option) =>
+      words.every((w) => `${o.name} ${o.stats ?? ""}`.toLowerCase().includes(w));
+    const hits = list.filter(inText);
+    // Name hits beat card-text hits, and names starting with the query lead:
+    // "prim" finds Primed mods before Reaper Prime.
     const lead = words[0] ?? "";
-    return hits.sort(
-      (a, b) =>
-        Number(!a.name.toLowerCase().startsWith(lead)) -
-          Number(!b.name.toLowerCase().startsWith(lead)) || a.name.localeCompare(b.name),
-    );
+    const rank = (o: Option) => (inName(o) ? Number(!o.name.toLowerCase().startsWith(lead)) : 2);
+    return hits.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   }
 
   const results = $derived.by(() => {
@@ -85,12 +88,19 @@
       <li>
         <button
           type="button"
-          class="w-full cursor-pointer truncate rounded px-2 py-1 text-left text-sm {i === active
+          class="flex w-full cursor-pointer flex-col rounded px-2 py-1 text-left text-sm {i ===
+          active
             ? 'bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] text-accent'
             : 'text-text-primary hover:bg-bg-raised'}"
+          title={option.stats || undefined}
           onmouseenter={() => (active = i)}
-          onclick={() => onPick(option.type)}>{option.name}</button
+          onclick={() => onPick(option.type)}
         >
+          <span class="truncate">{option.name}</span>
+          {#if option.stats}
+            <span class="truncate text-[11px] text-text-muted">{option.stats}</span>
+          {/if}
+        </button>
       </li>
     {:else}
       <li class="px-2 py-1 text-xs text-text-muted">{$t("levelCap.editor.noMatch")}</li>

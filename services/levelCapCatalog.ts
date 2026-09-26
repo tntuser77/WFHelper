@@ -42,7 +42,59 @@ const FLAWED_RE = /\/Beginner\//;
 // The Helminth's subsume recipes; each one's result is the ability it can graft.
 const HELMINTH_RECIPE_RE = /\/Recipes\/AbilityOverrides\//;
 
+// Variants the game will not equip beside their base mod.
+const VARIANT_PREFIX_RE = /^(?:Primed|Archon|Umbral) /;
+// Variants whose base goes by another name; nothing in the export links them.
+const VARIANT_BASES: Record<string, string> = {
+  "Galvanized Chamber": "Split Chamber",
+  "Galvanized Diffusion": "Barrel Diffusion",
+  "Galvanized Hell": "Hell's Chamber",
+  "Umbral Fiber": "Steel Fiber",
+  "Sacrificial Pressure": "Pressure Point",
+  "Sacrificial Steel": "True Steel",
+};
+
 let _catalog: LevelCapCatalog | null = null;
+
+/** Mods that share a family cannot sit on one item together: Continuity, Primed
+ *  Continuity and Archon Continuity are all "WARFRAME|Continuity". */
+export function levelCapModFamily(
+  name: string,
+  compat: string,
+  known: ReadonlySet<string>,
+): string {
+  const alias = VARIANT_BASES[name];
+  if (alias) return `${compat}|${alias}`;
+  const base = name.replace(VARIANT_PREFIX_RE, "");
+  return `${compat}|${base !== name && known.has(`${compat}|${base}`) ? base : name}`;
+}
+
+/** Max-rank stat lines from WFCD, keyed by uniqueName; the DE export has no card text. */
+function loadStatText(): Map<string, string> {
+  const text = new Map<string, string>();
+  try {
+    const Items = require("@wfcd/items");
+    const items = new Items({ category: ["Mods", "Arcanes"] }) as Array<{
+      uniqueName?: string;
+      levelStats?: Array<{ stats?: string[] }>;
+    }>;
+    for (const item of items) {
+      const stats = item.levelStats?.[item.levelStats.length - 1]?.stats;
+      if (!item.uniqueName || !stats?.length) continue;
+      const lines = stats.map((line) =>
+        line
+          .replace(/<[^>]*>/g, "")
+          // WFCD escapes its line breaks as a literal backslash-n.
+          .replace(/(?:\\n|\s)+/g, " ")
+          .trim(),
+      );
+      text.set(item.uniqueName, [...new Set(lines)].filter(Boolean).join(" · "));
+    }
+  } catch (err) {
+    log.warn("[LevelCap] mod stat text unavailable:", normalizeErrorMessage(err));
+  }
+  return text;
+}
 
 function byName<T extends { name: string }>(entries: T[]): T[] {
   const seen = new Set<string>();
@@ -81,6 +133,14 @@ function build(): LevelCapCatalog {
       if (ability.uniqueName && name) abilityNames.set(ability.uniqueName, name);
     }
   }
+  const statText = loadStatText();
+  const modEntries = Object.entries(pep.ExportUpgrades ?? {}).flatMap(([type, entry]) => {
+    const name = nameOf(entry);
+    if (!name || !entry.type || RIVEN_RE.test(type) || FLAWED_RE.test(type)) return [];
+    return [{ type, name, compat: entry.type, entry }];
+  });
+  const knownMods = new Set(modEntries.map((mod) => `${mod.compat}|${mod.name}`));
+
   const helminth = Object.entries(pep.ExportRecipes ?? {}).flatMap(([recipe, entry]) => {
     const type = entry.resultType;
     const name = type && abilityNames.get(type);
@@ -97,25 +157,29 @@ function build(): LevelCapCatalog {
       COMPANION_CATEGORIES.has(entry.productCategory ?? ""),
     ),
     mods: byName(
-      Object.entries(pep.ExportUpgrades ?? {}).flatMap(([type, entry]) => {
-        const name = nameOf(entry);
-        if (!name || !entry.type || RIVEN_RE.test(type) || FLAWED_RE.test(type)) return [];
-        return [
-          {
-            type,
-            name,
-            compat: entry.type,
-            maxRank: entry.fusionLimit ?? 0,
-            rarity: entry.rarity ?? "COMMON",
-          },
-        ];
-      }),
+      modEntries.map(({ type, name, compat, entry }) => ({
+        type,
+        name,
+        compat,
+        maxRank: entry.fusionLimit ?? 0,
+        rarity: entry.rarity ?? "COMMON",
+        family: levelCapModFamily(name, compat, knownMods),
+        stats: statText.get(type) ?? "",
+      })),
     ),
     arcanes: byName(
       Object.entries(pep.ExportArcanes ?? {}).flatMap(([type, entry]) => {
         const name = nameOf(entry);
         if (!name || OPERATOR_ARCANE_RE.test(type)) return [];
-        return [{ type, name, maxRank: entry.fusionLimit ?? 5, rarity: entry.rarity ?? "RARE" }];
+        return [
+          {
+            type,
+            name,
+            maxRank: entry.fusionLimit ?? 5,
+            rarity: entry.rarity ?? "RARE",
+            stats: statText.get(type) ?? "",
+          },
+        ];
       }),
     ),
     abilities: byName(helminth),
