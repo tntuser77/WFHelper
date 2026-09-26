@@ -14,12 +14,18 @@
     row,
     runs,
     builds,
+    search,
     onOpen,
+    onSearchTag,
+    onClearTag,
   }: {
     row: LevelCapFrameRow;
     runs: LevelCapRun[];
     builds: LevelCapNamedBuild[];
+    search: string;
     onOpen: () => void;
+    onSearchTag: (tag: string) => void;
+    onClearTag: (tag: string) => void;
   } = $props();
 
   const SLOT_KEYS: Record<string, MessageKey> = {
@@ -30,7 +36,27 @@
   };
 
   const gear = $derived(levelCapGearUse(runs));
-  const tags = $derived(levelCapTagSuggestions(builds).slice(0, 3));
+  const allTags = $derived(levelCapTagSuggestions(builds));
+  const tags = $derived(allTags.slice(0, 3));
+  const hiddenTags = $derived(allTags.slice(3));
+  let showAllTags = $state(false);
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // The panel sits below the chip across the row gap, so closing waits a beat
+  // for the pointer to cross into it.
+  function openTags(): void {
+    clearTimeout(hideTimer);
+    showAllTags = true;
+  }
+
+  function closeTagsSoon(): void {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => (showAllTags = false), 150);
+  }
+
+  function isSearched(tag: string): boolean {
+    return tag.toLowerCase() === search.trim().toLowerCase();
+  }
 
   function nameOf(type: string): string {
     return itemLabel($itemDb[type]) || fallbackNameFromUniqueName(type);
@@ -44,8 +70,31 @@
   }
 </script>
 
-<button
-  type="button"
+{#snippet tagChip(tag: string)}
+  <button
+    type="button"
+    class="cursor-pointer rounded border px-1.5 py-0.5 text-[10px] font-semibold transition-colors duration-100 {isSearched(
+      tag,
+    )
+      ? 'border-info bg-info/25 text-text-primary'
+      : 'border-info/40 bg-info/10 text-info hover:border-info'}"
+    title={$t("levelCap.tagHint")}
+    onclick={(event) => {
+      event.stopPropagation();
+      onSearchTag(tag);
+    }}
+    oncontextmenu={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onClearTag(tag);
+    }}>{tag}</button
+  >
+{/snippet}
+
+<!-- A container, not a button, so the tags can be buttons of their own. Clicks
+     anywhere else bubble up here; the frame name is the keyboard entry point. -->
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+<div
   class="relative flex w-full cursor-pointer flex-col gap-3 rounded-[var(--radius-lg)] border border-[color:var(--ui-panel-border)] bg-[var(--ui-panel-bg)] p-4 text-left transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-accent"
   onclick={onOpen}
   data-level-cap-frame={row.frame}
@@ -62,20 +111,33 @@
         />
       {/if}
     </div>
-    <span class="min-w-0 flex-1 truncate text-xl font-bold text-text-primary">{row.frame}</span>
+    <!-- No handler of its own: its click bubbles to the card, so Enter opens it too. -->
+    <button
+      type="button"
+      class="min-w-0 flex-1 cursor-pointer truncate text-left text-xl font-bold text-text-primary"
+      >{row.frame}</button
+    >
     <span class="font-mono text-3xl font-bold text-accent">{row.count}</span>
   </div>
 
   <div class="flex min-h-5 flex-wrap gap-1">
     {#each tags as tag (tag)}
-      <span
-        class="rounded border border-info/40 bg-info/10 px-1.5 py-0.5 text-[10px] font-semibold text-info"
-        >{tag}</span
-      >
+      {@render tagChip(tag)}
     {/each}
+    {#if hiddenTags.length}
+      <span
+        class="rounded border px-1.5 py-0.5 text-[10px] font-semibold transition-colors duration-100 {showAllTags
+          ? 'border-info/40 text-info'
+          : 'border-border text-text-secondary'} bg-bg-surface"
+        role="presentation"
+        onmouseenter={openTags}
+        onmouseleave={closeTagsSoon}
+        data-level-cap-more-tags>+{hiddenTags.length}</span
+      >
+    {/if}
   </div>
 
-  <div class="grid grid-cols-4 gap-2">
+  <div class="relative grid grid-cols-4 gap-2">
     {#each gear as { slot, items } (slot)}
       {@const top = items[0]}
       <div
@@ -99,6 +161,19 @@
         {/if}
       </div>
     {/each}
+    {#if showAllTags}
+      <!-- Grows past the gear row into the card padding rather than clipping. -->
+      <div
+        role="presentation"
+        onmouseenter={openTags}
+        onmouseleave={closeTagsSoon}
+        class="absolute inset-x-0 top-0 z-10 flex min-h-full flex-wrap content-center gap-1 rounded-[var(--radius-md)] border border-border-strong bg-bg-surface/95 p-2"
+      >
+        {#each hiddenTags as tag (tag)}
+          {@render tagChip(tag)}
+        {/each}
+      </div>
+    {/if}
   </div>
 
   {#if row.unverified}
@@ -107,4 +182,4 @@
       title={$t("levelCap.unverifiedCount", { count: String(row.unverified) })}
     ></span>
   {/if}
-</button>
+</div>

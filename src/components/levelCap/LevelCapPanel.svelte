@@ -29,10 +29,24 @@
   const status = $derived($levelCap?.status ?? null);
   const abilityNames = $derived($levelCap?.abilityNames ?? {});
   const frames = $derived(levelCapFrames(runs));
-  const visibleFrames = $derived(
-    frames.filter((row) => row.frame.toLowerCase().includes(frameSearch.trim().toLowerCase())),
-  );
   const builds = $derived($levelCap?.builds ?? []);
+  // Build tags plus the ones still on untagged-build runs, lowercased for search.
+  const tagsByFrame = $derived.by(() => {
+    const byFrame: Record<string, string[]> = {};
+    for (const entry of [...builds, ...runs]) {
+      for (const tag of entry.tags ?? []) (byFrame[entry.frame] ??= []).push(tag.toLowerCase());
+    }
+    return byFrame;
+  });
+  const visibleFrames = $derived.by(() => {
+    const query = frameSearch.trim().toLowerCase();
+    if (!query) return frames;
+    return frames.filter(
+      (row) =>
+        row.frame.toLowerCase().includes(query) ||
+        (tagsByFrame[row.frame] ?? []).some((tag) => tag.includes(query)),
+    );
+  });
   const runsByFrame = $derived.by(() => {
     const byFrame: Record<string, typeof runs> = {};
     for (const run of runs) (byFrame[run.frame] ??= []).push(run);
@@ -47,6 +61,19 @@
   const openRow = $derived(frames.find((row) => row.frame === openFrame) ?? null);
   // Runs still carry tags until they are put on a build, so offer those too.
   const tagSuggestions = $derived(levelCapTagSuggestions([...builds, ...runs]));
+
+  function isSearch(tag: string): boolean {
+    return frameSearch.trim().toLowerCase() === tag.toLowerCase();
+  }
+
+  /** Clicking a tag searches for it; clicking the searched tag again clears it. */
+  function searchTag(tag: string): void {
+    frameSearch = isSearch(tag) ? "" : tag;
+  }
+
+  function clearTag(tag: string): void {
+    if (isSearch(tag)) frameSearch = "";
+  }
 
   async function runImport(): Promise<void> {
     importing = true;
@@ -94,7 +121,7 @@
   <div class="flex items-center gap-2">
     {#if frames.length}
       <input
-        class="w-48 rounded border border-border bg-bg-raised px-2 py-1 text-sm text-text-primary outline-none focus:border-info"
+        class="w-80 rounded border border-border bg-bg-raised px-2 py-1 text-sm text-text-primary outline-none focus:border-info"
         type="search"
         placeholder={$t("levelCap.searchFrames")}
         bind:value={frameSearch}
@@ -122,7 +149,10 @@
         {row}
         runs={runsByFrame[row.frame] ?? []}
         builds={buildsByFrame[row.frame] ?? []}
+        search={frameSearch}
         onOpen={() => (openFrame = row.frame)}
+        onSearchTag={searchTag}
+        onClearTag={clearTag}
       />
     {/each}
   </div>
