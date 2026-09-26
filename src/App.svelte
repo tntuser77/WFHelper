@@ -25,7 +25,12 @@
   import ModalHost from "./components/ModalHost.svelte";
   import BulkSellModal from "./components/workbench/BulkSellModal.svelte";
 
-  import { currentView, SETUP_COMPLETED_KEY, statusText } from "./stores/app.js";
+  import {
+    currentView,
+    rememberLastViewInDev,
+    SETUP_COMPLETED_KEY,
+    statusText,
+  } from "./stores/app.js";
   import { parsedItems } from "./stores/data.js";
   import {
     isPopoutWindow,
@@ -80,6 +85,7 @@
   $: shellAccentStyle = viewAccentVars(effectiveViewAccent($themeSettings, $currentView));
 
   onMount(() => {
+    let stopRememberingView = (): void => {};
     const unsubscribeViewChange = currentView.subscribe((view) => {
       handleViewChange(view);
     });
@@ -99,6 +105,7 @@
       // non-"1" leftover value is treated consistently.
       currentView.set("setup");
     } else {
+      stopRememberingView = rememberLastViewInDev();
       void reopenSetupWhenInventoryIsUnavailable();
       void restoreWorkspaceOnLaunch();
     }
@@ -109,6 +116,7 @@
       startup.dispose();
       disposeEvents();
       unsubscribeViewChange();
+      stopRememberingView();
       window.removeEventListener("keydown", onKeyDown);
     };
   });
