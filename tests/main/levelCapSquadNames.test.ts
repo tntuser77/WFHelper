@@ -57,6 +57,19 @@ describe("resolveSquadNames", () => {
     expect(run.players).toEqual(["WealthyPoet"]);
   });
 
+  it("matches a known name whose first letters were lost", () => {
+    const [run] = resolveSquadNames([[["yPoe...", "thyPoe..."]]], ["WealthyPoet"]);
+    expect(run.players).toEqual(["WealthyPoet"]);
+  });
+
+  it("names a row by its cleanest read, keeping a misread letter mid-name", () => {
+    const out = resolveSquadNames(
+      [[["N UReSs", "NouRsSs"]], [["0NouRssa", "NouRsSs!"]], [["NouReSs o"]]],
+      [],
+    );
+    expect(out.map((run) => run.players)).toEqual([["NouRsSs"], ["NouRsSs"], ["NouRsSs"]]);
+  });
+
   it("names a player seen across runs by what the reads agree on", () => {
     const runs = [
       [["piova-777-82"], ["Pawcanale"]],

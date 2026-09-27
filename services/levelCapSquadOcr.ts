@@ -1,6 +1,7 @@
 /** Reads the squadmates' names off a Void Cascade screenshot's top-right squad
- *  list, for runs imported from pictures. Each row is read twice, with a loose
- *  and a strict white cut, and levelCapSquadNames decides who they are. */
+ *  list, for runs imported from pictures. Rows are found by the solid slot disk
+ *  each name ends in, then read masked and as-is; levelCapSquadNames decides
+ *  who they are. */
 
 import { withScope } from "./logger";
 import { paddleRecognizerAvailable, recognizePaddleCrops, type RgbCrop } from "./rivenOcrOnnx";
@@ -27,6 +28,11 @@ const MAX_STROKE_PX = 45;
 const MAX_GAP_PX = 16;
 // The slot number sits in a solid disk after the name.
 const DISK_PX: [number, number] = [10, 22];
+const DISK_CUT = 185;
+// Squadmates' disks line up in one column; your frame's sits further right.
+const DISK_COLUMN_PX = 6;
+const NAME_HALF_PX = 13;
+const MAX_NAME_PX = 190;
 const UPSCALE = 3;
 
 type Raw = { data: Buffer; width: number; height: number };
@@ -98,6 +104,101 @@ function nameRows(mask: Uint8Array, width: number, height: number, scale: number
   return rows.slice(0, MAX_SLOTS);
 }
 
+interface Disk {
+  x0: number;
+  cx: number;
+  cy: number;
+}
+
+/** Solid white disks the slot size, with the digit's hole in them. */
+function findDisks(img: Raw, scale: number): Disk[] {
+  const { data, width, height } = img;
+  const on = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const lo = Math.min(data[i * 3], data[i * 3 + 1], data[i * 3 + 2]);
+    const hi = Math.max(data[i * 3], data[i * 3 + 1], data[i * 3 + 2]);
+    on[i] = lo > DISK_CUT && hi - lo < MAX_SPREAD ? 1 : 0;
+  }
+  const [min, max] = DISK_PX.map((px) => px * scale);
+  const disks: Disk[] = [];
+  const stack: number[] = [];
+  for (let start = 0; start < on.length; start++) {
+    if (on[start] !== 1) continue;
+    on[start] = 2;
+    stack.push(start);
+    let area = 0;
+    let [x0, x1, y0, y1] = [width, 0, height, 0];
+    while (stack.length) {
+      const i = stack.pop()!;
+      const x = i % width;
+      const y = (i - x) / width;
+      area++;
+      [x0, x1, y0, y1] = [Math.min(x0, x), Math.max(x1, x), Math.min(y0, y), Math.max(y1, y)];
+      for (const n of [i - 1, i + 1, i - width, i + width]) {
+        if (n < 0 || n >= on.length || on[n] !== 1) continue;
+        if (Math.abs((n % width) - x) > 1) continue;
+        on[n] = 2;
+        stack.push(n);
+      }
+    }
+    const w = x1 - x0 + 1;
+    const h = y1 - y0 + 1;
+    const fill = area / (w * h);
+    if (w < min || w > max || h < min || h > max || Math.abs(w - h) > 4 * scale) continue;
+    if (fill < 0.45 || fill > 0.9) continue;
+    disks.push({ x0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 });
+  }
+  const column = (d: Disk) => disks.filter((o) => Math.abs(o.cx - d.cx) <= DISK_COLUMN_PX * scale);
+  const best = disks.reduce<Disk[]>((acc, d) => {
+    const members = column(d);
+    return members.length > acc.length ? members : acc;
+  }, []);
+  return best.sort((a, b) => a.cy - b.cy).slice(0, MAX_SLOTS);
+}
+
+/** The name left of each disk, trimmed to where the masked text starts. */
+function diskRows(
+  disks: Disk[],
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  scale: number,
+): Row[] {
+  return disks.map((disk) => {
+    const y0 = Math.max(0, Math.round(disk.cy - NAME_HALF_PX * scale));
+    const y1 = Math.min(height, Math.round(disk.cy + NAME_HALF_PX * scale));
+    const x1 = Math.max(0, disk.x0 - 1);
+    const floor = Math.max(0, Math.round(x1 - MAX_NAME_PX * scale));
+    let x0 = Math.max(floor, Math.round(x1 - 60 * scale));
+    for (let x = x1, gap = 0; x >= floor; x--) {
+      let ink = false;
+      for (let y = y0; y < y1 && !ink; y++) ink = mask[y * width + x] === 1;
+      if (ink) {
+        x0 = Math.min(x0, x);
+        gap = 0;
+      } else if (++gap > MAX_GAP_PX * scale) break;
+    }
+    return { y0, y1, x0, x1 };
+  });
+}
+
+/** The row as the game drew it, for scenes too bright for the white mask. */
+async function plainCrop(img: Raw, row: Row): Promise<RgbCrop> {
+  const x0 = Math.max(0, row.x0 - 6);
+  const cw = Math.min(img.width, row.x1 + 1) - x0;
+  const ch = row.y1 - row.y0;
+  const out = Buffer.alloc(cw * ch * 3);
+  for (let y = 0; y < ch; y++) {
+    const from = ((row.y0 + y) * img.width + x0) * 3;
+    img.data.copy(out, y * cw * 3, from, from + cw * 3);
+  }
+  const data: Buffer = await loadSharp()(out, { raw: { width: cw, height: ch, channels: 3 } })
+    .resize(cw * UPSCALE, ch * UPSCALE, { kernel: "cubic" })
+    .raw()
+    .toBuffer();
+  return { data, width: cw * UPSCALE, height: ch * UPSCALE };
+}
+
 /** Black text on white, straight from the mask, so the minimap behind is gone. */
 async function rowCrop(mask: Uint8Array, width: number, row: Row): Promise<RgbCrop> {
   const x0 = Math.max(0, row.x0 - 6);
@@ -137,16 +238,27 @@ export async function readSquadFromScreenshot(file: string): Promise<string[][] 
       .toBuffer();
     const img = { data, width, height };
     const masks = WHITE_CUTS.map((cut) => whiteMask(img, cut, scale));
-    // Row boxes come from the loose cut; the strict one re-reads the same boxes.
-    const rows = nameRows(masks[0], width, height, scale);
+    // Disks survive bright scenes; the old line scan only covers screenshots without them.
+    // A disk touching its platform icon is missed, so the scan fills the gaps.
+    const byDisk = diskRows(findDisks(img, scale), masks[0], width, height, scale);
+    const mid = (row: Row) => (row.y0 + row.y1) / 2;
+    const scanned = nameRows(masks[0], width, height, scale).filter((row) =>
+      byDisk.every((disk) => Math.abs(mid(disk) - mid(row)) > NAME_HALF_PX * 1.5 * scale),
+    );
+    const rows = [...byDisk, ...scanned.slice(0, MAX_SLOTS - byDisk.length)].sort(
+      (a, b) => a.y0 - b.y0,
+    );
     if (!rows.length) return [];
-    const crops = await Promise.all(
-      masks.flatMap((mask) => rows.map((row) => rowCrop(mask, width, row))),
-    );
+    const crops = await Promise.all([
+      ...masks.flatMap((mask) => rows.map((row) => rowCrop(mask, width, row))),
+      ...rows.map((row) => plainCrop(img, row)),
+    ]);
     const lines = await recognizePaddleCrops(crops);
-    return rows.map((_, i) =>
-      masks.map((_, m) => lines[m * rows.length + i]?.text.trim() ?? "").filter(Boolean),
+    const reads = rows.map((_, i) =>
+      [0, 1, 2].map((v) => lines[v * rows.length + i]?.text.trim() ?? "").filter(Boolean),
     );
+    // A lone disk can be your own frame's level; its row names the frame.
+    return reads.filter((variants) => !variants.some((text) => /\[\d/.test(text)));
   } catch (err) {
     log.warn("[LevelCapOcr] squad read failed:", normalizeErrorMessage(err));
     return null;

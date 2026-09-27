@@ -73,12 +73,25 @@ export function squadNameDistance(a: SquadRead, b: SquadRead): number {
   return best / short.length;
 }
 
+/** Against a name the user knows, a read may also be missing its start, as
+ *  when a bright wall swallowed the first letters ("thyPoe..." for WealthyPoet). */
+function knownNameDistance(read: SquadRead, known: SquadRead): number {
+  let best = squadNameDistance(read, known);
+  if (fold(read.text).length < MIN_NAME + 1) return best;
+  const name = fold(known.text);
+  for (let from = 1; from + MIN_NAME < name.length; from++) {
+    const rest = { text: name.slice(from), truncated: false };
+    best = Math.min(best, squadNameDistance({ ...read, truncated: true }, rest));
+  }
+  return best;
+}
+
 /** The name most reads agree on, position by position, up to where they stop
  *  agreeing; cut-off reads only vote on their start. Marked with an ellipsis
  *  when most reads were cut off. */
 function consensus(reads: readonly SquadRead[]): string {
   const texts = reads.map((read) => read.text.replace(/\s+/g, ""));
-  let out = "";
+  const picked: Array<{ char: string; agreed: boolean }> = [];
   for (let i = 0; ; i++) {
     const votes = new Map<string, number>();
     let covering = 0;
@@ -89,11 +102,15 @@ function consensus(reads: readonly SquadRead[]): string {
     }
     if (!covering || covering < texts.length * 0.6) break;
     const [char, count] = [...votes].sort((x, y) => y[1] - x[1])[0];
-    // The platform icon reads as a different junk character every time.
-    if (count < covering * 0.6) break;
-    out += char;
+    picked.push({ char, agreed: count >= covering * 0.6 });
   }
-  out = out.replace(/[-._]+$/, "");
+  // The platform icon reads as a different junk character every time, so the
+  // tail stops where the reads stop agreeing; a misread letter mid-name stays.
+  while (picked.length && !picked[picked.length - 1].agreed) picked.pop();
+  const out = picked
+    .map((p) => p.char)
+    .join("")
+    .replace(/[-._]+$/, "");
   const cut = reads.filter((read) => read.truncated).length > reads.length / 2;
   return cut ? `${out}…` : out;
 }
@@ -115,37 +132,44 @@ export function resolveSquadNames(
   );
 
   const results: Array<Array<string | null>> = slots.map((run) => run.map(() => null));
-  const loose: Array<{ run: number; slot: number; read: SquadRead }> = [];
+  const loose: Array<{ run: number; slot: number; reads: SquadRead[] }> = [];
   slots.forEach((run, r) =>
     run.forEach((variants, s) => {
       let best: { name: string; d: number } | null = null;
       for (const read of variants) {
         for (const known of knownReads) {
-          const d = squadNameDistance(read, known.read);
+          const d = knownNameDistance(read, known.read);
           if (d <= KNOWN_MATCH && (!best || d < best.d)) best = { name: known.name, d };
         }
       }
       if (best) results[r][s] = best.name;
-      else if (variants.length) loose.push({ run: r, slot: s, read: variants[0] });
+      else if (variants.length) loose.push({ run: r, slot: s, reads: variants });
     }),
   );
 
-  // Single-link grouping of the unmatched reads.
+  // Single-link grouping of unmatched rows; any pair of their reads can link them.
+  const rowDistance = (a: SquadRead[], b: SquadRead[]) =>
+    Math.min(...a.flatMap((x) => b.map((y) => squadNameDistance(x, y))));
   const parent = loose.map((_, i) => i);
   const root = (i: number): number => (parent[i] === i ? i : (parent[i] = root(parent[i])));
   for (let i = 0; i < loose.length; i++) {
     for (let j = i + 1; j < loose.length; j++) {
       if (loose[i].run === loose[j].run) continue;
-      if (squadNameDistance(loose[i].read, loose[j].read) <= CLUSTER_MATCH) {
-        parent[root(i)] = root(j);
-      }
+      if (rowDistance(loose[i].reads, loose[j].reads) <= CLUSTER_MATCH) parent[root(i)] = root(j);
     }
   }
   const groups = new Map<number, number[]>();
   loose.forEach((_, i) => groups.set(root(i), [...(groups.get(root(i)) ?? []), i]));
   for (const members of groups.values()) {
     if (new Set(members.map((i) => loose[i].run)).size < 2) continue;
-    const name = consensus(members.map((i) => loose[i].read));
+    // Each row votes with the read closest to the other rows, not its garbled ones.
+    const picks = members.map((i) => {
+      const others = members.filter((j) => j !== i).flatMap((j) => loose[j].reads);
+      const score = (read: SquadRead) =>
+        others.reduce((sum, other) => sum + Math.min(1, squadNameDistance(read, other)), 0);
+      return loose[i].reads.reduce((a, b) => (score(b) < score(a) ? b : a));
+    });
+    const name = consensus(picks);
     if (fold(name).length < MIN_NAME) continue;
     for (const i of members) results[loose[i].run][loose[i].slot] = name;
   }
