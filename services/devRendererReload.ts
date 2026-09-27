@@ -22,11 +22,9 @@ function isMainRendererWindow(win: BrowserWindow, entryFile: string): boolean {
   }
 }
 
-/**
- * Unpackaged builds only: reloads the main window and popouts in place when the
- * renderer bundle is rebuilt, so `pnpm dev` does not restart Electron per save.
- * The watch sits on renderer/ because the build may empty and recreate dist/.
- */
+/** Unpackaged builds only: reloads the main window and popouts in place when the
+ *  renderer bundle is rebuilt, so `pnpm dev` does not restart Electron per save.
+ *  The watch sits on renderer/ because the build may empty and recreate dist/. */
 export function watchRendererBuild(entryFile: string): void {
   if (app.isPackaged) return;
   const rendererDir = path.dirname(path.dirname(entryFile));
