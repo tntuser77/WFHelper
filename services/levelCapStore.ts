@@ -269,6 +269,8 @@ function ensureLoaded(): void {
     // A build deleted by hand leaves its runs unassigned, never pointing nowhere.
     const known = new Set(_builds.map((b) => b.id));
     for (const run of _runs) if (run.buildId && !known.has(run.buildId)) delete run.buildId;
+    // Labels written while the app was closed reach the squads now, not at the next save.
+    resolveScreenshotSquads();
   } catch (err) {
     if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
       log.warn("[LevelCap] index unreadable, starting empty:", normalizeErrorMessage(err));

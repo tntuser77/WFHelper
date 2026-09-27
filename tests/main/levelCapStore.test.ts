@@ -164,6 +164,30 @@ describe("levelCapStore", () => {
     expect(mates().get(b.id)![0].frame).toBe("Titania Prime");
   });
 
+  it("names squadmates on load from labels added while the app was closed", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const portrait = Buffer.alloc(16 * 16 * 3, 200).toString("base64");
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        schemaVersion: 2,
+        portraitLabels: [{ portrait, frame: "Titania" }],
+        runs: [
+          {
+            ...run({ source: "import", squadSize: null, screenshot: "a.png" }),
+            id: "a",
+            squadReads: [["Kemani"]],
+            squadOcr: "read",
+            squadPortraits: [portrait],
+            squadmates: [{ name: "Kemani", portrait: "a:0", frame: null }],
+          },
+        ],
+      }),
+    );
+    const store = await freshStore();
+    expect(store.getRuns()[0].squadmates?.[0].frame).toBe("Titania");
+  });
+
   it("cleans build tags and frame notes on the way in", async () => {
     const store = await freshStore();
     const { buildId } = store.addRun(run({ build: BUILD }));
