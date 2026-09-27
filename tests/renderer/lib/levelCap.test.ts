@@ -82,7 +82,7 @@ describe("levelCap helpers", () => {
     ]);
   });
 
-  it("shows the archgun only on runs that fired it", () => {
+  it("shows the archgun slot only when a build carries one", () => {
     const archgun: LevelCapItem = {
       kind: "archgun",
       type: "/Lotus/Weapons/Archgun/Mausolon",
@@ -91,10 +91,10 @@ describe("levelCap helpers", () => {
     };
     const carried = { ...build(SUIT), archgun };
     const slots = (runs: LevelCapRun[]) => levelCapGearUse(runs).map((g) => g.slot);
-    expect(slots([run("1", "Caliban", 1, { build: carried })])).not.toContain("archgun");
+    expect(slots([run("1", "Caliban", 1, { build: build(SUIT) })])).not.toContain("archgun");
     const gear = levelCapGearUse([
-      run("1", "Caliban", 1, { build: carried }),
-      run("2", "Caliban", 2, { build: carried, archgunUsed: true }),
+      run("1", "Caliban", 1, { build: build(SUIT) }),
+      run("2", "Caliban", 2, { build: carried }),
     ]);
     expect(gear.find((g) => g.slot === "archgun")?.items).toEqual([{ item: archgun, count: 1 }]);
   });

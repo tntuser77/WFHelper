@@ -64,20 +64,14 @@ interface LevelCapGearUse {
   items: Array<{ item: LevelCapItemRef; count: number }>;
 }
 
-/** Every build carries the equipped archgun, so it only counts on runs that fired it. */
-export function levelCapRunGear(run: LevelCapRun, slot: LevelCapCardSlot): LevelCapItemRef | null {
-  if (slot === "archgun" && !run.archgunUsed) return null;
-  return run.build?.[slot] ?? null;
-}
-
 /** What a frame's runs carried in each card slot. A frame run with several
  * setups shows its most-used item per slot, the rest counted behind it. The
- * archgun slot only shows when some run used it. */
+ * archgun slot only shows when some build carries one. */
 export function levelCapGearUse(runs: readonly LevelCapRun[]): LevelCapGearUse[] {
   const gear = LEVEL_CAP_CARD_SLOTS.map((slot) => {
     const counts = new Map<string, { item: LevelCapItemRef; count: number }>();
     for (const run of runs) {
-      const item = levelCapRunGear(run, slot);
+      const item = run.build?.[slot];
       if (!item) continue;
       const key = levelCapItemKey(item);
       const entry = counts.get(key) ?? { item, count: 0 };

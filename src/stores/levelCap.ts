@@ -36,10 +36,6 @@ export async function setLevelCapNotes(id: string, notes: string): Promise<void>
   patchRun(await invoke("setLevelCapNotes", id, notes));
 }
 
-export async function setLevelCapArchgun(id: string, used: boolean): Promise<void> {
-  patchRun(await invoke("setLevelCapArchgun", id, used));
-}
-
 /** Resolves to the new build's id, or null when the equipped frame is a different one. */
 export async function createLevelCapBuild(
   frame: string,

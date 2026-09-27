@@ -723,10 +723,6 @@ export interface IpcInvokeMap {
     args: [id: string, notes: string];
     return: LevelCapRun | null;
   };
-  setLevelCapArchgun: {
-    args: [id: string, used: boolean];
-    return: LevelCapRun | null;
-  };
   createLevelCapBuild: {
     args: [frame: string, source: LevelCapBuildSource, name?: string];
     return: { payload: LevelCapPayload; buildId: string | null };

@@ -1,13 +1,13 @@
 <script lang="ts">
   import { SvelteSet } from "svelte/reactivity";
 
+  import type { LevelCapBuild } from "../../../config/shared/levelCapTypes.js";
   import type { LevelCapNamedBuild, LevelCapRun } from "../../types/ipc.js";
   import { locale, tr as t } from "../../lib/i18n.js";
   import {
     formatLevelCapDuration,
     levelCapItemImage,
     levelCapItemName,
-    levelCapRunGear,
     orderLevelCapTags,
     type LevelCapFrameRow,
   } from "../../lib/levelCap.js";
@@ -38,6 +38,9 @@
   } = $props();
 
   const GEAR = ["primary", "secondary", "melee", "archgun", "companion"] as const;
+  /** The archgun box only shows when the build carries one. */
+  const gearSlots = (build: LevelCapBuild | null) =>
+    GEAR.filter((slot) => slot !== "archgun" || build?.archgun);
   const UNVERIFIED = "unverified";
 
   let editingId = $state<string | null>(null);
@@ -54,10 +57,6 @@
     for (const run of runs) if (run.buildId) counts[run.buildId] = (counts[run.buildId] ?? 0) + 1;
     return counts;
   });
-  // Every build carries the equipped archgun; it shows once one of its runs fired it.
-  const archgunBuilds = $derived(
-    new Set(runs.filter((run) => run.archgunUsed && run.buildId).map((run) => run.buildId)),
-  );
   const unverified = $derived(runs.filter((run) => run.buildUnverified || !run.buildId));
   const shownRuns = $derived(
     filter === null
@@ -195,7 +194,7 @@
                 >
               </button>
               <div class="flex items-center gap-1.5">
-                {#each GEAR.filter((s) => s !== "archgun" || archgunBuilds.has(build.id)) as slot (slot)}
+                {#each gearSlots(build.build) as slot (slot)}
                   {@const gear = build.build[slot]}
                   {@const art = gear ? levelCapItemImage(gear, $itemDb) : null}
                   <div
@@ -328,8 +327,8 @@
                 />
                 <div class="flex w-[22rem] shrink-0 items-center gap-2">
                   <div class="flex shrink-0 items-center gap-1">
-                    {#each GEAR.filter((s) => s !== "archgun" || run.archgunUsed) as slot (slot)}
-                      {@const gear = levelCapRunGear(run, slot)}
+                    {#each gearSlots(run.build) as slot (slot)}
+                      {@const gear = run.build?.[slot]}
                       {@const art = gear ? levelCapItemImage(gear, $itemDb) : null}
                       <div
                         class="flex h-9 w-9 items-center justify-center rounded bg-bg-raised {gear

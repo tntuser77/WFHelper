@@ -38,7 +38,6 @@ import {
   LEVEL_CAP_IMPORT_FOLDERS,
   LEVEL_CAP_OPEN_SCREENSHOT,
   LEVEL_CAP_PICK_FOLDER,
-  LEVEL_CAP_SET_ARCHGUN,
   LEVEL_CAP_SET_NOTES,
   LEVEL_CAP_THUMBNAIL,
   LEVEL_CAP_UPDATE_BUILD,
@@ -271,16 +270,6 @@ function register(): void {
     (_e, id: unknown, notes: unknown) => {
       const runId = asRunId(id);
       return runId ? store.setRunNotes(runId, notes) : null;
-    },
-  );
-
-  handleAuthorized(
-    LEVEL_CAP_SET_ARCHGUN,
-    assertMainRendererSender,
-    (_e, id: unknown, used: unknown) => {
-      const runId = asRunId(id);
-      if (!runId || typeof used !== "boolean") return null;
-      return store.updateRun(runId, (run) => (run.archgunUsed = used));
     },
   );
 

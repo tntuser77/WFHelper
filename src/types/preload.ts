@@ -290,10 +290,6 @@ export interface PreloadAPI {
     id: IpcInvokeMap["setLevelCapNotes"]["args"][0],
     notes: IpcInvokeMap["setLevelCapNotes"]["args"][1],
   ) => Promise<IpcInvokeMap["setLevelCapNotes"]["return"]>;
-  setLevelCapArchgun: (
-    id: IpcInvokeMap["setLevelCapArchgun"]["args"][0],
-    used: IpcInvokeMap["setLevelCapArchgun"]["args"][1],
-  ) => Promise<IpcInvokeMap["setLevelCapArchgun"]["return"]>;
   createLevelCapBuild: (
     frame: IpcInvokeMap["createLevelCapBuild"]["args"][0],
     source: IpcInvokeMap["createLevelCapBuild"]["args"][1],

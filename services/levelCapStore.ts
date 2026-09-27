@@ -325,6 +325,21 @@ export function updateRun(id: string, mutate: (run: LevelCapRun) => void): Level
   return run;
 }
 
+/** The archgun gained XP on this run, so its build carries it from now on. A
+ * build that already has an archgun keeps its own. */
+export function addArchgunToBuild(id: string, archgun: LevelCapItem): LevelCapRun | null {
+  return updateRun(id, (run) => {
+    const record = _builds.find((b) => b.id === run.buildId);
+    if (!record) {
+      if (run.build && !run.build.archgun) run.build.archgun = structuredClone(archgun);
+      return;
+    }
+    if (record.build.archgun) return;
+    record.build.archgun = structuredClone(archgun);
+    for (const other of _runs) if (other.buildId === record.id) stamp(other, record);
+  });
+}
+
 /** The run's loadout changed under it (the tracker corrected the frame); find its build again. */
 export function relinkRun(id: string): LevelCapRun | null {
   return updateRun(id, (run) => {

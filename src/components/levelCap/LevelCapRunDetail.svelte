@@ -6,11 +6,7 @@
   import { tr as t, type MessageKey } from "../../lib/i18n.js";
   import { confirmWithDialog, invoke } from "../../lib/ipc.js";
   import { log } from "../../lib/log.js";
-  import {
-    deleteLevelCapRun,
-    setLevelCapArchgun,
-    setLevelCapNotes,
-  } from "../../stores/levelCap.js";
+  import { deleteLevelCapRun, setLevelCapNotes } from "../../stores/levelCap.js";
   import ThemedButton from "../ThemedButton.svelte";
   import LevelCapItemCard from "./LevelCapItemCard.svelte";
 
@@ -29,7 +25,7 @@
     push(build.primary, "profile.primaryWeapon");
     push(build.secondary, "profile.secondaryWeapon");
     push(build.melee, "rivens.type.melee");
-    if (run.archgunUsed) push(build.archgun, "rivens.type.archgun");
+    push(build.archgun, "rivens.type.archgun");
     push(build.companion, "levelCap.build.companion");
     return rows;
   });
@@ -148,14 +144,6 @@
       </label>
 
       <div class="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
-        <label class="flex cursor-pointer items-center gap-1.5">
-          <input
-            type="checkbox"
-            checked={run.archgunUsed}
-            onchange={(e) => setLevelCapArchgun(run.id, e.currentTarget.checked)}
-          />
-          {$t("levelCap.archgunUsed")}
-        </label>
         {#if run.build?.focus}
           <span
             >{$t("levelCap.build.focus")}: <span class="capitalize">{run.build.focus}</span></span

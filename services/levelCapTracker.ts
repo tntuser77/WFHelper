@@ -63,6 +63,11 @@ function squadSize(mission: LevelCapMission): number | null {
   return mission.players.length || null;
 }
 
+/** Loadouts always name the equipped archgun; a build only keeps one it used. */
+function withoutArchgun(build: LevelCapBuild | null): LevelCapBuild | null {
+  return build && { ...build, archgun: null };
+}
+
 function finishMission(mission: LevelCapMission): void {
   const deps = _deps;
   const runId = _missionRunId;
@@ -88,20 +93,25 @@ function finishMission(mission: LevelCapMission): void {
       if (playedType && playedType !== run.frameType) {
         run.frameType = playedType;
         run.frame = frameGroup(deps.frameName(playedType));
-        run.build = snapshotBuildForFrame(deps.getInventory(), playedType) ?? run.build;
+        run.build =
+          withoutArchgun(snapshotBuildForFrame(deps.getInventory(), playedType)) ?? run.build;
         frameCorrected = true;
       }
     });
     if (frameCorrected) store.relinkRun(runId);
+    const archgun = archgunUsed ? snapshotEquippedBuild(deps.getInventory())?.archgun : null;
+    if (archgun) store.addArchgunToBuild(runId, archgun);
     deps.onChanged();
     return;
   }
 
   // No key press, but the run made it: keep it without a screenshot rather than lose it.
   if ((mission.exolizers ?? 0) < LEVEL_CAP_EXOLIZER_TARGET) return;
-  const build = playedType
+  const snapshot = playedType
     ? snapshotBuildForFrame(deps.getInventory(), playedType)
     : snapshotEquippedBuild(deps.getInventory());
+  const archgun = archgunUsed ? (snapshot?.archgun ?? null) : null;
+  const build = withoutArchgun(snapshot);
   const run = store.addRun({
     completedAt: Date.now(),
     ...frameOf(build),
@@ -115,6 +125,7 @@ function finishMission(mission: LevelCapMission): void {
     build,
     screenshot: null,
   });
+  if (archgun) store.addArchgunToBuild(run.id, archgun);
   log.info(`[LevelCap] ${run.frame} run logged at mission end without a screenshot`);
   deps.onChanged();
 }
@@ -200,7 +211,8 @@ async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome |
     return { type: "screenshot-replaced", run: existing };
   }
 
-  const build = snapshotEquippedBuild(deps.getInventory());
+  // The archgun joins the build at mission end, once its XP shows it was used.
+  const build = withoutArchgun(snapshotEquippedBuild(deps.getInventory()));
   const { frame, frameType } = frameOf(build);
   const run: LevelCapRun = store.addRun({
     completedAt: Date.now(),

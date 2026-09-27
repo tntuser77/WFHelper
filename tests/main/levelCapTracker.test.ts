@@ -103,6 +103,7 @@ describe("levelCapTracker", () => {
     const [logged] = store.getRuns();
     expect(logged.frame).toBe("Dante");
     expect(logged.build?.loadoutName).toBe("Cap Dante");
+    expect(logged.build?.archgun).toBeNull();
     expect(logged.screenshot && fs.readFileSync(logged.screenshot, "utf8")).toBe("png");
     expect(tracker.getStatus()).toEqual({
       inCascade: true,
@@ -117,6 +118,11 @@ describe("levelCapTracker", () => {
     expect(done.durationSec).toBe(4200);
     expect(done.squadSize).toBe(1);
     expect(done.archgunUsed).toBe(true);
+    // The archgun gained XP, so it joins the build and every run on it.
+    expect(done.build?.archgun).not.toBeNull();
+    expect(store.getBuilds().find((b) => b.id === done.buildId)?.build.archgun).toEqual(
+      done.build?.archgun,
+    );
   });
 
   it("a second press replaces the screenshot instead of logging again", async () => {
@@ -152,6 +158,15 @@ describe("levelCapTracker", () => {
     expect(run.screenshot).toBeNull();
     expect(run.frame).toBe("Dante");
     expect(run.archgunUsed).toBe(false);
+    expect(run.build?.archgun).toBeNull();
+  });
+
+  it("puts the archgun on a missed run's build when it gained XP", async () => {
+    const { tracker, store } = await setup();
+    feed(tracker, [...START, exo(4000, 107), ...END(4100, true)]);
+    const [run] = store.getRuns();
+    expect(run.build?.archgun).not.toBeNull();
+    expect(store.getBuilds().find((b) => b.id === run.buildId)?.build.archgun).not.toBeNull();
   });
 
   it("drops a short run the hotkey never logged", async () => {
