@@ -4,7 +4,9 @@
 - [x] Record which other players where in the run.
 - [x] Search/filter runs by which players were in them.
 - [ ] Show anylitics based on which players were in the run.
-- [ ] Detect which Warframe each squadmate was running from the portrait next to their name (about 67 frames, each with a normal and Prime look, plus Operator and Drifter), then show stats like "the frame you most often play alongside is Titania".
+- [x] Collect which Warframe each squadmate was running: portraits next to each name are fingerprinted and grouped across runs.
+- [ ] Name the squadmate portrait groups (one label per frame look) in the analytics tab, then show stats like "the frame you most often play alongside is Titania".
+- [ ] Read squadmates' frames from EE.log once a squad mission log sample is saved (the app now keeps them in level-cap-logs).
 - [x] See if there is anyway to get exolizer values off of the screenshot rather then the more generic round reached.
 - [ ] Add guessing based tags? If my warframe has arcane persistance, add persistance tag. If running vazarin, add vaz dash tag etc
 - [ ] Allow me to edit the icon for each warframe to change the skin?

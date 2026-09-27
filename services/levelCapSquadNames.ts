@@ -14,6 +14,8 @@ export type SquadSlots = readonly (readonly string[])[];
 
 export interface SquadResolution {
   players: string[];
+  /** The name per squad row, null where nobody could be pinned. */
+  slots: Array<string | null>;
   /** Slots whose name could not be pinned to anyone. */
   unknown: number;
 }
@@ -176,6 +178,6 @@ export function resolveSquadNames(
 
   return results.map((run) => {
     const players = [...new Set(run.filter((name): name is string => name !== null))];
-    return { players, unknown: run.length - players.length };
+    return { players, slots: run, unknown: run.length - players.length };
   });
 }

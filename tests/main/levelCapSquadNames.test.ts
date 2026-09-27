@@ -49,7 +49,7 @@ describe("resolveSquadNames", () => {
       [[["WealthyPpe.."], ["Alaric.Saltz... Q"]]],
       ["WealthyPoet", "Alaric.Saltzman"],
     );
-    expect(run).toEqual({ players: ["WealthyPoet", "Alaric.Saltzman"], unknown: 0 });
+    expect(run).toMatchObject({ players: ["WealthyPoet", "Alaric.Saltzman"], unknown: 0 });
   });
 
   it("tries every variant read of a row against known names", () => {

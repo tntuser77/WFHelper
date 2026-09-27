@@ -98,6 +98,11 @@ export interface LevelCapRun {
   squadOcr?: "read" | "unreadable";
   /** `players` came from `squadReads` and is redone as names are learned. */
   playersFromScreenshot?: boolean;
+  /** Screenshot runs: portrait fingerprint per squad row, in `squadReads` order. */
+  squadPortraits?: Array<string | null>;
+  /** Who was in each squad row and what they played, as far as the screenshot
+   *  tells; redone as names and portrait labels are learned. For analytics. */
+  squadmates?: LevelCapSquadmate[];
   tile: LevelCapTile | null;
   /** The archgun got kills this run, so it belongs in the build. */
   archgunUsed: boolean;
@@ -163,6 +168,21 @@ export interface LevelCapCatalog {
   abilities: LevelCapCatalogEntry[];
   /** Frame type -> the base suit its augments name, e.g. HydroidPrime -> PirateBaseSuit. */
   suitParents: Record<string, string>;
+}
+
+export interface LevelCapSquadmate {
+  /** Resolved player name; null for a one-off nobody could name. */
+  name: string | null;
+  /** Portrait group: squadmates sharing it played the same frame look. */
+  portrait: string | null;
+  /** Frame the portrait group was labelled with, once someone labels it. */
+  frame: string | null;
+}
+
+/** A portrait someone named; every portrait like it gets the same frame. */
+export interface LevelCapPortraitLabel {
+  portrait: string;
+  frame: string;
 }
 
 export interface LevelCapSettings {

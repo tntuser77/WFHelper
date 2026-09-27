@@ -4,6 +4,8 @@ import path from "node:path";
 import { app } from "electron";
 
 import { resolveSquadNames } from "./levelCapSquadNames";
+import type { SquadScreenshotRead } from "./levelCapSquadOcr";
+import { groupPortraits, isPortrait } from "./levelCapSquadPortraits";
 import { userDataPath } from "./userDataPath";
 import { writeFileAtomicSync } from "./atomicFile";
 import { normalizeRunNotes, normalizeRunTags } from "./runAnnotations";
@@ -21,9 +23,11 @@ import type {
   LevelCapImportResult,
   LevelCapItem,
   LevelCapNamedBuild,
+  LevelCapPortraitLabel,
   LevelCapRiven,
   LevelCapRun,
   LevelCapSettings,
+  LevelCapSquadmate,
 } from "../config/shared/levelCapTypes";
 
 const log = withScope("levelCapStore");
@@ -40,6 +44,10 @@ let _runs: LevelCapRun[] = [];
 let _builds: LevelCapNamedBuild[] = [];
 let _settings: LevelCapSettings | null = null;
 let _frameNotes: Record<string, string> = {};
+let _portraitLabels: LevelCapPortraitLabel[] = [];
+const PORTRAIT_DIR = "level-cap-portraits";
+const SQUAD_LOG_DIR = "level-cap-logs";
+const MAX_SQUAD_LOGS = 20;
 let _loaded = false;
 
 function defaultSettings(): LevelCapSettings {
@@ -105,6 +113,12 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
   if (Array.isArray(run.squadReads)) out.squadReads = normalizeSquadReads(run.squadReads);
   if (run.squadOcr === "read" || run.squadOcr === "unreadable") out.squadOcr = run.squadOcr;
   if (run.playersFromScreenshot === true) out.playersFromScreenshot = true;
+  delete out.squadPortraits;
+  delete out.squadmates;
+  if (Array.isArray(run.squadPortraits)) {
+    out.squadPortraits = run.squadPortraits.slice(0, 4).map((p) => (isPortrait(p) ? p : null));
+  }
+  if (Array.isArray(run.squadmates)) out.squadmates = normalizeSquadmates(run.squadmates);
   delete (out as { notes?: unknown }).notes;
   delete out.buildId;
   if (tags.length) out.tags = tags;
@@ -131,6 +145,24 @@ function normalizeSquadReads(raw: unknown[]): string[][] {
             .map((read) => read.slice(0, 64))
         : [],
     );
+}
+
+function normalizeSquadmates(raw: unknown[]): LevelCapSquadmate[] {
+  const text = (value: unknown) => (typeof value === "string" && value ? value.slice(0, 64) : null);
+  return raw.slice(0, 4).map((entry) => {
+    const value = (entry ?? {}) as Record<string, unknown>;
+    return { name: text(value.name), portrait: text(value.portrait), frame: text(value.frame) };
+  });
+}
+
+function normalizePortraitLabels(raw: unknown): LevelCapPortraitLabel[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry) => {
+    const value = (entry ?? {}) as Record<string, unknown>;
+    return isPortrait(value.portrait) && typeof value.frame === "string" && value.frame.trim()
+      ? [{ portrait: value.portrait, frame: value.frame.trim().slice(0, 64) }]
+      : [];
+  });
 }
 
 function normalizeFrameNotes(raw: unknown): Record<string, string> {
@@ -216,6 +248,7 @@ function ensureLoaded(): void {
       builds?: unknown;
       settings?: unknown;
       frameNotes?: unknown;
+      portraitLabels?: unknown;
     };
     _runs = Array.isArray(parsed.runs) ? parsed.runs.flatMap((raw) => normalizeRun(raw) ?? []) : [];
     _builds = Array.isArray(parsed.builds)
@@ -223,6 +256,7 @@ function ensureLoaded(): void {
       : [];
     _settings = normalizeSettings(parsed.settings);
     _frameNotes = normalizeFrameNotes(parsed.frameNotes);
+    _portraitLabels = normalizePortraitLabels(parsed.portraitLabels);
     const version = typeof parsed.schemaVersion === "number" ? parsed.schemaVersion : 1;
     if (version < 2) {
       // Keep the pre-migration index untouched in case the grouping is ever wrong.
@@ -243,6 +277,7 @@ function ensureLoaded(): void {
     _builds = [];
     _settings = defaultSettings();
     _frameNotes = {};
+    _portraitLabels = [];
   }
 }
 
@@ -252,6 +287,7 @@ function serialize(): string {
       schemaVersion: INDEX_SCHEMA_VERSION,
       settings: _settings,
       frameNotes: _frameNotes,
+      portraitLabels: _portraitLabels,
       builds: _builds,
       runs: _runs,
     },
@@ -280,7 +316,17 @@ function resolveScreenshotSquads(): void {
     read.map((run) => run.squadReads ?? []),
     known,
   );
+  const portraits = read.flatMap((run) =>
+    (run.squadPortraits ?? []).flatMap((portrait, slot) =>
+      portrait ? [{ key: `${run.id}:${slot}`, portrait }] : [],
+    ),
+  );
+  const groups = groupPortraits(portraits, _portraitLabels);
   read.forEach((run, i) => {
+    run.squadmates = resolved[i].slots.map((name, slot) => {
+      const group = groups.get(`${run.id}:${slot}`);
+      return { name, portrait: group?.group ?? null, frame: group?.frame ?? null };
+    });
     if (run.players?.length && !run.playersFromScreenshot) return;
     const { players } = resolved[i];
     if (players.length) {
@@ -445,23 +491,66 @@ export function recordExolizerRead(
   });
 }
 
-/** Screenshot runs whose squad list has not been read yet. */
+/** Runs with a screenshot whose squad list, names and portraits, has not been
+ *  read yet. Runs read before portraits were kept are read again. */
 export function runsAwaitingSquadRead(): Array<{ id: string; screenshot: string }> {
   ensureLoaded();
   return _runs.flatMap((run) =>
-    run.screenshot && !run.squadOcr && !(run.players?.length && !run.playersFromScreenshot)
+    run.screenshot && run.squadOcr !== "unreadable" && !run.squadPortraits
       ? [{ id: run.id, screenshot: run.screenshot }]
       : [],
   );
 }
 
-/** Keeps the raw reads; who they are is worked out on every save. A failed read
- *  is remembered so it is not retried. */
-export function recordSquadRead(id: string, reads: string[][] | null): LevelCapRun | null {
+/** Keeps the raw reads and portraits; who and what they are is worked out on
+ *  every save. A failed read is remembered so it is not retried. */
+export function recordSquadRead(id: string, read: SquadScreenshotRead | null): LevelCapRun | null {
   return updateRun(id, (run) => {
-    run.squadOcr = reads ? "read" : "unreadable";
-    if (reads) run.squadReads = normalizeSquadReads(reads);
+    run.squadOcr = read ? "read" : "unreadable";
+    if (!read) return;
+    run.squadReads = normalizeSquadReads(read.names);
+    run.squadPortraits = read.portraits.slice(0, 4);
+    read.thumbs.forEach((thumb, slot) => {
+      if (thumb) writePortraitThumb(`${run.id}-${slot}.png`, thumb);
+    });
   });
+}
+
+function writePortraitThumb(name: string, png: Buffer): void {
+  try {
+    fs.mkdirSync(userDataPath(PORTRAIT_DIR), { recursive: true });
+    fs.writeFileSync(userDataPath(PORTRAIT_DIR, name), png);
+  } catch (err) {
+    log.warn("[LevelCap] portrait not saved:", normalizeErrorMessage(err));
+  }
+}
+
+/** Names a portrait's frame; every portrait like it, past and future, follows. */
+export function labelPortrait(portrait: string, frame: string): void {
+  ensureLoaded();
+  if (!isPortrait(portrait)) return;
+  _portraitLabels = _portraitLabels.filter((label) => label.portrait !== portrait);
+  if (frame.trim()) _portraitLabels.push({ portrait, frame: frame.trim().slice(0, 64) });
+  save();
+}
+
+/** Keeps a squad mission's EE.log lines: the log's squad lines are not parsed
+ *  yet, and real samples are what that parser will be written against. */
+export function saveSquadLog(text: string): void {
+  try {
+    const dir = userDataPath(SQUAD_LOG_DIR);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${formatId(new Date())}.log`), text);
+    const logs = fs
+      .readdirSync(dir)
+      .filter((name) => name.endsWith(".log"))
+      .sort();
+    for (const old of logs.slice(0, Math.max(0, logs.length - MAX_SQUAD_LOGS))) {
+      fs.rmSync(path.join(dir, old), { force: true });
+    }
+  } catch (err) {
+    log.warn("[LevelCap] squad log not saved:", normalizeErrorMessage(err));
+  }
 }
 
 /** The archgun gained XP on this run, so its build carries it from now on. A
@@ -734,5 +823,6 @@ export function __resetLevelCapStoreForTest(): void {
   _builds = [];
   _settings = null;
   _frameNotes = {};
+  _portraitLabels = [];
   _loaded = false;
 }

@@ -202,9 +202,9 @@ async function readScreenshots(): Promise<void> {
       const pending = store.runsAwaitingSquadRead();
       if (!pending.length) break;
       for (const { id, screenshot } of pending) {
-        const reads = await readSquadFromScreenshot(screenshot);
-        store.recordSquadRead(id, reads);
-        if (reads?.length) squads++;
+        const read = await readSquadFromScreenshot(screenshot);
+        store.recordSquadRead(id, read);
+        if (read?.names.length) squads++;
       }
       pushUpdate();
     }
@@ -297,6 +297,10 @@ function register(): void {
     onHotkey: (outcome) => {
       broadcastToRenderers(LEVEL_CAP_HOTKEY, outcome);
       showLevelCapNotification(toastCard(outcome));
+      // The new screenshot's squad list: names and what they played.
+      if (outcome.type === "logged" || outcome.type === "screenshot-replaced") {
+        void readScreenshots();
+      }
     },
   });
   bindHotkey();

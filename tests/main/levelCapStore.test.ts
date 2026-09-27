@@ -115,7 +115,8 @@ describe("levelCapStore", () => {
     const live = store.getRuns().find((r) => r.players?.includes("Kemani"))!;
     expect(store.runsAwaitingSquadRead().map((r) => r.id)).toEqual([shot.id]);
 
-    store.recordSquadRead(shot.id, [["WealthyPoe...2"], ["Frozenosmo"], ["Me"], ["Pawcanale"]]);
+    const names = [["WealthyPoe...2"], ["Frozenosmo"], ["Me"], ["Pawcanale"]];
+    store.recordSquadRead(shot.id, { names, portraits: [], thumbs: [] });
     const read = store.getRuns().find((r) => r.id === shot.id)!;
     // Your own name is in every live run, so it is never offered as a match.
     expect(read).toMatchObject({
@@ -126,6 +127,41 @@ describe("levelCapStore", () => {
     });
     expect(store.runsAwaitingSquadRead()).toEqual([]);
     expect(live.players).toEqual(["Me", "Kemani"]);
+  });
+
+  it("groups squad portraits across runs and names them from one label", async () => {
+    const store = await freshStore();
+    const portrait = (shade: number) => Buffer.alloc(16 * 16 * 3, shade).toString("base64");
+    const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
+    const b = store.addRun(run({ source: "import", squadSize: null, screenshot: "b.png" }));
+    store.recordSquadRead(a.id, {
+      names: [["Kemani"], ["x"]],
+      portraits: [portrait(200), portrait(40)],
+      thumbs: [Buffer.from("png"), null],
+    });
+    store.recordSquadRead(b.id, {
+      names: [["Kemani"]],
+      portraits: [portrait(205)],
+      thumbs: [null],
+    });
+    expect(
+      fs.existsSync(path.join(tmpDir, "userData", "level-cap-portraits", `${a.id}-0.png`)),
+    ).toBe(true);
+
+    const mates = () => new Map(store.getRuns().map((r) => [r.id, r.squadmates]));
+    const [first, second] = [mates().get(a.id)!, mates().get(b.id)!];
+    expect(first[0].portrait).toBe(second[0].portrait);
+    expect(first[1].portrait).not.toBe(first[0].portrait);
+    expect(first.map((m) => m.frame)).toEqual([null, null]);
+    expect(second[0].name).toBe("Kemani");
+
+    store.labelPortrait(portrait(202), "Titania Prime");
+    expect(
+      mates()
+        .get(a.id)!
+        .map((m) => m.frame),
+    ).toEqual(["Titania Prime", null]);
+    expect(mates().get(b.id)![0].frame).toBe("Titania Prime");
   });
 
   it("cleans build tags and frame notes on the way in", async () => {

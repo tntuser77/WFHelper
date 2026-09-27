@@ -5,6 +5,7 @@
 
 import { withScope } from "./logger";
 import { paddleRecognizerAvailable, recognizePaddleCrops, type RgbCrop } from "./rivenOcrOnnx";
+import { PORTRAIT_BOX, PORTRAIT_GRID } from "./levelCapSquadPortraits";
 import { loadSharp } from "./sharpRuntime";
 import { normalizeErrorMessage } from "../config/shared/errors";
 
@@ -41,7 +42,22 @@ interface Row {
   y1: number;
   x0: number;
   x1: number;
+  /** The slot disk's centre, which places the portrait; guessed for scanned rows. */
+  disk?: { cx: number; cy: number };
 }
+
+export interface SquadScreenshotRead {
+  /** Variant reads per squad row; empty for a solo run. */
+  names: string[][];
+  /** Portrait fingerprint per row, null where the row had no disk to place it. */
+  portraits: Array<string | null>;
+  /** Small PNG of each portrait, kept so a person can name the frame later. */
+  thumbs: Array<Buffer | null>;
+}
+
+// The portrait ring's centre, in 1080p pixels from the slot disk's centre.
+const PORTRAIT_FROM_DISK = { x: 43, y: -14 };
+const THUMB = { width: 48, height: 42 };
 
 function whiteMask(img: Raw, cut: number, scale: number): Uint8Array {
   const { data, width, height } = img;
@@ -178,8 +194,39 @@ function diskRows(
         gap = 0;
       } else if (++gap > MAX_GAP_PX * scale) break;
     }
-    return { y0, y1, x0, x1 };
+    return { y0, y1, x0, x1, disk: { cx: disk.cx, cy: disk.cy } };
   });
+}
+
+/** Fingerprint and thumbnail of the portrait beside a row, from the full image. */
+async function portraitOf(
+  file: string,
+  W: number,
+  H: number,
+  at: { x: number; y: number },
+  scale: number,
+): Promise<{ portrait: string; thumb: Buffer } | null> {
+  const sharp = loadSharp();
+  const x0 = Math.round(at.x - PORTRAIT_BOX.left * scale);
+  const y0 = Math.round(at.y - PORTRAIT_BOX.top * scale);
+  const w = Math.round((PORTRAIT_BOX.left + PORTRAIT_BOX.right) * scale);
+  const h = Math.round((PORTRAIT_BOX.top + PORTRAIT_BOX.bottom) * scale);
+  // Snips are often cut close on the right; pad what the picture lacks.
+  const cw = Math.min(w, W - x0);
+  if (x0 < 0 || y0 < 0 || y0 + h > H || cw < w * 0.6) return null;
+  const crop: Buffer = await sharp(file)
+    .extract({ left: x0, top: y0, width: cw, height: h })
+    .removeAlpha()
+    .extend({ right: w - cw, background: "#000" })
+    .png()
+    .toBuffer();
+  const grid: Buffer = await sharp(crop)
+    .resize(PORTRAIT_GRID, PORTRAIT_GRID, { fit: "fill" })
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+  const thumb: Buffer = await sharp(crop).resize(THUMB.width, THUMB.height).png().toBuffer();
+  return { portrait: grid.toString("base64"), thumb };
 }
 
 /** The row as the game drew it, for scenes too bright for the white mask. */
@@ -217,8 +264,8 @@ async function rowCrop(mask: Uint8Array, width: number, row: Row): Promise<RgbCr
   return { data, width: cw * UPSCALE, height: ch * UPSCALE };
 }
 
-/** Raw reads per squad row (empty for a solo run), or null when unreadable. */
-export async function readSquadFromScreenshot(file: string): Promise<string[][] | null> {
+/** Names and portraits per squad row, or null when the screenshot is unreadable. */
+export async function readSquadFromScreenshot(file: string): Promise<SquadScreenshotRead | null> {
   if (!paddleRecognizerAvailable()) return null;
   try {
     const sharp = loadSharp();
@@ -245,10 +292,13 @@ export async function readSquadFromScreenshot(file: string): Promise<string[][] 
     const scanned = nameRows(masks[0], width, height, scale).filter((row) =>
       byDisk.every((disk) => Math.abs(mid(disk) - mid(row)) > NAME_HALF_PX * 1.5 * scale),
     );
+    // A scanned row's disk sits in the same column as the found ones.
+    const column = byDisk[0]?.disk?.cx;
+    for (const row of scanned) if (column !== undefined) row.disk = { cx: column, cy: mid(row) };
     const rows = [...byDisk, ...scanned.slice(0, MAX_SLOTS - byDisk.length)].sort(
       (a, b) => a.y0 - b.y0,
     );
-    if (!rows.length) return [];
+    if (!rows.length) return { names: [], portraits: [], thumbs: [] };
     const crops = await Promise.all([
       ...masks.flatMap((mask) => rows.map((row) => rowCrop(mask, width, row))),
       ...rows.map((row) => plainCrop(img, row)),
@@ -257,8 +307,29 @@ export async function readSquadFromScreenshot(file: string): Promise<string[][] 
     const reads = rows.map((_, i) =>
       [0, 1, 2].map((v) => lines[v * rows.length + i]?.text.trim() ?? "").filter(Boolean),
     );
+    const faces = await Promise.all(
+      rows.map((row) =>
+        row.disk
+          ? portraitOf(
+              file,
+              W,
+              H,
+              {
+                x: left + row.disk.cx + PORTRAIT_FROM_DISK.x * scale,
+                y: top + row.disk.cy + PORTRAIT_FROM_DISK.y * scale,
+              },
+              scale,
+            )
+          : null,
+      ),
+    );
     // A lone disk can be your own frame's level; its row names the frame.
-    return reads.filter((variants) => !variants.some((text) => /\[\d/.test(text)));
+    const keep = reads.map((variants) => !variants.some((text) => /\[\d/.test(text)));
+    return {
+      names: reads.filter((_, i) => keep[i]),
+      portraits: faces.flatMap((face, i) => (keep[i] ? [face?.portrait ?? null] : [])),
+      thumbs: faces.flatMap((face, i) => (keep[i] ? [face?.thumb ?? null] : [])),
+    };
   } catch (err) {
     log.warn("[LevelCapOcr] squad read failed:", normalizeErrorMessage(err));
     return null;
