@@ -89,6 +89,22 @@ describe("levelCapStore", () => {
     expect(b.id).toBe(`${a.id}-2`);
   });
 
+  it("reads each imported screenshot for Exolizers once", async () => {
+    const store = await freshStore();
+    const shot = path.join(tmpDir, "shot.png");
+    const a = store.addRun(run({ source: "import", exolizers: null, screenshot: shot }));
+    const b = store.addRun(run({ source: "import", exolizers: null, screenshot: shot }));
+    store.addRun(run({ screenshot: shot }));
+    expect(store.runsAwaitingExolizerRead().map((r) => r.id)).toEqual([a.id, b.id]);
+
+    store.recordExolizerRead(a.id, { exolizers: 112, rounds: 29 });
+    store.recordExolizerRead(b.id, null);
+    expect(store.runsAwaitingExolizerRead()).toEqual([]);
+    const byId = new Map(store.getRuns().map((r) => [r.id, r]));
+    expect(byId.get(a.id)).toMatchObject({ exolizers: 112, rounds: 29, exolizerOcr: "read" });
+    expect(byId.get(b.id)).toMatchObject({ exolizers: null, exolizerOcr: "unreadable" });
+  });
+
   it("cleans build tags and frame notes on the way in", async () => {
     const store = await freshStore();
     const { buildId } = store.addRun(run({ build: BUILD }));

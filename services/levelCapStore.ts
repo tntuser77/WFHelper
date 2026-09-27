@@ -89,6 +89,10 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
   };
   delete out.tags;
   delete out.players;
+  delete out.exolizerOcr;
+  if (run.exolizerOcr === "read" || run.exolizerOcr === "unreadable") {
+    out.exolizerOcr = run.exolizerOcr;
+  }
   if (players.length) out.players = players;
   delete (out as { notes?: unknown }).notes;
   delete out.buildId;
@@ -353,6 +357,32 @@ export function updateRun(id: string, mutate: (run: LevelCapRun) => void): Level
   mutate(run);
   save();
   return run;
+}
+
+/** Imported runs whose screenshot has not been read for the Exolizer count yet. */
+export function runsAwaitingExolizerRead(): Array<{ id: string; screenshot: string }> {
+  ensureLoaded();
+  return _runs.flatMap((run) =>
+    run.source === "import" && run.exolizers === null && !run.exolizerOcr && run.screenshot
+      ? [{ id: run.id, screenshot: run.screenshot }]
+      : [],
+  );
+}
+
+/** Stores what the screenshot said; a failed read is remembered so it is not retried. */
+export function recordExolizerRead(
+  id: string,
+  read: { exolizers: number; rounds: number | null } | null,
+): LevelCapRun | null {
+  return updateRun(id, (run) => {
+    if (!read) {
+      run.exolizerOcr = "unreadable";
+      return;
+    }
+    run.exolizerOcr = "read";
+    run.exolizers = read.exolizers;
+    if (read.rounds !== null && run.rounds == null) run.rounds = read.rounds;
+  });
 }
 
 /** The archgun gained XP on this run, so its build carries it from now on. A

@@ -22,6 +22,7 @@ import {
   snapshotItemConfigs,
 } from "../services/levelCapBuild";
 import { captureScreenFast } from "../services/screenCapture";
+import { readExolizersFromScreenshot } from "../services/levelCapExolizerOcr";
 import { withScope } from "../services/logger";
 import { loadRegionTranslation } from "../services/regionNames";
 import { fallbackNameFromUniqueName } from "../config/shared/displayName";
@@ -59,6 +60,9 @@ const log = withScope("levelCapIpc");
 const THUMBNAIL_WIDTH = 960;
 
 let _boundHotkey = "";
+let _readingExolizers = false;
+// Startup has enough to load; the screenshot pass can wait a little.
+const EXOLIZER_READ_DELAY_MS = 15_000;
 
 function frameName(type: string): string {
   return itemDb.lookupItem(type)?.name || fallbackNameFromUniqueName(type);
@@ -175,6 +179,28 @@ function pushUpdate(): void {
   broadcastToRenderers(LEVEL_CAP_UPDATED, payload());
 }
 
+/** Reads the Exolizer count off imported screenshots, one at a time in the background. */
+async function readImportedExolizers(): Promise<void> {
+  if (_readingExolizers) return;
+  _readingExolizers = true;
+  let read = 0;
+  try {
+    for (;;) {
+      const pending = store.runsAwaitingExolizerRead();
+      if (!pending.length) break;
+      for (const { id, screenshot } of pending) {
+        const result = await readExolizersFromScreenshot(screenshot);
+        store.recordExolizerRead(id, result);
+        if (result) read++;
+      }
+      pushUpdate();
+    }
+    if (read) log.info(`[LevelCap] read ${read} Exolizer count(s) off screenshots`);
+  } finally {
+    _readingExolizers = false;
+  }
+}
+
 function bindHotkey(): void {
   const { hotkey, passthrough } = store.getSettings();
   if (_boundHotkey) unregisterTransientHotkey(_boundHotkey);
@@ -260,6 +286,7 @@ function register(): void {
     },
   });
   bindHotkey();
+  setTimeout(() => void readImportedExolizers(), EXOLIZER_READ_DELAY_MS).unref?.();
 
   handleAuthorized(LEVEL_CAP_GET, assertMainRendererSender, () => {
     backfillInventory(ctx.currentInventoryData);
@@ -370,6 +397,7 @@ function register(): void {
       buildForFrame: (type) => snapshotBuildForFrame(ctx.currentInventoryData, type),
     });
     log.info(`[LevelCap] imported ${result.imported} screenshot(s), ${result.skipped} known`);
+    if (result.imported) void readImportedExolizers();
     return { result, payload: payload() };
   });
 

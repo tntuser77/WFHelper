@@ -83,6 +83,8 @@ export interface LevelCapRun {
   frameType: string | null;
   source: LevelCapRunSource;
   exolizers: number | null;
+  /** Imported runs only: whether the Exolizer count was read off the screenshot. */
+  exolizerOcr?: "read" | "unreadable";
   /** Rounds completed; the only progress a squad client's log carries. */
   rounds?: number | null;
   durationSec: number | null;
