@@ -102,6 +102,8 @@ export interface LevelCapRun {
   squadPortraits?: Array<string | null>;
   /** Version of the squad reader behind `squadReads`; a newer one reads runs again. */
   squadReader?: number;
+  /** Corrections the user made to squad rows the screenshot read got wrong. */
+  squadFixes?: LevelCapSquadFix[];
   /** Who was in each squad row and what they played, as far as the screenshot
    *  tells; redone as names and portrait labels are learned. For analytics. */
   squadmates?: LevelCapSquadmate[];
@@ -179,6 +181,15 @@ export interface LevelCapSquadmate {
   portrait: string | null;
   /** Frame the portrait group was labelled with, once someone labels it. */
   frame: string | null;
+}
+
+/** A correction to one squad row, by its place in `squadReads`. */
+export interface LevelCapSquadFix {
+  slot: number;
+  name?: string;
+  frame?: string;
+  /** The row was HUD text or a nametag, not a player. */
+  notSquadmate?: true;
 }
 
 /** A portrait someone named; every portrait like it gets the same frame. */

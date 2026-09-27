@@ -24,6 +24,7 @@ import type {
   LevelCapItem,
   LevelCapNamedBuild,
   LevelCapPortraitLabel,
+  LevelCapSquadFix,
   LevelCapRiven,
   LevelCapRun,
   LevelCapSettings,
@@ -121,6 +122,9 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
   if (Array.isArray(run.squadmates)) out.squadmates = normalizeSquadmates(run.squadmates);
   delete out.squadReader;
   if (typeof run.squadReader === "number") out.squadReader = run.squadReader;
+  delete out.squadFixes;
+  const fixes = Array.isArray(run.squadFixes) ? normalizeSquadFixes(run.squadFixes) : [];
+  if (fixes.length) out.squadFixes = fixes;
   delete (out as { notes?: unknown }).notes;
   delete out.buildId;
   if (tags.length) out.tags = tags;
@@ -155,6 +159,30 @@ function normalizeSquadmates(raw: unknown[]): LevelCapSquadmate[] {
     const value = (entry ?? {}) as Record<string, unknown>;
     return { name: text(value.name), portrait: text(value.portrait), frame: text(value.frame) };
   });
+}
+
+function normalizeSquadFix(raw: unknown): LevelCapSquadFix | null {
+  const value = (raw ?? {}) as Record<string, unknown>;
+  if (!Number.isInteger(value.slot) || (value.slot as number) < 0 || (value.slot as number) > 3) {
+    return null;
+  }
+  const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 64) : null);
+  const fix: LevelCapSquadFix = { slot: value.slot as number };
+  const name = text(value.name);
+  const frame = text(value.frame);
+  if (name) fix.name = name;
+  if (frame) fix.frame = frame;
+  if (value.notSquadmate === true) fix.notSquadmate = true;
+  return name || frame || fix.notSquadmate ? fix : null;
+}
+
+function normalizeSquadFixes(raw: unknown[]): LevelCapSquadFix[] {
+  const bySlot = new Map<number, LevelCapSquadFix>();
+  for (const entry of raw) {
+    const fix = normalizeSquadFix(entry);
+    if (fix) bySlot.set(fix.slot, fix);
+  }
+  return [...bySlot.values()].sort((a, b) => a.slot - b.slot);
 }
 
 function normalizePortraitLabels(raw: unknown): LevelCapPortraitLabel[] {
@@ -320,19 +348,31 @@ function resolveScreenshotSquads(): void {
     read.map((run) => run.squadReads ?? []),
     known,
   );
-  const portraits = read.flatMap((run) =>
-    (run.squadPortraits ?? []).flatMap((portrait, slot) =>
-      portrait ? [{ key: `${run.id}:${slot}`, portrait }] : [],
-    ),
-  );
+  const fixesOf = (run: LevelCapRun) => new Map(run.squadFixes?.map((fix) => [fix.slot, fix]));
+  // A row ruled out as a player never lends its portrait to a group.
+  const portraits = read.flatMap((run) => {
+    const fixes = fixesOf(run);
+    return (run.squadPortraits ?? []).flatMap((portrait, slot) =>
+      portrait && !fixes.get(slot)?.notSquadmate ? [{ key: `${run.id}:${slot}`, portrait }] : [],
+    );
+  });
   const groups = groupPortraits(portraits, _portraitLabels);
   read.forEach((run, i) => {
-    run.squadmates = resolved[i].slots.map((name, slot) => {
+    const fixes = fixesOf(run);
+    run.squadmates = resolved[i].slots.flatMap((name, slot) => {
+      const fix = fixes.get(slot);
+      if (fix?.notSquadmate) return [];
       const group = groups.get(`${run.id}:${slot}`);
-      return { name, portrait: group?.group ?? null, frame: group?.frame ?? null };
+      return [
+        {
+          name: fix?.name ?? name,
+          portrait: group?.group ?? null,
+          frame: fix?.frame ?? group?.frame ?? null,
+        },
+      ];
     });
     if (run.players?.length && !run.playersFromScreenshot) return;
-    const { players } = resolved[i];
+    const players = [...new Set(run.squadmates.flatMap((mate) => (mate.name ? [mate.name] : [])))];
     if (players.length) {
       run.players = players;
       run.playersFromScreenshot = true;
@@ -341,7 +381,7 @@ function resolveScreenshotSquads(): void {
       delete run.playersFromScreenshot;
     }
     if (run.source === "import" && run.squadReads?.length) {
-      run.squadSize = run.squadReads.length + 1;
+      run.squadSize = run.squadmates.length + 1;
     }
   });
 }
@@ -553,6 +593,21 @@ export function labelPortrait(portrait: string, frame: string): void {
   _portraitLabels = _portraitLabels.filter((label) => label.portrait !== portrait);
   if (frame.trim()) _portraitLabels.push({ portrait, frame: frame.trim().slice(0, 64) });
   save();
+}
+
+/** Sets or, with null, clears the correction on one squad row of a run. */
+export function fixSquadmate(
+  id: string,
+  slot: number,
+  fix: Omit<LevelCapSquadFix, "slot"> | null,
+): LevelCapRun | null {
+  return updateRun(id, (run) => {
+    const clean = fix && normalizeSquadFix({ ...fix, slot });
+    const kept = (run.squadFixes ?? []).filter((f) => f.slot !== slot);
+    const next = clean ? [...kept, clean].sort((a, b) => a.slot - b.slot) : kept;
+    if (next.length) run.squadFixes = next;
+    else delete run.squadFixes;
+  });
 }
 
 /** Keeps a squad mission's EE.log lines: the log's squad lines are not parsed

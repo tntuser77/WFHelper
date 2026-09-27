@@ -188,6 +188,44 @@ describe("levelCapStore", () => {
     expect(store.getRuns()[0].squadmates?.[0].frame).toBe("Titania");
   });
 
+  it("applies squad corrections: a frame, a name, and a row that was never a player", async () => {
+    const store = await freshStore();
+    const portrait = (shade: number) => Buffer.alloc(16 * 16 * 3, shade).toString("base64");
+    const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
+    store.recordSquadRead(a.id, {
+      names: [["62%"], ["Kemani"], ["x"]],
+      portraits: [portrait(10), portrait(200), null],
+      thumbs: [null, null, null],
+    });
+    store.labelPortrait(portrait(200), "Titania");
+    store.fixSquadmate(a.id, 0, { notSquadmate: true });
+    store.fixSquadmate(a.id, 2, { name: "Clapher", frame: "Cyte-09" });
+    store.fixSquadmate(a.id, 1, { frame: "Gauss" });
+    let fixed = store.getRuns().find((r) => r.id === a.id)!;
+    expect(fixed.squadmates?.map((m) => [m.name, m.frame])).toEqual([
+      [null, "Gauss"],
+      ["Clapher", "Cyte-09"],
+    ]);
+    expect(fixed.players).toEqual(["Clapher"]);
+    expect(fixed.squadSize).toBe(3);
+
+    // Clearing a correction hands the row back to what the screenshot says.
+    store.fixSquadmate(a.id, 1, null);
+    fixed = store.getRuns().find((r) => r.id === a.id)!;
+    expect(fixed.squadmates?.[0].frame).toBe("Titania");
+  });
+
+  it("counts a run as solo once every squad row is ruled out", async () => {
+    const store = await freshStore();
+    const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
+    store.recordSquadRead(a.id, { names: [["Djinn"]], portraits: [null], thumbs: [null] });
+    store.fixSquadmate(a.id, 0, { notSquadmate: true });
+    const fixed = store.getRuns().find((r) => r.id === a.id)!;
+    expect(fixed.squadmates).toEqual([]);
+    expect(fixed.squadSize).toBe(1);
+    expect(fixed.players).toBeUndefined();
+  });
+
   it("reads a squad again once when an older reader found no portraits", async () => {
     const file = path.join(tmpDir, "userData", "level-cap-runs.json");
     const portrait = Buffer.alloc(16 * 16 * 3, 90).toString("base64");
