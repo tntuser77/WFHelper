@@ -13,6 +13,7 @@ import {
 import {
   formatLevelCapDuration,
   levelCapFrames,
+  levelCapGearUse,
   levelCapItemImage,
   levelCapItemKey,
   levelCapItemName,
@@ -79,6 +80,23 @@ describe("levelCap helpers", () => {
       ["Dante", 2, 0],
       ["Cyte-09", 1, 1],
     ]);
+  });
+
+  it("shows the archgun only on runs that fired it", () => {
+    const archgun: LevelCapItem = {
+      kind: "archgun",
+      type: "/Lotus/Weapons/Archgun/Mausolon",
+      config: 0,
+      upgrades: [],
+    };
+    const carried = { ...build(SUIT), archgun };
+    const slots = (runs: LevelCapRun[]) => levelCapGearUse(runs).map((g) => g.slot);
+    expect(slots([run("1", "Caliban", 1, { build: carried })])).not.toContain("archgun");
+    const gear = levelCapGearUse([
+      run("1", "Caliban", 1, { build: carried }),
+      run("2", "Caliban", 2, { build: carried, archgunUsed: true }),
+    ]);
+    expect(gear.find((g) => g.slot === "archgun")?.items).toEqual([{ item: archgun, count: 1 }]);
   });
 
   it("treats builds that differ only in mod ranks as the same build", () => {

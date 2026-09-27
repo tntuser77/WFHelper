@@ -38,6 +38,7 @@
     primary: "profile.primaryWeapon",
     secondary: "profile.secondaryWeapon",
     melee: "rivens.type.melee",
+    archgun: "rivens.type.archgun",
     companion: "levelCap.build.companion",
   };
 
@@ -142,7 +143,7 @@
     {/if}
   </div>
 
-  <div class="relative grid grid-cols-4 gap-2">
+  <div class="relative grid gap-2 {gear.length > 4 ? 'grid-cols-5' : 'grid-cols-4'}">
     {#each gear as { slot, items } (slot)}
       {@const top = items[0]}
       {@const art = top ? levelCapItemImage(top.item, $itemDb) : null}

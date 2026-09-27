@@ -54,7 +54,7 @@ export interface LevelCapFrameRow {
 }
 
 /** The card's gear strip, in display order. */
-const LEVEL_CAP_CARD_SLOTS = ["primary", "secondary", "melee", "companion"] as const;
+const LEVEL_CAP_CARD_SLOTS = ["primary", "secondary", "melee", "archgun", "companion"] as const;
 
 type LevelCapCardSlot = (typeof LEVEL_CAP_CARD_SLOTS)[number];
 
@@ -64,13 +64,20 @@ interface LevelCapGearUse {
   items: Array<{ item: LevelCapItemRef; count: number }>;
 }
 
+/** Every build carries the equipped archgun, so it only counts on runs that fired it. */
+export function levelCapRunGear(run: LevelCapRun, slot: LevelCapCardSlot): LevelCapItemRef | null {
+  if (slot === "archgun" && !run.archgunUsed) return null;
+  return run.build?.[slot] ?? null;
+}
+
 /** What a frame's runs carried in each card slot. A frame run with several
- * setups shows its most-used item per slot, the rest counted behind it. */
+ * setups shows its most-used item per slot, the rest counted behind it. The
+ * archgun slot only shows when some run used it. */
 export function levelCapGearUse(runs: readonly LevelCapRun[]): LevelCapGearUse[] {
-  return LEVEL_CAP_CARD_SLOTS.map((slot) => {
+  const gear = LEVEL_CAP_CARD_SLOTS.map((slot) => {
     const counts = new Map<string, { item: LevelCapItemRef; count: number }>();
     for (const run of runs) {
-      const item = run.build?.[slot];
+      const item = levelCapRunGear(run, slot);
       if (!item) continue;
       const key = levelCapItemKey(item);
       const entry = counts.get(key) ?? { item, count: 0 };
@@ -82,6 +89,7 @@ export function levelCapGearUse(runs: readonly LevelCapRun[]): LevelCapGearUse[]
     );
     return { slot, items };
   });
+  return gear.filter(({ slot, items }) => slot !== "archgun" || items.length);
 }
 
 /** One row per frame with at least one run, most-run first. */
