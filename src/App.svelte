@@ -85,6 +85,7 @@
   $: shellAccentStyle = viewAccentVars(effectiveViewAccent($themeSettings, $currentView));
 
   onMount(() => {
+    let disposed = false;
     let stopRememberingView = (): void => {};
     const unsubscribeViewChange = currentView.subscribe((view) => {
       handleViewChange(view);
@@ -105,14 +106,19 @@
       // non-"1" leftover value is treated consistently.
       currentView.set("setup");
     } else {
-      stopRememberingView = rememberLastViewInDev();
-      void reopenSetupWhenInventoryIsUnavailable();
+      // The inventory redirect only corrects the view while the launch default is
+      // still showing, so it has to settle before the dev restore can take that
+      // view away from it.
+      void reopenSetupWhenInventoryIsUnavailable().then(() => {
+        if (!disposed) stopRememberingView = rememberLastViewInDev();
+      });
       void restoreWorkspaceOnLaunch();
     }
 
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
+      disposed = true;
       startup.dispose();
       disposeEvents();
       unsubscribeViewChange();
