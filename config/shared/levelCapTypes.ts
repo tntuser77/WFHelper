@@ -90,8 +90,14 @@ export interface LevelCapRun {
   durationSec: number | null;
   /** Players in the mission including you; null when the log never said. */
   squadSize: number | null;
-  /** Names the log gave for the squad, you included; only on runs logged live. */
+  /** Names the log gave for the squad, you included; on screenshot runs, the
+   *  squadmates read off the picture that could be pinned to someone. */
   players?: string[];
+  /** Screenshot runs: raw OCR of each squad row, variant reads per row. */
+  squadReads?: string[][];
+  squadOcr?: "read" | "unreadable";
+  /** `players` came from `squadReads` and is redone as names are learned. */
+  playersFromScreenshot?: boolean;
   tile: LevelCapTile | null;
   /** The archgun got kills this run, so it belongs in the build. */
   archgunUsed: boolean;
@@ -168,6 +174,8 @@ export interface LevelCapSettings {
   screenshotDir: string;
   /** Mirror of the index and screenshots; empty disables the backup. */
   backupDir: string;
+  /** Exact names of players the user runs with, so screenshot reads snap to them. */
+  knownPlayers: string[];
 }
 
 export interface LevelCapStatus {

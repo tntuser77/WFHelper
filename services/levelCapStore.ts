@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 
+import { resolveSquadNames } from "./levelCapSquadNames";
 import { userDataPath } from "./userDataPath";
 import { writeFileAtomicSync } from "./atomicFile";
 import { normalizeRunNotes, normalizeRunTags } from "./runAnnotations";
@@ -47,6 +48,7 @@ function defaultSettings(): LevelCapSettings {
     passthrough: true,
     screenshotDir: path.join(app.getPath("pictures"), "WarframeCaps"),
     backupDir: "",
+    knownPlayers: [],
   };
 }
 
@@ -62,6 +64,9 @@ function normalizeSettings(raw: unknown): LevelCapSettings {
         ? value.screenshotDir
         : base.screenshotDir,
     backupDir: typeof value.backupDir === "string" ? value.backupDir : base.backupDir,
+    knownPlayers: Array.isArray(value.knownPlayers)
+      ? normalizePlayers(value.knownPlayers, 200)
+      : base.knownPlayers,
   };
 }
 
@@ -94,6 +99,12 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
     out.exolizerOcr = run.exolizerOcr;
   }
   if (players.length) out.players = players;
+  delete out.squadReads;
+  delete out.squadOcr;
+  delete out.playersFromScreenshot;
+  if (Array.isArray(run.squadReads)) out.squadReads = normalizeSquadReads(run.squadReads);
+  if (run.squadOcr === "read" || run.squadOcr === "unreadable") out.squadOcr = run.squadOcr;
+  if (run.playersFromScreenshot === true) out.playersFromScreenshot = true;
   delete (out as { notes?: unknown }).notes;
   delete out.buildId;
   if (tags.length) out.tags = tags;
@@ -101,13 +112,25 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
   return out;
 }
 
-function normalizePlayers(raw: unknown): string[] {
+function normalizePlayers(raw: unknown, max = 8): string[] {
   if (!Array.isArray(raw)) return [];
   const names = raw
     .filter((name): name is string => typeof name === "string")
     .map((name) => name.trim().slice(0, 64))
     .filter(Boolean);
-  return [...new Set(names)].slice(0, 8);
+  return [...new Set(names)].slice(0, max);
+}
+
+function normalizeSquadReads(raw: unknown[]): string[][] {
+  return raw
+    .slice(0, 4)
+    .map((slot) =>
+      Array.isArray(slot)
+        ? slot
+            .filter((read): read is string => typeof read === "string")
+            .map((read) => read.slice(0, 64))
+        : [],
+    );
 }
 
 function normalizeFrameNotes(raw: unknown): Record<string, string> {
@@ -237,7 +260,44 @@ function serialize(): string {
   );
 }
 
+/** Names from live runs, minus yours: the one name every live run has. */
+function namesFromLiveRuns(): string[] {
+  const live = _runs.filter((run) => run.players?.length && !run.playersFromScreenshot);
+  const counts = new Map<string, number>();
+  for (const run of live)
+    for (const name of run.players ?? []) counts.set(name, (counts.get(name) ?? 0) + 1);
+  return [...counts]
+    .filter(([, count]) => live.length < 2 || count < live.length)
+    .map(([name]) => name);
+}
+
+/** Re-pins every screenshot run's squad, since each learned name can fix old reads. */
+function resolveScreenshotSquads(): void {
+  const read = _runs.filter((run) => run.squadReads);
+  if (!read.length) return;
+  const known = [...new Set([...getSettings().knownPlayers, ...namesFromLiveRuns()])];
+  const resolved = resolveSquadNames(
+    read.map((run) => run.squadReads ?? []),
+    known,
+  );
+  read.forEach((run, i) => {
+    if (run.players?.length && !run.playersFromScreenshot) return;
+    const { players } = resolved[i];
+    if (players.length) {
+      run.players = players;
+      run.playersFromScreenshot = true;
+    } else {
+      delete run.players;
+      delete run.playersFromScreenshot;
+    }
+    if (run.source === "import" && run.squadReads?.length) {
+      run.squadSize = run.squadReads.length + 1;
+    }
+  });
+}
+
 function save(): void {
+  resolveScreenshotSquads();
   const text = serialize();
   try {
     writeFileAtomicSync(userDataPath(INDEX_FILE), text);
@@ -382,6 +442,25 @@ export function recordExolizerRead(
     run.exolizerOcr = "read";
     run.exolizers = read.exolizers;
     if (read.rounds !== null && run.rounds == null) run.rounds = read.rounds;
+  });
+}
+
+/** Screenshot runs whose squad list has not been read yet. */
+export function runsAwaitingSquadRead(): Array<{ id: string; screenshot: string }> {
+  ensureLoaded();
+  return _runs.flatMap((run) =>
+    run.screenshot && !run.squadOcr && !(run.players?.length && !run.playersFromScreenshot)
+      ? [{ id: run.id, screenshot: run.screenshot }]
+      : [],
+  );
+}
+
+/** Keeps the raw reads; who they are is worked out on every save. A failed read
+ *  is remembered so it is not retried. */
+export function recordSquadRead(id: string, reads: string[][] | null): LevelCapRun | null {
+  return updateRun(id, (run) => {
+    run.squadOcr = reads ? "read" : "unreadable";
+    if (reads) run.squadReads = normalizeSquadReads(reads);
   });
 }
 

@@ -13,6 +13,18 @@
 
   // Tags live on builds; a run only keeps its own until it is put on one.
   const legacyTags = $derived(run.tags ?? []);
+  // Screenshot rows nobody could be pinned to; the log never leaves any.
+  const unknownPlayers = $derived(
+    run.playersFromScreenshot || run.squadReads
+      ? Math.max(0, (run.squadReads?.length ?? 0) - (run.players?.length ?? 0))
+      : 0,
+  );
+  const squadNames = $derived(
+    [
+      ...(run.players ?? []),
+      ...(unknownPlayers ? [$t("levelCap.playersUnknown", { count: String(unknownPlayers) })] : []),
+    ].join(", "),
+  );
   const items = $derived.by(() => {
     const build = run.build;
     if (!build) return [];
@@ -110,9 +122,12 @@
         {#if run.build?.loadoutName}
           <span>{$t("levelCap.build.loadout", { name: run.build.loadoutName })}</span>
         {/if}
-        {#if run.players?.length}
-          <span data-level-cap-players
-            >{$t("levelCap.players", { names: run.players.join(", ") })}</span
+        {#if run.players?.length || unknownPlayers}
+          <span
+            data-level-cap-players
+            title={run.playersFromScreenshot ? $t("levelCap.playersOcrHint") : undefined}
+            >{$t("levelCap.players", { names: squadNames })}{#if run.playersFromScreenshot}
+              <span class="text-text-muted">{$t("levelCap.playersOcr")}</span>{/if}</span
           >
         {/if}
         {#if run.source === "mission-end"}

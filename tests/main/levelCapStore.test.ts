@@ -70,6 +70,7 @@ describe("levelCapStore", () => {
       passthrough: true,
       screenshotDir: path.join(tmpDir, "pictures", "WarframeCaps"),
       backupDir: "",
+      knownPlayers: [],
     });
   });
 
@@ -103,6 +104,28 @@ describe("levelCapStore", () => {
     const byId = new Map(store.getRuns().map((r) => [r.id, r]));
     expect(byId.get(a.id)).toMatchObject({ exolizers: 112, rounds: 29, exolizerOcr: "read" });
     expect(byId.get(b.id)).toMatchObject({ exolizers: null, exolizerOcr: "unreadable" });
+  });
+
+  it("names screenshot squads from known players and live runs", async () => {
+    const store = await freshStore();
+    store.updateSettings({ knownPlayers: ["WealthyPoet"] });
+    store.addRun(run({ players: ["Me", "Frozenos"] }));
+    store.addRun(run({ players: ["Me", "Kemani"] }));
+    const shot = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
+    const live = store.getRuns().find((r) => r.players?.includes("Kemani"))!;
+    expect(store.runsAwaitingSquadRead().map((r) => r.id)).toEqual([shot.id]);
+
+    store.recordSquadRead(shot.id, [["WealthyPoe...2"], ["Frozenosmo"], ["Me"], ["Pawcanale"]]);
+    const read = store.getRuns().find((r) => r.id === shot.id)!;
+    // Your own name is in every live run, so it is never offered as a match.
+    expect(read).toMatchObject({
+      players: ["WealthyPoet", "Frozenos"],
+      playersFromScreenshot: true,
+      squadOcr: "read",
+      squadSize: 5,
+    });
+    expect(store.runsAwaitingSquadRead()).toEqual([]);
+    expect(live.players).toEqual(["Me", "Kemani"]);
   });
 
   it("cleans build tags and frame notes on the way in", async () => {
