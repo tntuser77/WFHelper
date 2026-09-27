@@ -8,6 +8,8 @@
     formatLevelCapDuration,
     levelCapItemImage,
     levelCapItemName,
+    levelCapPlayerTerms,
+    levelCapRunHasPlayer,
     orderLevelCapTags,
     type LevelCapFrameRow,
   } from "../../lib/levelCap.js";
@@ -25,6 +27,7 @@
     runs,
     builds,
     notes,
+    searchTerms,
     tagSuggestions,
     abilityNames,
     onClose,
@@ -35,6 +38,8 @@
     /** This frame's builds only. */
     builds: LevelCapNamedBuild[];
     notes: string;
+    /** The panel's search; terms naming a squad player narrow the run list. */
+    searchTerms: string[];
     tagSuggestions: string[];
     abilityNames: Record<string, string>;
     onClose: () => void;
@@ -61,12 +66,14 @@
     return counts;
   });
   const unverified = $derived(runs.filter((run) => run.buildUnverified || !run.buildId));
+  const playerTerms = $derived(levelCapPlayerTerms(runs, searchTerms));
   const shownRuns = $derived(
-    filter === null
+    (filter === null
       ? runs
       : filter === UNVERIFIED
         ? unverified
-        : runs.filter((run) => run.buildId === filter),
+        : runs.filter((run) => run.buildId === filter)
+    ).filter((run) => playerTerms.every((term) => levelCapRunHasPlayer(run, term))),
   );
   const checkedRuns = $derived(runs.filter((run) => checked.has(run.id)));
   const buildName = (id: string | undefined) => builds.find((b) => b.id === id)?.name ?? "";
@@ -286,6 +293,11 @@
               >{$t("levelCap.allBuilds")}</ThemedButton
             >
           {/if}
+          {#if playerTerms.length}
+            <span class="text-info" data-level-cap-player-filter
+              >{$t("levelCap.playerFilter", { names: playerTerms.join(", ") })}</span
+            >
+          {/if}
           <ThemedButton
             size="compact"
             onClick={() => shownRuns.forEach((run) => checked.add(run.id))}
@@ -412,7 +424,7 @@
                   </span>
                   <span class="flex flex-col items-end text-xs text-text-muted">
                     <span class="whitespace-nowrap">{runDate(run.completedAt)}</span>
-                    <span>{squadLabel(run)}</span>
+                    <span title={run.players?.join(", ")}>{squadLabel(run)}</span>
                   </span>
                 </button>
                 <button

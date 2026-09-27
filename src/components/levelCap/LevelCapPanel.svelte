@@ -7,6 +7,7 @@
   import {
     levelCapFrames,
     levelCapItemName,
+    levelCapRunHasPlayer,
     levelCapSearchTerms,
     levelCapTagSuggestions,
     toggleLevelCapSearchTag,
@@ -65,7 +66,8 @@
         (term) =>
           row.frame.toLowerCase().includes(term) ||
           (tagsByFrame[row.frame] ?? []).some((tag) => tag.includes(term)) ||
-          (itemsByFrame[row.frame] ?? []).some((name) => name.includes(term)),
+          (itemsByFrame[row.frame] ?? []).some((name) => name.includes(term)) ||
+          (runsByFrame[row.frame] ?? []).some((run) => levelCapRunHasPlayer(run, term)),
       ),
     );
   });
@@ -211,6 +213,7 @@
     runs={runsByFrame[openRow.frame] ?? []}
     builds={buildsByFrame[openRow.frame] ?? []}
     notes={$levelCap?.frameNotes[openRow.frame] ?? ""}
+    {searchTerms}
     {tagSuggestions}
     {abilityNames}
     onClose={() => (openFrame = null)}

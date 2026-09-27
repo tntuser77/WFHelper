@@ -126,6 +126,19 @@ export function levelCapSearchTerms(query: string): string[] {
     .filter(Boolean);
 }
 
+/** Whether a squad player's name contains the (lowercased) search term. */
+export function levelCapRunHasPlayer(run: { players?: string[] }, term: string): boolean {
+  return (run.players ?? []).some((name) => name.toLowerCase().includes(term));
+}
+
+/** The search terms that name a player on at least one of these runs. */
+export function levelCapPlayerTerms(
+  runs: ReadonlyArray<{ players?: string[] }>,
+  terms: readonly string[],
+): string[] {
+  return terms.filter((term) => runs.some((run) => levelCapRunHasPlayer(run, term)));
+}
+
 /** Adds the tag to the comma list, or takes it out when it is already there. */
 export function toggleLevelCapSearchTag(query: string, tag: string): string {
   const terms = query

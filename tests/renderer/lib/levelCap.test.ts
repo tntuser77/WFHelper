@@ -17,6 +17,8 @@ import {
   levelCapItemImage,
   levelCapItemKey,
   levelCapItemName,
+  levelCapPlayerTerms,
+  levelCapRunHasPlayer,
   levelCapSearchTerms,
   levelCapSlotLayout,
   levelCapTagSuggestions,
@@ -217,6 +219,20 @@ describe("level cap search", () => {
     expect(toggleLevelCapSearchTag("", "Melee")).toBe("Melee");
     expect(toggleLevelCapSearchTag("Melee", "Influence")).toBe("Melee, Influence");
     expect(toggleLevelCapSearchTag("melee, Influence", "Melee")).toBe("Influence");
+  });
+
+  it("matches squad players by part of their name", () => {
+    const run = { players: ["Me", "WealthyPoet", "Alaric.Saltzman"] };
+    expect(levelCapRunHasPlayer(run, "wealthy")).toBe(true);
+    expect(levelCapRunHasPlayer(run, "saltz")).toBe(true);
+    expect(levelCapRunHasPlayer(run, "melee")).toBe(false);
+    expect(levelCapRunHasPlayer({}, "wealthy")).toBe(false);
+  });
+
+  it("keeps only the terms that name a player on some run", () => {
+    const runs = [{ players: ["WealthyPoet"] }, {}];
+    expect(levelCapPlayerTerms(runs, ["melee", "wealthy"])).toEqual(["wealthy"]);
+    expect(levelCapPlayerTerms(runs, ["melee"])).toEqual([]);
   });
 });
 
