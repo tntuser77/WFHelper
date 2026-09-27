@@ -17,7 +17,11 @@ export function disposeAppHotkeys(): void {
   if ("dispose" in overlayHotkeyBackend) overlayHotkeyBackend.dispose();
 }
 
-export function registerTransientHotkey(accelerator: string, callback: () => void): boolean {
+export function registerTransientHotkey(
+  accelerator: string,
+  callback: () => void,
+  options: { passthrough?: boolean } = {},
+): boolean {
   if (!accelerator) return false;
   if (
     accelerator === ctx.overlayHotkeyRegistered ||
@@ -28,7 +32,10 @@ export function registerTransientHotkey(accelerator: string, callback: () => voi
     return false;
   }
   try {
-    return overlayHotkeyBackend.register(accelerator, callback);
+    // Only the keyboard hook can pass a key through; globalShortcut always eats it.
+    return "dispose" in overlayHotkeyBackend
+      ? overlayHotkeyBackend.register(accelerator, callback, options)
+      : overlayHotkeyBackend.register(accelerator, callback);
   } catch (err) {
     log.warn("[TransientHotkey] register failed:", accelerator, String(err));
     return false;

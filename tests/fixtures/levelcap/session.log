@@ -1,0 +1,128 @@
+13.982 Sys [Info]: HighLevelGraph setup 9 implicit bridges for zone 1 in 4.3e-06s total 7
+23.213 Game [Info]: Player1 loadout loader finished.
+30.554 Game [Info]: Player1 loadout loader finished.
+36.106 Game [Info]: Player1 loadout loader finished.
+51.049 Script [Info]: ThemedSquadOverlay.lua: Mission name: Tuvul Commons (Zariman) - THE STEEL PATH
+51.168 Script [Info]: ThemedSquadOverlay.lua: Host loading {"difficulty":1,"name":"SolNode232_Hard"} with MissionInfo:
+57.980 Sys [Info]: HighLevelGraph setup 30 implicit bridges for zone 1 in 7.8e-06s total 29
+57.980 Sys [Info]: HighLevelGraph setup 142 implicit bridges for zone 2 in 1.94e-05s total 148
+57.980 Sys [Info]: HighLevelGraph setup 30 implicit bridges for zone 3 in 4.2e-06s total 176
+57.980 Sys [Info]: HighLevelGraph setup 2 implicit bridges for zone 4 in 8e-07s total 178
+57.980 Sys [Info]: HighLevelGraph setup 86 implicit bridges for zone 5 in 9.9e-06s total 253
+57.980 Sys [Info]: HighLevelGraph setup 87 implicit bridges for zone 6 in 9.3e-06s total 333
+57.980 Sys [Info]: HighLevelGraph setup 21 implicit bridges for zone 7 in 1.4e-06s total 337
+57.980 Sys [Info]: HighLevelGraph setup 402 implicit bridges for zone 8 in 5.9e-05s total 690
+57.980 Sys [Info]: HighLevelGraph setup 138 implicit bridges for zone 9 in 1.4e-05s total 797
+57.980 Sys [Info]: HighLevelGraph setup 33 implicit bridges for zone 10 in 5.5e-06s total 820
+57.980 Sys [Info]: HighLevelGraph setup 1 implicit bridges for zone 11 in 4e-07s total 820
+57.980 Sys [Info]: HighLevelGraph setup 1 implicit bridges for zone 12 in 4e-07s total 821
+57.980 Sys [Info]: HighLevelGraph setup 4 implicit bridges for zone 13 in 5e-07s total 825
+57.980 Sys [Info]: HighLevelGraph setup 7 implicit bridges for zone 14 in 7e-07s total 830
+57.980 Sys [Info]: HighLevelGraph setup 14 implicit bridges for zone 15 in 1.6e-06s total 838
+57.980 Sys [Info]: HighLevelGraph setup 2 implicit bridges for zone 16 in 7e-07s total 840
+57.980 Sys [Info]: HighLevelGraph setup 2 implicit bridges for zone 17 in 8e-07s total 842
+57.980 Sys [Info]: HighLevelGraph setup 1 implicit bridges for zone 18 in 1e-07s total 843
+57.980 Sys [Info]: HighLevelGraph setup 2 implicit bridges for zone 19 in 3e-07s total 845
+57.980 Sys [Info]: HighLevelGraph setup 7 implicit bridges for zone 20 in 5e-07s total 850
+57.980 Sys [Info]: HighLevelGraph setup 4 implicit bridges for zone 21 in 4e-07s total 854
+58.832 Game [Info]: Player1 loadout loader finished.
+60.969 Game [Info]: OnStateStarted, mission type=MT_VOID_CASCADE
+182.348 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+183.353 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+183.678 Script [Info]: TopMenu.lua: Abort: host/no session
+183.679 Sys [Info]: EOM missionLocationUnlocked=1
+183.679 Sys [Info]: Weapon in slot SUIT_SLOT with ID 6a36e9677e549b911b0dafe7 has gained 940 XP
+183.679 Sys [Info]: Weapon in slot PISTOL_SLOT with ID 63f36f634dee666dd2068d74 has gained 927 XP
+183.679 Sys [Info]: Weapon in slot MELEE_SLOT with ID 6a61088f72874380ea0fb68b has gained 444 XP
+183.679 Sys [Info]: Weapon in slot HEAVY_GUN_SLOT with ID 63e04c632c6d285795055eed has gained 69 XP
+187.651 Sys [Info]: HighLevelGraph setup 109 implicit bridges for zone 0 in 1.81e-05s total 85
+187.651 Sys [Info]: HighLevelGraph setup 155 implicit bridges for zone 2 in 2.59e-05s total 196
+188.190 Game [Info]: Player1 loadout loader finished.
+232.784 Script [Info]: ThemedSquadOverlay.lua: Mission name: Halako Perimeter (Zariman) - THE STEEL PATH
+237.205 Sys [Info]: HighLevelGraph setup 30 implicit bridges for zone 1 in 3.4e-06s total 29
+237.205 Sys [Info]: HighLevelGraph setup 6 implicit bridges for zone 2 in 1.2e-06s total 34
+237.205 Sys [Info]: HighLevelGraph setup 144 implicit bridges for zone 3 in 1.42e-05s total 150
+237.205 Sys [Info]: HighLevelGraph setup 5 implicit bridges for zone 4 in 8e-07s total 155
+237.205 Sys [Info]: HighLevelGraph setup 21 implicit bridges for zone 5 in 1.6e-06s total 159
+237.205 Sys [Info]: HighLevelGraph setup 42 implicit bridges for zone 6 in 4.8e-06s total 197
+237.205 Sys [Info]: HighLevelGraph setup 274 implicit bridges for zone 7 in 3.34e-05s total 456
+237.205 Sys [Info]: HighLevelGraph setup 14 implicit bridges for zone 8 in 3.1e-06s total 465
+237.205 Sys [Info]: HighLevelGraph setup 86 implicit bridges for zone 9 in 1.12e-05s total 531
+237.205 Sys [Info]: HighLevelGraph setup 226 implicit bridges for zone 10 in 1.65e-05s total 659
+237.205 Sys [Info]: HighLevelGraph setup 23 implicit bridges for zone 11 in 1.9e-06s total 681
+237.205 Sys [Info]: HighLevelGraph setup 9 implicit bridges for zone 12 in 2.8e-06s total 687
+237.205 Sys [Info]: HighLevelGraph setup 100 implicit bridges for zone 13 in 7.8e-06s total 781
+237.205 Sys [Info]: HighLevelGraph setup 1 implicit bridges for zone 14 in 3e-07s total 781
+237.205 Sys [Info]: HighLevelGraph setup 2 implicit bridges for zone 15 in 6e-07s total 783
+237.205 Sys [Info]: HighLevelGraph setup 7 implicit bridges for zone 16 in 1.1e-06s total 788
+237.205 Sys [Info]: HighLevelGraph setup 7 implicit bridges for zone 17 in 6e-07s total 793
+237.205 Sys [Info]: HighLevelGraph setup 1 implicit bridges for zone 18 in 6e-07s total 794
+237.205 Sys [Info]: HighLevelGraph setup 4 implicit bridges for zone 19 in 1.8e-06s total 798
+239.280 Game [Info]: OnStateStarted, mission type=MT_EXTERMINATION
+239.294 Game [Info]: Player1 loadout loader finished.
+263.405 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+263.654 Script [Info]: TopMenu.lua: Abort: host/no session
+263.654 Sys [Info]: EOM missionLocationUnlocked=1
+263.654 Sys [Info]: Weapon in slot SUIT_SLOT with ID 6a36e9677e549b911b0dafe7 has gained 2617 XP
+263.654 Sys [Info]: Weapon in slot MELEE_SLOT with ID 6a61088f72874380ea0fb68b has gained 2617 XP
+267.099 Sys [Info]: HighLevelGraph setup 109 implicit bridges for zone 0 in 1.49e-05s total 85
+267.099 Sys [Info]: HighLevelGraph setup 155 implicit bridges for zone 2 in 1.97e-05s total 196
+267.173 Game [Info]: Player1 loadout loader finished.
+281.561 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+284.647 Script [Info]: ThemedSquadOverlay.lua: Mission name: Tuvul Commons (Zariman) - THE STEEL PATH
+288.238 Sys [Info]: HighLevelGraph setup 30 implicit bridges for zone 1 in 2.4e-06s total 29
+288.238 Sys [Info]: HighLevelGraph setup 493 implicit bridges for zone 2 in 4.3e-05s total 398
+288.238 Sys [Info]: HighLevelGraph setup 64 implicit bridges for zone 3 in 5.3e-06s total 462
+288.238 Sys [Info]: HighLevelGraph setup 2 implicit bridges for zone 4 in 5e-07s total 464
+288.238 Sys [Info]: HighLevelGraph setup 6 implicit bridges for zone 5 in 8e-07s total 469
+288.238 Sys [Info]: HighLevelGraph setup 87 implicit bridges for zone 6 in 9.1e-06s total 549
+288.238 Sys [Info]: HighLevelGraph setup 7 implicit bridges for zone 7 in 2e-06s total 556
+288.238 Sys [Info]: HighLevelGraph setup 274 implicit bridges for zone 8 in 2.55e-05s total 815
+288.238 Sys [Info]: HighLevelGraph setup 37 implicit bridges for zone 9 in 4.3e-06s total 839
+288.238 Sys [Info]: HighLevelGraph setup 9 implicit bridges for zone 10 in 2e-06s total 845
+288.238 Sys [Info]: HighLevelGraph setup 14 implicit bridges for zone 11 in 1e-06s total 853
+288.238 Sys [Info]: HighLevelGraph setup 4 implicit bridges for zone 12 in 6e-07s total 857
+288.238 Sys [Info]: HighLevelGraph setup 4 implicit bridges for zone 13 in 4e-07s total 861
+288.238 Sys [Info]: HighLevelGraph setup 1 implicit bridges for zone 14 in 4e-07s total 861
+288.238 Sys [Info]: HighLevelGraph setup 2 implicit bridges for zone 15 in 6e-07s total 863
+288.238 Sys [Info]: HighLevelGraph setup 14 implicit bridges for zone 16 in 8e-07s total 871
+288.238 Sys [Info]: HighLevelGraph setup 7 implicit bridges for zone 17 in 7e-07s total 876
+288.238 Sys [Info]: HighLevelGraph setup 1 implicit bridges for zone 18 in 3e-07s total 877
+289.911 Game [Info]: OnStateStarted, mission type=MT_VOID_CASCADE
+289.917 Game [Info]: Player1 loadout loader finished.
+389.048 Script [Info]: ZarimanSurvivalMission.lua: Zariman Survival (Void Cascade): Pillars used increased to: 1
+422.591 Script [Info]: ZarimanSurvivalMission.lua: Zariman Survival (Void Cascade): Pillars used increased to: 2
+598.730 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+598.951 Script [Info]: TopMenu.lua: Abort: host/no session
+598.952 Sys [Info]: EOM missionLocationUnlocked=1
+598.952 Sys [Info]: Weapon in slot SUIT_SLOT with ID 6a36e9677e549b911b0dafe7 has gained 34444 XP
+598.952 Sys [Info]: Weapon in slot MELEE_SLOT with ID 6a61088f72874380ea0fb68b has gained 34444 XP
+603.016 Sys [Info]: HighLevelGraph setup 9 implicit bridges for zone 1 in 3e-06s total 7
+605.625 Game [Info]: Player1 loadout loader finished.
+606.575 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+606.748 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+607.413 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+607.676 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+607.925 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+608.290 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+613.689 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+617.089 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+629.847 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+632.249 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+635.036 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+637.523 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+642.073 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+644.750 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+647.554 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+650.145 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+652.668 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+655.332 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+659.641 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+662.358 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+665.021 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+667.529 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+712.732 Sys [Info]: Executing command: /EE/Editor/ToolMenus/Commands/CmdCinematicSkipEnd
+750.366 Game [Info]: Player1 loadout loader finished.
+1183.544 Game [Info]: Player1 loadout loader finished.
+1258.442 Game [Info]: Player1 loadout loader finished.
+1269.568 Game [Info]: Player1 loadout loader finished.

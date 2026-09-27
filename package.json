@@ -42,7 +42,7 @@
     "dev:preloads": "node scripts/bundle-preloads.js --watch",
     "dev:renderer": "vite build --watch",
     "typecheck:renderer": "tsc --noEmit",
-    "dev:electron": "wait-on .electron-build/main.js renderer/dist/index.html && nodemon --watch .electron-build --watch renderer --ext js,json,html,css --exec electron .",
+    "dev:electron": "wait-on .electron-build/main.js renderer/dist/index.html && nodemon --watch .electron-build --watch renderer --ignore renderer/dist/ --ext js,json,html,css --exec electron .",
     "typecheck:main": "tsc -p tsconfig.main.json --noEmit",
     "typecheck:tests": "tsc -p tsconfig.tests.json",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",

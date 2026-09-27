@@ -64,8 +64,26 @@ describe("keyHookShortcut", () => {
     );
     expect(setWatch).toEqual({
       type: "setWatch",
-      watch: [{ id: "F8", ctrl: false, alt: false, shift: false, win: false, vk: 0x77 }],
+      watch: [
+        {
+          id: "F8",
+          ctrl: false,
+          alt: false,
+          shift: false,
+          win: false,
+          vk: 0x77,
+          passthrough: false,
+        },
+      ],
     });
+  });
+
+  it("marks a pass-through binding so the key still reaches the game", () => {
+    const hook = makeHook();
+    hook.register("F12", () => {}, { passthrough: true });
+    h.state.processes[0].emit("spawn");
+    const posted = h.state.processes[0].posted as Array<{ watch: Array<{ passthrough: boolean }> }>;
+    expect(posted.at(-1)?.watch[0].passthrough).toBe(true);
   });
 
   it("dispatches the handler when the utility process reports a hotkey", () => {

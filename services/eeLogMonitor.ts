@@ -32,6 +32,11 @@ import {
   shutdownPtTracker,
   setPtCallbacks,
 } from "./profitTakerTracker";
+import {
+  processLevelCapLine,
+  notifyLevelCapEeLogReset,
+  primeLevelCapFromLog,
+} from "./levelCapTracker";
 import type { ArbiRunRecord } from "../config/shared/arbiTypes";
 import type { PtRunRecord } from "../config/shared/profitTakerTypes";
 import { normalizeErrorMessage } from "../config/shared/errors";
@@ -277,6 +282,7 @@ function pollReadNewBytes(): void {
           uptimeTracker.reset();
           notifyEeLogReset();
           notifyPtEeLogReset();
+          notifyLevelCapEeLogReset();
         }
       } catch {
         // ignore stat errors; retry next tick
@@ -486,9 +492,10 @@ function handleLine(line: string, source: "dbwin" | "file" = "file"): void {
   // Delegate to the riven state machine - returns whether SendResult was consumed.
   processRivenPatterns(line, source, realtimeSourceActive());
 
-  // Both run trackers ignore dbwin-source lines.
+  // The run trackers ignore dbwin-source lines.
   processArbiLine(line, source);
   processProfitTakerLine(line, source);
+  processLevelCapLine(line, source);
 
   // Riven flow and delayed file echoes make InitMapping unsafe as a picker close.
   if (
@@ -746,6 +753,9 @@ export function startWatching(
     lastSize = 0;
   }
   lineRemainder = "";
+  // Live reading starts at the end, so a Void Cascade that began before the
+  // app did would otherwise go unseen.
+  primeLevelCapFromLog(EE_LOG_PATH, lastSize);
 
   if (watcher) {
     watcher.close();
@@ -766,6 +776,7 @@ export function startWatching(
     lastLoginCompleteAt = 0;
     notifyEeLogReset();
     notifyPtEeLogReset();
+    notifyLevelCapEeLogReset();
   });
 
   pollTimer = setInterval(pollReadNewBytes, POLL_INTERVAL_MS);

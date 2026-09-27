@@ -715,6 +715,66 @@ export interface IpcInvokeMap {
     args: [id: string];
     return: { ok: boolean };
   };
+  getLevelCap: {
+    args: [];
+    return: LevelCapPayload;
+  };
+  setLevelCapNotes: {
+    args: [frame: string, notes: string];
+    return: LevelCapPayload;
+  };
+  createLevelCapBuild: {
+    args: [frame: string, source: LevelCapBuildSource, name?: string];
+    return: { payload: LevelCapPayload; buildId: string | null };
+  };
+  updateLevelCapBuild: {
+    args: [id: string, patch: LevelCapBuildPatch & { fromEquipped?: boolean }];
+    return: { payload: LevelCapPayload; ok: boolean };
+  };
+  deleteLevelCapBuild: {
+    args: [id: string];
+    return: LevelCapPayload;
+  };
+  assignLevelCapBuild: {
+    args: [runIds: string[], buildId: string];
+    return: LevelCapPayload;
+  };
+  getLevelCapCatalog: {
+    args: [];
+    return: LevelCapCatalog;
+  };
+  getLevelCapItemConfigs: {
+    args: [kind: LevelCapSlotKind, type: string, parts?: string[]];
+    return: LevelCapItem[];
+  };
+  getLevelCapModularItems: {
+    args: [kind: LevelCapSlotKind];
+    return: LevelCapItem[];
+  };
+  deleteLevelCapRun: {
+    args: [id: string];
+    return: LevelCapPayload;
+  };
+  importLevelCapFolders: {
+    args: [];
+    return: { result: LevelCapImportResult; payload: LevelCapPayload };
+  };
+  updateLevelCapSettings: {
+    args: [patch: Partial<LevelCapSettings>];
+    return: LevelCapPayload;
+  };
+  pickLevelCapFolder: {
+    args: [kind: "screenshotDir" | "backupDir"];
+    return: LevelCapPayload;
+  };
+  getLevelCapThumbnail: {
+    args: [id: string];
+    return: string | null;
+  };
+  openLevelCapScreenshot: {
+    args: [id: string];
+    return: { ok: boolean };
+  };
   workbenchGetState: {
     args: [];
     return: WorkbenchState;
@@ -867,6 +927,21 @@ import type {
 } from "../../config/shared/profitTakerTypes.js";
 export type { PtRunRecord };
 
+import type {
+  LevelCapBuildPatch,
+  LevelCapBuildSource,
+  LevelCapCatalog,
+  LevelCapHotkeyOutcome,
+  LevelCapImportResult,
+  LevelCapItem,
+  LevelCapNamedBuild,
+  LevelCapPayload,
+  LevelCapRun,
+  LevelCapSettings,
+  LevelCapSlotKind,
+} from "../../config/shared/levelCapTypes.js";
+export type { LevelCapCatalog, LevelCapNamedBuild, LevelCapPayload, LevelCapRun, LevelCapSettings };
+
 type WfmTradeMatchEvent = TradeMatchPayload;
 
 interface TradeRecordedEvent {
@@ -888,6 +963,8 @@ export interface IpcEventMap {
   "arbi-run-saved": ArbiRunRecord;
   "arbi-open-run": string;
   "pt-run-saved": PtRunRecord;
+  "level-cap-updated": LevelCapPayload;
+  "level-cap-hotkey": LevelCapHotkeyOutcome;
   "warframe-ui-scale-updated": number | null;
   "notification-history-added": NotificationEntry;
   "notification-sound-play": import("../../config/shared/notificationSound.js").NotificationSoundPlayback;

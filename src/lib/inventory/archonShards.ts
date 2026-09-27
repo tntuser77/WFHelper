@@ -161,7 +161,8 @@ export function archonShardDisplaySlots(slots: ArchonShardSlot[]): ArchonShardSl
   return out;
 }
 
-function parseSlot(entry: unknown, index: number): ArchonShardSlot {
+/** One socket of a frame's ArchonCrystalUpgrades. */
+export function parseArchonShardSlot(entry: unknown, index: number): ArchonShardSlot {
   const record = asRecord(entry) as RawArchonCrystalUpgrade | null;
   const upgradeType = typeof record?.UpgradeType === "string" ? record.UpgradeType : null;
   const rawColor = typeof record?.Color === "string" ? record.Color : "";
@@ -179,7 +180,7 @@ function parseSlot(entry: unknown, index: number): ArchonShardSlot {
 function parseSuit(entry: RawSuitEntry): SuitArchonShards | null {
   const itemType = typeof entry.ItemType === "string" ? entry.ItemType : "";
   if (!itemType || !Array.isArray(entry.ArchonCrystalUpgrades)) return null;
-  const slots = entry.ArchonCrystalUpgrades.map(parseSlot);
+  const slots = entry.ArchonCrystalUpgrades.map(parseArchonShardSlot);
   const filled = slots.reduce((sum, slot) => sum + (slot.filled ? 1 : 0), 0);
   if (filled === 0) return null;
   return { itemType, instanceId: entryInstanceId(entry), slots, filled };

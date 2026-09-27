@@ -11,6 +11,7 @@ interface WatchEntry {
   shift: boolean;
   win: boolean;
   vk: number;
+  passthrough: boolean;
 }
 
 const kernel32 = koffi.load("kernel32.dll");
@@ -113,6 +114,7 @@ function normalizeWatch(value: unknown): WatchEntry[] {
       shift: !!v.shift,
       win: !!v.win,
       vk: v.vk,
+      passthrough: !!v.passthrough,
     }));
 }
 
@@ -154,7 +156,9 @@ const hookProc = koffi.register((nCode: number, wParam: number, lParam: unknown)
         const match = matchBinding(info.vkCode);
         if (match && foregroundIsWarframe()) {
           parentPort.postMessage({ type: "hotkey", id: match.id });
-          return 1; // swallow: the game (and only the game) loses this key
+          // swallow: the game (and only the game) loses this key, unless the
+          // binding asked to share it (e.g. F12 still reaching Steam)
+          if (!match.passthrough) return 1;
         }
       }
     }

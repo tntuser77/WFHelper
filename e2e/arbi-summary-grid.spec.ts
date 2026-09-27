@@ -50,6 +50,8 @@ test("arbitration summary grid wraps with visible dividers and no overflow", asy
     });
     const { page } = harness;
     await page.locator('#sidebar [data-view="arbi"]').click();
+    // Level Cap is the default Run Analysis tab.
+    await page.locator('#content [data-tour-tab="arbitrations"]').click();
     await page.locator("#content table tbody tr").first().click();
     const strip = page.locator('[data-summary-strip="grid"]');
     await expect(strip).toBeVisible();

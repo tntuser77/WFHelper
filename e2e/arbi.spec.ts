@@ -122,6 +122,8 @@ describeArbi("Arbitration schedule + post-run overlay", () => {
 
   test("backfills squad names onto a pre-update run and shows them", async () => {
     await page.locator('#sidebar [data-view="arbi"]').click();
+    // Level Cap is the default Run Analysis tab.
+    await page.locator('#content [data-tour-tab="arbitrations"]').click();
     await page.locator("#content").getByText("Casta Defense (Ceres)").first().click();
     await expect(page.locator("#content").getByText("HostPlayer, ClientOne").first()).toBeVisible({
       timeout: 15_000,
@@ -180,6 +182,8 @@ describeArbi("Arbitration schedule + post-run overlay", () => {
   test("compares two selected runs against the filtered average", async () => {
     await page.locator('#sidebar [data-view="inventory"]').click();
     await page.locator('#sidebar [data-view="arbi"]').click();
+    // Level Cap is the default Run Analysis tab.
+    await page.locator('#content [data-tour-tab="arbitrations"]').click();
     await expect(page.locator("#content [data-arbi-runs]")).toBeVisible();
 
     const rowChecks = page.locator("#content table tbody input[type=checkbox]");
