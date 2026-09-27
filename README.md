@@ -14,6 +14,7 @@
 - [ ] Making underframe work better with it? Adding support for importing the external buffs from the warframe?
 - [ ] Make sure that F12 grabs a screenshot of the run, even if steam isn't running, if this is on someone elses setup
 - [ ] When more the 2 builds, the UI for new build gets smooshed to the bottem, which might not be the best option.
+- [ ] When searching, the run count on each frame card should show how many runs match the search, not the frame's total (searching "slam" should show 3 on Follie, not 10).
 - [x] Even on my Caliban builds, where I kept the archgun, its not showing up in a box that makes it obvious that I was using the archgun heavily
 
 ## Disclaimer
