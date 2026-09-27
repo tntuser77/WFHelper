@@ -183,7 +183,8 @@ export interface LevelCapSquadmate {
   frame: string | null;
 }
 
-/** A correction to one squad row, by its place in `squadReads`. */
+/** A correction to one squad row, by its place in `squadReads`; a slot past the
+ *  rows read adds a squadmate the read missed. */
 export interface LevelCapSquadFix {
   slot: number;
   name?: string;

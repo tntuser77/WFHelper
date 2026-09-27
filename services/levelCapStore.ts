@@ -371,6 +371,12 @@ function resolveScreenshotSquads(): void {
         },
       ];
     });
+    // Fixes past the rows read are squadmates the reader missed outright.
+    const readRows = resolved[i].slots.length;
+    for (const fix of run.squadFixes ?? []) {
+      if (fix.slot < readRows || fix.notSquadmate) continue;
+      run.squadmates.push({ name: fix.name ?? null, portrait: null, frame: fix.frame ?? null });
+    }
     if (run.players?.length && !run.playersFromScreenshot) return;
     const players = [...new Set(run.squadmates.flatMap((mate) => (mate.name ? [mate.name] : [])))];
     if (players.length) {

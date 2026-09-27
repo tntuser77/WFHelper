@@ -215,6 +215,22 @@ describe("levelCapStore", () => {
     expect(fixed.squadmates?.[0].frame).toBe("Titania");
   });
 
+  it("adds a squadmate the screenshot read missed", async () => {
+    const store = await freshStore();
+    const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
+    store.recordSquadRead(a.id, { names: [["Kemani"]], portraits: [null], thumbs: [null] });
+    store.fixSquadmate(a.id, 1, { name: "xSavxage", frame: "Operator" });
+    // A row past the ones read only counts once it names someone or something.
+    store.fixSquadmate(a.id, 2, { notSquadmate: true });
+    const fixed = store.getRuns().find((r) => r.id === a.id)!;
+    expect(fixed.squadmates?.map((m) => [m.name, m.frame])).toEqual([
+      [null, null],
+      ["xSavxage", "Operator"],
+    ]);
+    expect(fixed.squadSize).toBe(3);
+    expect(fixed.players).toEqual(["xSavxage"]);
+  });
+
   it("counts a run as solo once every squad row is ruled out", async () => {
     const store = await freshStore();
     const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
