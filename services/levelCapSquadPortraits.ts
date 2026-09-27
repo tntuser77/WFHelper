@@ -58,7 +58,7 @@ export function isPortrait(value: unknown): value is string {
 }
 
 /** Mean per-channel difference over the masked cells. */
-export function portraitDistance(a: string, b: string): number {
+function portraitDistance(a: string, b: string): number {
   const x = bytes(a);
   const y = bytes(b);
   let sum = 0;
