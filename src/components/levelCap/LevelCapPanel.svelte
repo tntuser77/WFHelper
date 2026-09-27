@@ -83,7 +83,7 @@
         searchTerms.every(
           (term) =>
             lowerFrame.includes(term) ||
-            (items.some((name) => name.includes(term))) ||
+            items.some((name) => name.includes(term)) ||
             levelCapRunHasPlayer(run, term) ||
             (run.tags ?? tagsByBuild[run.buildId ?? ""] ?? []).some((tag) =>
               tag.toLowerCase().includes(term),
