@@ -98,7 +98,11 @@ test("level cap runs move onto named builds that edit in one place", async () =>
     await suit.locator(`[data-level-cap-mod="mod"]`, { hasText: "Empty" }).first().click();
     const picker = editor.locator("[data-level-cap-picker]");
     await picker.locator("input").fill("streamline");
-    await picker.getByRole("button", { name: "Streamline", exact: true }).click();
+    // A mod row shows its card text too, so the name alone is the row's identity.
+    await picker
+      .locator("li", { has: page.getByText("Streamline", { exact: true }) })
+      .getByRole("button")
+      .click();
 
     await suit.locator("[data-level-cap-helminth]").click();
     await picker.locator("input").fill("roar");
