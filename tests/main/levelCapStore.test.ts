@@ -188,6 +188,30 @@ describe("levelCapStore", () => {
     expect(store.getRuns()[0].squadmates?.[0].frame).toBe("Titania");
   });
 
+  it("reads a squad again once when an older reader found no portraits", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const portrait = Buffer.alloc(16 * 16 * 3, 90).toString("base64");
+    const shot = (id: string, portraits: Array<string | null>) => ({
+      ...run({ source: "import", squadSize: null, screenshot: `${id}.png` }),
+      id,
+      squadOcr: "read",
+      squadReads: portraits.map(() => ["Kemani"]),
+      squadPortraits: portraits,
+    });
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        schemaVersion: 2,
+        runs: [shot("blank", [null, null]), shot("seen", [portrait, null]), shot("solo", [])],
+      }),
+    );
+    const store = await freshStore();
+    expect(store.runsAwaitingSquadRead().map((r) => r.id)).toEqual(["blank"]);
+    // The new reader has had its go; a second blank read is final.
+    store.recordSquadRead("blank", { names: [["Kemani"]], portraits: [null], thumbs: [null] });
+    expect(store.runsAwaitingSquadRead()).toEqual([]);
+  });
+
   it("cleans build tags and frame notes on the way in", async () => {
     const store = await freshStore();
     const { buildId } = store.addRun(run({ build: BUILD }));

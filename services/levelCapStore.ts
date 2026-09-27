@@ -119,6 +119,8 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
     out.squadPortraits = run.squadPortraits.slice(0, 4).map((p) => (isPortrait(p) ? p : null));
   }
   if (Array.isArray(run.squadmates)) out.squadmates = normalizeSquadmates(run.squadmates);
+  delete out.squadReader;
+  if (typeof run.squadReader === "number") out.squadReader = run.squadReader;
   delete (out as { notes?: unknown }).notes;
   delete out.buildId;
   if (tags.length) out.tags = tags;
@@ -493,12 +495,28 @@ export function recordExolizerRead(
   });
 }
 
+// 2: a snip cut close on the right no longer loses every slot disk.
+const SQUAD_READER = 2;
+
+/** An older reader found rows but not one portrait beside them. */
+function squadReadIsStale(run: LevelCapRun): boolean {
+  const portraits = run.squadPortraits;
+  return (
+    (run.squadReader ?? 1) < SQUAD_READER &&
+    !!portraits?.length &&
+    portraits.every((portrait) => portrait === null)
+  );
+}
+
 /** Runs with a screenshot whose squad list, names and portraits, has not been
- *  read yet. Runs read before portraits were kept are read again. */
+ *  read yet. Runs read before portraits were kept are read again, and so are
+ *  runs an older reader found no portraits on. */
 export function runsAwaitingSquadRead(): Array<{ id: string; screenshot: string }> {
   ensureLoaded();
   return _runs.flatMap((run) =>
-    run.screenshot && run.squadOcr !== "unreadable" && !run.squadPortraits
+    run.screenshot &&
+    run.squadOcr !== "unreadable" &&
+    (!run.squadPortraits || squadReadIsStale(run))
       ? [{ id: run.id, screenshot: run.screenshot }]
       : [],
   );
@@ -509,6 +527,7 @@ export function runsAwaitingSquadRead(): Array<{ id: string; screenshot: string 
 export function recordSquadRead(id: string, read: SquadScreenshotRead | null): LevelCapRun | null {
   return updateRun(id, (run) => {
     run.squadOcr = read ? "read" : "unreadable";
+    run.squadReader = SQUAD_READER;
     if (!read) return;
     run.squadReads = normalizeSquadReads(read.names);
     run.squadPortraits = read.portraits.slice(0, 4);

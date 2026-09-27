@@ -100,6 +100,8 @@ export interface LevelCapRun {
   playersFromScreenshot?: boolean;
   /** Screenshot runs: portrait fingerprint per squad row, in `squadReads` order. */
   squadPortraits?: Array<string | null>;
+  /** Version of the squad reader behind `squadReads`; a newer one reads runs again. */
+  squadReader?: number;
   /** Who was in each squad row and what they played, as far as the screenshot
    *  tells; redone as names and portrait labels are learned. For analytics. */
   squadmates?: LevelCapSquadmate[];
