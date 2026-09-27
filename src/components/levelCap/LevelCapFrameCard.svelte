@@ -14,6 +14,7 @@
 
   let {
     row,
+    matchedCount,
     runs,
     builds,
     searchTerms,
@@ -23,6 +24,8 @@
     onClearTag,
   }: {
     row: LevelCapFrameRow;
+    /** Runs matching the current search; falls back to the frame total when nothing matches by player. */
+    matchedCount: number;
     runs: LevelCapRun[];
     builds: LevelCapNamedBuild[];
     /** Lowercased comma-separated search terms. */
@@ -123,7 +126,7 @@
       class="min-w-0 flex-1 cursor-pointer truncate text-left text-xl font-bold text-text-primary"
       >{row.frame}</button
     >
-    <span class="font-mono text-3xl font-bold text-accent">{row.count}</span>
+    <span class="font-mono text-3xl font-bold text-accent">{matchedCount}</span>
   </div>
 
   <div class="flex min-h-5 flex-wrap gap-1">
