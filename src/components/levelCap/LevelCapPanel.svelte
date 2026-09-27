@@ -7,6 +7,7 @@
   import {
     levelCapFrames,
     levelCapItemName,
+    levelCapRunHasPlayer,
     levelCapSearchTerms,
     levelCapTagSuggestions,
     toggleLevelCapSearchTag,
@@ -57,7 +58,41 @@
     }
     return byFrame;
   });
+  const runsByFrame = $derived.by(() => {
+    const byFrame: Record<string, typeof runs> = {};
+    for (const run of runs) (byFrame[run.frame] ??= []).push(run);
+    return byFrame;
+  });
   const searchTerms = $derived(levelCapSearchTerms(frameSearch));
+  // A run matches a term through the frame name, its tags (its own or its
+  // named build's), the frame's build items, or a player name; the count
+  // covers runs matching every term.
+  const tagsByBuild = $derived.by(() => {
+    const byBuild: Record<string, string[]> = {};
+    for (const build of builds)
+      byBuild[build.id] = (build.tags ?? []).map((tag) => tag.toLowerCase());
+    return byBuild;
+  });
+  const matchedRunsByFrame = $derived.by(() => {
+    if (!searchTerms.length) return null;
+    const counts: Record<string, number> = {};
+    for (const [frame, frameRuns] of Object.entries(runsByFrame)) {
+      const lowerFrame = frame.toLowerCase();
+      const items = itemsByFrame[frame] ?? [];
+      counts[frame] = frameRuns.filter((run) =>
+        searchTerms.every(
+          (term) =>
+            lowerFrame.includes(term) ||
+            (items.some((name) => name.includes(term))) ||
+            levelCapRunHasPlayer(run, term) ||
+            (run.tags ?? tagsByBuild[run.buildId ?? ""] ?? []).some((tag) =>
+              tag.toLowerCase().includes(term),
+            ),
+        ),
+      ).length;
+    }
+    return counts;
+  });
   const visibleFrames = $derived.by(() => {
     if (!searchTerms.length) return frames;
     return frames.filter((row) =>
@@ -65,14 +100,10 @@
         (term) =>
           row.frame.toLowerCase().includes(term) ||
           (tagsByFrame[row.frame] ?? []).some((tag) => tag.includes(term)) ||
-          (itemsByFrame[row.frame] ?? []).some((name) => name.includes(term)),
+          (itemsByFrame[row.frame] ?? []).some((name) => name.includes(term)) ||
+          (runsByFrame[row.frame] ?? []).some((run) => levelCapRunHasPlayer(run, term)),
       ),
     );
-  });
-  const runsByFrame = $derived.by(() => {
-    const byFrame: Record<string, typeof runs> = {};
-    for (const run of runs) (byFrame[run.frame] ??= []).push(run);
-    return byFrame;
   });
   const buildsByFrame = $derived.by(() => {
     const byFrame: Record<string, typeof builds> = {};
@@ -193,6 +224,7 @@
     {#each visibleFrames as row (row.frame)}
       <LevelCapFrameCard
         {row}
+        matchedCount={matchedRunsByFrame?.[row.frame] ?? row.count}
         runs={runsByFrame[row.frame] ?? []}
         builds={buildsByFrame[row.frame] ?? []}
         {searchTerms}
@@ -211,6 +243,7 @@
     runs={runsByFrame[openRow.frame] ?? []}
     builds={buildsByFrame[openRow.frame] ?? []}
     notes={$levelCap?.frameNotes[openRow.frame] ?? ""}
+    {searchTerms}
     {tagSuggestions}
     {abilityNames}
     onClose={() => (openFrame = null)}
