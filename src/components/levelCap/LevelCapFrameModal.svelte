@@ -10,6 +10,7 @@
     levelCapItemName,
     levelCapPlayerTerms,
     levelCapRunHasPlayer,
+    levelCapSquad,
     orderLevelCapTags,
     type LevelCapFrameRow,
   } from "../../lib/levelCap.js";
@@ -331,11 +332,11 @@
           {/if}
         </div>
 
-        <ul
-          class="m-0 list-none overflow-hidden rounded-[var(--radius-md)] border border-border/60 p-0"
-        >
-          {#each shownRuns as run (run.id)}
+        <ul class="m-0 list-none rounded-[var(--radius-md)] border border-border/60 p-0">
+          {#each shownRuns as run, index (run.id)}
             {@const open = expanded.has(run.id)}
+            {@const squad = levelCapSquad(run)}
+            {@const squadUp = shownRuns.length > 2 && index >= shownRuns.length - 2}
             <li class="border-b border-border/50 last:border-b-0">
               <div class="flex min-h-[3.75rem] items-center gap-4 px-3 py-2.5 text-sm">
                 <input
@@ -424,7 +425,34 @@
                   </span>
                   <span class="flex flex-col items-end text-xs text-text-muted">
                     <span class="whitespace-nowrap">{runDate(run.completedAt)}</span>
-                    <span title={run.players?.join(", ")}>{squadLabel(run)}</span>
+                    {#if squad.names.length}
+                      <span class="group/squad relative cursor-default" data-level-cap-squad
+                        >{squadLabel(run)}
+                        <span
+                          class="pointer-events-none absolute right-0 z-20 {squadUp
+                            ? 'bottom-full mb-1'
+                            : 'top-full mt-1'} hidden min-w-40 flex-col gap-0.5 rounded-[var(--radius-md)] border border-border-strong bg-bg-surface px-3 py-2 text-left text-xs text-text-primary shadow-lg group-hover/squad:flex"
+                        >
+                          <span
+                            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted"
+                            >{squadLabel(run)}</span
+                          >
+                          {#each squad.names as name (name)}
+                            <span class="whitespace-nowrap">{name}</span>
+                          {/each}
+                          {#if squad.others}
+                            <span class="whitespace-nowrap text-text-muted"
+                              >{$t(
+                                squad.others === 1 ? "levelCap.squadOther" : "levelCap.squadOthers",
+                                { count: String(squad.others) },
+                              )}</span
+                            >
+                          {/if}
+                        </span>
+                      </span>
+                    {:else}
+                      <span>{squadLabel(run)}</span>
+                    {/if}
                   </span>
                 </button>
                 <button

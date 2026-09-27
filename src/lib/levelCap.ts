@@ -126,6 +126,18 @@ export function levelCapSearchTerms(query: string): string[] {
     .filter(Boolean);
 }
 
+/** The squad names a run knows, and how many squadmates it could not name. A
+ *  screenshot never shows your own name; the log's list includes it. */
+export function levelCapSquad(
+  run: Pick<LevelCapRun, "players" | "squadSize" | "squadReads" | "playersFromScreenshot">,
+): { names: string[]; others: number } {
+  const names = run.players ?? [];
+  const fromShot = run.playersFromScreenshot === true || run.squadReads !== undefined;
+  const known = fromShot ? names.length + 1 : names.length;
+  const size = run.squadSize ?? (fromShot ? (run.squadReads?.length ?? 0) + 1 : names.length);
+  return { names, others: Math.max(0, size - known) };
+}
+
 /** Whether a squad player's name contains the (lowercased) search term. */
 export function levelCapRunHasPlayer(run: { players?: string[] }, term: string): boolean {
   return (run.players ?? []).some((name) => name.toLowerCase().includes(term));
