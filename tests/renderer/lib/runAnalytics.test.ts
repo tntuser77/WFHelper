@@ -7,6 +7,7 @@ import {
   ANALYTICS_SQUAD,
   ANALYTICS_UNKNOWN,
   analyticsResult,
+  analyticsSquadChoices,
   type AnalyticsChartSpec,
   type AnalyticsContext,
 } from "../../../src/lib/analytics/runAnalytics.js";
@@ -45,6 +46,7 @@ function spec(overrides: Partial<AnalyticsChartSpec> = {}): AnalyticsChartSpec {
     range: "all",
     squad: "all",
     frames: [],
+    squadConditions: [],
     limit: 10,
     wide: false,
     ...overrides,
@@ -173,5 +175,65 @@ describe("analyticsResult", () => {
       "caster",
       "comfy",
     ]);
+  });
+
+  describe("squad conditions", () => {
+    const mate = (name: string | null, frame: string | null) => ({ name, portrait: null, frame });
+    const runs = [
+      run({ exolizers: 110, squadmates: [mate("xSavxage", "Dante"), mate("Poet", "Titania")] }),
+      run({ exolizers: 118, squadmates: [mate("WealthyPoet", "Titania"), mate(null, "Titania")] }),
+      run({ exolizers: 125, squadmates: [mate("WealthyPoet", "Titania")] }),
+      run({ exolizers: 108, frame: "Dante", squadmates: [mate("HH_Saeed", "Mesa")] }),
+    ];
+    const titaniaNotPoet = {
+      has: true,
+      frame: "titania",
+      player: "WealthyPoet",
+      notPlayer: true,
+    };
+
+    it("counts the squadmates matching one condition, each one once", () => {
+      const result = analyticsResult(
+        runs,
+        spec({ measure: "squadmates", chart: "stat", squadConditions: [titaniaNotPoet] }),
+        ctx,
+      );
+      // Poet in the first run and the unnamed Titania in the second.
+      expect(result.total).toBe(2);
+      expect(result.runCount).toBe(2);
+    });
+
+    it("splits counted squadmates by who they were", () => {
+      const result = analyticsResult(
+        runs,
+        spec({ measure: "squadmates", splitBy: "squadmate", squadConditions: [titaniaNotPoet] }),
+        ctx,
+      );
+      expect(result.categories).toEqual(["Poet"]);
+    });
+
+    it("takes the best Exolizers of runs with someone on a frame", () => {
+      const dante = { has: true, frame: "Dante", player: null, notPlayer: false };
+      const best = analyticsResult(
+        runs,
+        spec({ measure: "exolizersBest", chart: "stat", squadConditions: [dante] }),
+        ctx,
+      );
+      // Your own Dante run is not a squadmate on Dante.
+      expect(best.total).toBe(110);
+    });
+
+    it("offers the frames and names seen in squads, most seen first", () => {
+      expect(analyticsSquadChoices(runs)).toEqual({
+        frames: ["Titania", "Dante", "Mesa"],
+        players: ["WealthyPoet", "HH_Saeed", "Poet", "xSavxage"],
+      });
+    });
+
+    it("keeps only runs without a matching squadmate when told to", () => {
+      const noPoet = { has: false, frame: null, player: "wealthypoet", notPlayer: false };
+      const result = analyticsResult(runs, spec({ chart: "stat", squadConditions: [noPoet] }), ctx);
+      expect(result.total).toBe(2);
+    });
   });
 });

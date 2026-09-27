@@ -4,7 +4,13 @@ import type {
   LevelCapRun,
 } from "../../../config/shared/levelCapTypes.js";
 
-export const ANALYTICS_MEASURES = ["runs", "exolizersAvg", "exolizersBest", "durationAvg"] as const;
+export const ANALYTICS_MEASURES = [
+  "runs",
+  "squadmates",
+  "exolizersAvg",
+  "exolizersBest",
+  "durationAvg",
+] as const;
 export type AnalyticsMeasure = (typeof ANALYTICS_MEASURES)[number];
 
 const ANALYTICS_TIME_SPLITS = ["week", "month"] as const;
@@ -33,6 +39,15 @@ export type AnalyticsRange = (typeof ANALYTICS_RANGES)[number];
 export const ANALYTICS_SQUAD_FILTERS = ["all", "solo", "squad"] as const;
 export type AnalyticsSquadFilter = (typeof ANALYTICS_SQUAD_FILTERS)[number];
 
+/** A run passes when it has (or, with `has` false, lacks) a squadmate matching
+ *  every part that is set: the frame, and the player being or not being someone. */
+export interface AnalyticsSquadCondition {
+  has: boolean;
+  frame: string | null;
+  player: string | null;
+  notPlayer: boolean;
+}
+
 /** One card on the dashboard. Only level cap runs exist as a source so far. */
 export interface AnalyticsChartSpec {
   id: string;
@@ -46,8 +61,11 @@ export interface AnalyticsChartSpec {
   chart: AnalyticsChartKind;
   range: AnalyticsRange;
   squad: AnalyticsSquadFilter;
-  /** Frames to keep; empty keeps every frame. */
+  /** Frames you played to keep; empty keeps every frame. */
   frames: string[];
+  /** Every one has to hold. The first `has` condition also picks which
+   *  squadmates the "squadmates" measure counts. */
+  squadConditions: AnalyticsSquadCondition[];
   /** Categories shown before the rest fold into "Other"; time splits never fold. */
   limit: number;
   wide: boolean;
@@ -83,8 +101,20 @@ export interface AnalyticsResult {
   /** Per category over every series; a run in two series counts once. */
   totals: Array<number | null>;
   total: number | null;
+  /** Runs behind the chart; with the "squadmates" measure, the runs they were in. */
   runCount: number;
   time: boolean;
+}
+
+interface Mate {
+  name: string | null;
+  frame: string | null;
+}
+
+/** What gets counted: a run, or one squadmate in it for the "squadmates" measure. */
+interface Unit {
+  run: LevelCapRun;
+  mate: Mate | null;
 }
 
 interface Acc {
@@ -96,13 +126,15 @@ interface Acc {
 
 const newAcc = (): Acc => ({ runs: 0, sum: 0, n: 0, max: null });
 
+const counts = (measure: AnalyticsMeasure) => measure === "runs" || measure === "squadmates";
+
 function measureOf(run: LevelCapRun, measure: AnalyticsMeasure): number | null {
   if (measure === "durationAvg") return run.durationSec;
-  if (measure === "runs") return null;
+  if (counts(measure)) return null;
   return run.exolizers;
 }
 
-function add(acc: Acc, run: LevelCapRun, measure: AnalyticsMeasure): void {
+function add(acc: Acc, { run }: Unit, measure: AnalyticsMeasure): void {
   acc.runs++;
   const value = measureOf(run, measure);
   if (value === null) return;
@@ -112,8 +144,8 @@ function add(acc: Acc, run: LevelCapRun, measure: AnalyticsMeasure): void {
 }
 
 function read(acc: Acc | undefined, measure: AnalyticsMeasure): number | null {
-  if (!acc) return measure === "runs" ? 0 : null;
-  if (measure === "runs") return acc.runs;
+  if (!acc) return counts(measure) ? 0 : null;
+  if (counts(measure)) return acc.runs;
   if (measure === "exolizersBest") return acc.max;
   return acc.n ? acc.sum / acc.n : null;
 }
@@ -176,34 +208,52 @@ function selfNames(runs: readonly LevelCapRun[]): Set<string> {
   return new Set([...counts].filter(([, n]) => n === live.length).map(([name]) => name));
 }
 
+/** Squadmates off the screenshot, else the log's squad list minus you. */
+function matesOf(run: LevelCapRun, self: Set<string>): Mate[] {
+  if (run.squadmates?.length) return run.squadmates.map(({ name, frame }) => ({ name, frame }));
+  return (run.players ?? [])
+    .filter((name) => !self.has(name))
+    .map((name) => ({ name, frame: null }));
+}
+
+const same = (a: string | null, b: string) => a?.toLowerCase() === b.toLowerCase();
+
+function mateMatches(mate: Mate, condition: AnalyticsSquadCondition): boolean {
+  if (condition.frame !== null && !same(mate.frame, condition.frame)) return false;
+  if (condition.player === null) return true;
+  return same(mate.name, condition.player) !== condition.notPlayer;
+}
+
 function squadKey(run: LevelCapRun): string {
   if (run.squadSize === 1) return ANALYTICS_SOLO;
   if (run.squadSize !== null && run.squadSize > 1) return ANALYTICS_SQUAD;
   return ANALYTICS_UNKNOWN;
 }
 
-type ValuesOf = (run: LevelCapRun) => string[];
+type ValuesOf = (unit: Unit) => string[];
 
 function valuesFor(
   split: AnalyticsSplit,
   ctx: AnalyticsContext,
-  runs: readonly LevelCapRun[],
+  mates: (run: LevelCapRun) => Mate[],
 ): ValuesOf {
   const builds = new Map(ctx.builds.map((b) => [b.id, b]));
+  // A counted squadmate splits by itself; a run by everyone in it.
+  const each = ({ run, mate }: Unit) => (mate ? [mate] : mates(run));
   switch (split) {
     case "week":
-      return (run) => [weekKey(run.completedAt)];
+      return ({ run }) => [weekKey(run.completedAt)];
     case "month":
-      return (run) => [monthKey(run.completedAt)];
+      return ({ run }) => [monthKey(run.completedAt)];
     case "frame":
-      return (run) => [run.frame];
+      return ({ run }) => [run.frame];
     case "build":
-      return (run) => {
+      return ({ run }) => {
         const build = run.buildId ? builds.get(run.buildId) : undefined;
         return build ? [`${build.frame} · ${build.name}`] : [];
       };
     case "tag":
-      return (run) => {
+      return ({ run }) => {
         const build = run.buildId ? builds.get(run.buildId) : undefined;
         return [...(build?.tags ?? []), ...(run.tags ?? [])];
       };
@@ -211,43 +261,49 @@ function valuesFor(
     case "secondary":
     case "melee":
     case "companion":
-      return (run) => {
+      return ({ run }) => {
         const item = run.build?.[split];
         return item ? [ctx.itemName(item)] : [];
       };
-    case "squadmate": {
-      const self = selfNames(runs);
-      return (run) => (run.players ?? []).filter((name) => !self.has(name));
-    }
+    case "squadmate":
+      return (unit) => each(unit).flatMap((mate) => (mate.name ? [mate.name] : []));
     case "squadmateFrame":
-      return (run) => (run.squadmates ?? []).map((mate) => mate.frame ?? ANALYTICS_UNKNOWN);
+      return (unit) => each(unit).map((mate) => mate.frame ?? ANALYTICS_UNKNOWN);
     case "squad":
-      return (run) => [squadKey(run)];
+      return ({ run }) => [squadKey(run)];
   }
 }
 
-function keepRun(run: LevelCapRun, spec: AnalyticsChartSpec, now: number): boolean {
+function keepRun(
+  run: LevelCapRun,
+  spec: AnalyticsChartSpec,
+  now: number,
+  mates: (run: LevelCapRun) => Mate[],
+): boolean {
   if (spec.range !== "all") {
     const days = Number.parseInt(spec.range, 10);
     if (run.completedAt < now - days * 86_400_000) return false;
   }
   if (spec.squad === "solo" && run.squadSize !== 1) return false;
   if (spec.squad === "squad" && !(run.squadSize !== null && run.squadSize > 1)) return false;
-  return !spec.frames.length || spec.frames.includes(run.frame);
+  if (spec.frames.length && !spec.frames.includes(run.frame)) return false;
+  return spec.squadConditions.every(
+    (condition) => mates(run).some((mate) => mateMatches(mate, condition)) === condition.has,
+  );
 }
 
 /** The `limit` keys with the highest measure; the rest are what folds into "Other". */
 function topKeys(
-  runs: readonly LevelCapRun[],
+  units: readonly Unit[],
   valuesOf: ValuesOf,
   measure: AnalyticsMeasure,
   limit: number,
 ): string[] {
   const accs = new Map<string, Acc>();
-  for (const run of runs) {
-    for (const key of new Set(valuesOf(run))) {
+  for (const unit of units) {
+    for (const key of new Set(valuesOf(unit))) {
       const acc = accs.get(key) ?? newAcc();
-      add(acc, run, measure);
+      add(acc, unit, measure);
       accs.set(key, acc);
     }
   }
@@ -262,15 +318,34 @@ function topKeys(
     .map(([key]) => key);
 }
 
-/** Folds a run's values onto the kept keys, "Other" standing in for the rest. */
+/** Folds a unit's values onto the kept keys, "Other" standing in for the rest. */
 function folded(values: string[], kept: Set<string> | null): string[] {
   const out = new Set<string>();
   for (const value of values) out.add(!kept || kept.has(value) ? value : ANALYTICS_OTHER);
   return [...out];
 }
 
-function hasOther(runs: readonly LevelCapRun[], valuesOf: ValuesOf, kept: Set<string>): boolean {
-  return runs.some((run) => valuesOf(run).some((value) => !kept.has(value)));
+function hasOther(units: readonly Unit[], valuesOf: ValuesOf, kept: Set<string>): boolean {
+  return units.some((unit) => valuesOf(unit).some((value) => !kept.has(value)));
+}
+
+function mostSeenFirst(values: Array<string | null | undefined>): string[] {
+  const seen = new Map<string, number>();
+  for (const value of values) if (value) seen.set(value, (seen.get(value) ?? 0) + 1);
+  return [...seen].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([v]) => v);
+}
+
+/** What squad conditions offer: squadmates' frames and names, most seen first. */
+export function analyticsSquadChoices(runs: readonly LevelCapRun[]): {
+  frames: string[];
+  players: string[];
+} {
+  const self = selfNames(runs);
+  const mates = runs.flatMap((run) => matesOf(run, self));
+  return {
+    frames: mostSeenFirst(mates.map((mate) => mate.frame)),
+    players: mostSeenFirst(mates.map((mate) => mate.name)),
+  };
 }
 
 /** Filters the runs, splits them and works out the measure for every cell. */
@@ -279,49 +354,69 @@ export function analyticsResult(
   spec: AnalyticsChartSpec,
   ctx: AnalyticsContext,
 ): AnalyticsResult {
-  const kept = runs.filter((run) => keepRun(run, spec, ctx.now));
-  const time = isAnalyticsTimeSplit(spec.splitBy);
-  const catValues = valuesFor(spec.splitBy, ctx, runs);
+  const self = selfNames(runs);
+  const mateCache = new Map<LevelCapRun, Mate[]>();
+  const mates = (run: LevelCapRun): Mate[] => {
+    let list = mateCache.get(run);
+    if (!list) mateCache.set(run, (list = matesOf(run, self)));
+    return list;
+  };
+  const kept = runs.filter((run) => keepRun(run, spec, ctx.now, mates));
+  const focus = spec.squadConditions.find((condition) => condition.has);
+  const units: Unit[] =
+    spec.measure === "squadmates"
+      ? kept.flatMap((run) =>
+          mates(run)
+            .filter((mate) => !focus || mateMatches(mate, focus))
+            .map((mate) => ({ run, mate })),
+        )
+      : kept.map((run) => ({ run, mate: null }));
+  // A single number counts everything that passed, split or not.
+  const stat = spec.chart === "stat";
+  const time = !stat && isAnalyticsTimeSplit(spec.splitBy);
+  const catValues = stat ? () => [""] : valuesFor(spec.splitBy, ctx, mates);
   const seriesBy = spec.seriesBy && !isAnalyticsTimeSplit(spec.seriesBy) ? spec.seriesBy : null;
-  const seriesValues = seriesBy ? valuesFor(seriesBy, ctx, runs) : () => [""];
+  const seriesValues = seriesBy ? valuesFor(seriesBy, ctx, mates) : () => [""];
 
   let categories: string[];
   let catKept: Set<string> | null = null;
   if (time) {
     categories = timeBuckets(
       spec.splitBy as "week" | "month",
-      kept.map((run) => run.completedAt),
+      units.map(({ run }) => run.completedAt),
     );
   } else {
-    categories = topKeys(kept, catValues, spec.measure, spec.limit);
+    categories = topKeys(units, catValues, spec.measure, spec.limit);
     catKept = new Set(categories);
-    if (hasOther(kept, catValues, catKept)) categories.push(ANALYTICS_OTHER);
+    if (hasOther(units, catValues, catKept)) categories.push(ANALYTICS_OTHER);
   }
 
   let series = [""];
   let seriesKept: Set<string> | null = null;
   if (seriesBy) {
-    series = topKeys(kept, seriesValues, "runs", ANALYTICS_MAX_SERIES);
+    series = topKeys(units, seriesValues, "runs", ANALYTICS_MAX_SERIES);
     seriesKept = new Set(series);
-    if (hasOther(kept, seriesValues, seriesKept)) series.push(ANALYTICS_OTHER);
+    if (hasOther(units, seriesValues, seriesKept)) series.push(ANALYTICS_OTHER);
   }
 
   const cells = new Map<string, Acc>();
   const catTotals = new Map<string, Acc>();
   const overall = newAcc();
-  for (const run of kept) {
-    const cats = folded(catValues(run), catKept);
+  const counted = new Set<LevelCapRun>();
+  for (const unit of units) {
+    const cats = folded(catValues(unit), catKept);
     if (!cats.length) continue;
-    const sers = folded(seriesValues(run), seriesKept);
-    add(overall, run, spec.measure);
+    const sers = folded(seriesValues(unit), seriesKept);
+    add(overall, unit, spec.measure);
+    counted.add(unit.run);
     for (const cat of cats) {
       const total = catTotals.get(cat) ?? newAcc();
-      add(total, run, spec.measure);
+      add(total, unit, spec.measure);
       catTotals.set(cat, total);
       for (const ser of sers) {
         const key = `${ser}\u0001${cat}`;
         const acc = cells.get(key) ?? newAcc();
-        add(acc, run, spec.measure);
+        add(acc, unit, spec.measure);
         cells.set(key, acc);
       }
     }
@@ -335,7 +430,7 @@ export function analyticsResult(
     ),
     totals: categories.map((cat) => read(catTotals.get(cat), spec.measure)),
     total: overall.runs ? read(overall, spec.measure) : null,
-    runCount: overall.runs,
+    runCount: counted.size,
     time,
   };
 }
