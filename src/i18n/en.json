@@ -2623,7 +2623,6 @@
   "levelCap.role.aura": "Aura",
   "levelCap.role.exilus": "Exilus",
   "levelCap.role.stance": "Stance",
-  "levelCap.archgunUsed": "Archgun used this run",
   "levelCap.underframeTitle": "Open this build on underframe.site",
   "levelCap.missionEnd": "Logged at mission end",
   "levelCap.toast.logged": "{frame} run #{count} logged",

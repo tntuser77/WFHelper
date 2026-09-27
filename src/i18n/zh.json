@@ -2603,7 +2603,6 @@
   "levelCap.role.aura": "灵化",
   "levelCap.role.exilus": "特殊功能槽",
   "levelCap.role.stance": "架式",
-  "levelCap.archgunUsed": "本局使用了曲翼枪械",
   "levelCap.underframeTitle": "在 underframe.site 打开此配置",
   "levelCap.missionEnd": "任务结束时自动记录",
   "levelCap.toast.logged": "{frame} 第 {count} 局已记录",

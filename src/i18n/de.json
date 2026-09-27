@@ -2603,7 +2603,6 @@
   "levelCap.role.aura": "Aura",
   "levelCap.role.exilus": "Exilus",
   "levelCap.role.stance": "Haltung",
-  "levelCap.archgunUsed": "Arch-Gewehr in diesem Run benutzt",
   "levelCap.underframeTitle": "Diesen Build auf underframe.site öffnen",
   "levelCap.missionEnd": "Am Missionsende gespeichert",
   "levelCap.toast.logged": "{frame}-Run #{count} gespeichert",
