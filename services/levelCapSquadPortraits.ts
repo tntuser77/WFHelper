@@ -8,12 +8,12 @@ export const PORTRAIT_GRID = 16;
 // Mean per-channel difference, 0-255, under which two portraits are the same art.
 const SAME_PORTRAIT = 22;
 
-export interface PortraitLabel {
+interface PortraitLabel {
   portrait: string;
   frame: string;
 }
 
-export interface PortraitGroup {
+interface PortraitGroup {
   /** Key of the group's first portrait; stable while the group holds together. */
   group: string;
   frame: string | null;

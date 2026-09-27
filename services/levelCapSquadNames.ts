@@ -2,7 +2,7 @@
  *  matched to names the user plays with first; the rest are grouped across
  *  runs, so a player seen in several runs gets a name and one-offs are dropped. */
 
-export interface SquadRead {
+interface SquadRead {
   /** Cleaned text, spaces and case as read. */
   text: string;
   /** The HUD cut the name short ("WealthyPoe..."), so only its start is known. */
@@ -10,9 +10,9 @@ export interface SquadRead {
 }
 
 /** One screenshot's squad slots; each slot holds the variant reads of one row. */
-export type SquadSlots = readonly (readonly string[])[];
+type SquadSlots = readonly (readonly string[])[];
 
-export interface SquadResolution {
+interface SquadResolution {
   players: string[];
   /** The name per squad row, null where nobody could be pinned. */
   slots: Array<string | null>;
