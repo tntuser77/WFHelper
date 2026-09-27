@@ -62,6 +62,27 @@ describe("run analytics dashboard store", () => {
     ]);
   });
 
+  it("keeps squad conditions that name a frame or a player", async () => {
+    const store = await freshStore({
+      version: 1,
+      charts: [
+        {
+          id: "a",
+          squadConditions: [
+            { has: true, frame: " Titania ", player: "WealthyPoet", notPlayer: true },
+            { has: false, frame: null, player: "", notPlayer: true },
+            { frame: "Dante" },
+            "junk",
+          ],
+        },
+      ],
+    });
+    expect(get(store.analyticsCharts)[0].squadConditions).toEqual([
+      { has: true, frame: "Titania", player: "WealthyPoet", notPlayer: true },
+      { has: true, frame: "Dante", player: null, notPlayer: false },
+    ]);
+  });
+
   it("adds, edits, moves and removes cards and saves each change", async () => {
     const store = await freshStore({ version: 1, charts: [] });
     store.addAnalyticsChart({ ...store.newChartDraft(), splitBy: "tag" });

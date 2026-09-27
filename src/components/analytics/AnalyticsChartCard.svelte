@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { analyticsConditionText } from "../../lib/analytics/analyticsLabels.js";
   import type { AnalyticsChartSpec, AnalyticsResult } from "../../lib/analytics/runAnalytics.js";
   import { tr } from "../../lib/i18n.js";
   import ThemedPanel from "../ThemedPanel.svelte";
@@ -54,6 +55,11 @@
       </button>
       <div class="flex min-w-0 flex-1 flex-col">
         <h3 class="m-0 truncate text-sm font-semibold text-text-heading">{title}</h3>
+        {#if spec.squadConditions.length}
+          <span class="truncate text-xs text-text-secondary" data-analytics-conditions
+            >{spec.squadConditions.map((c) => analyticsConditionText(c, $tr)).join(" · ")}</span
+          >
+        {/if}
         {#if spec.chart !== "stat"}
           <span class="text-xs text-text-muted"
             >{$tr("analytics.runCount", { count: String(result.runCount) })}</span

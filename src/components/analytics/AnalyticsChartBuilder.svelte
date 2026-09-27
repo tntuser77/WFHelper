@@ -37,6 +37,8 @@
     runs,
     ctx,
     frames,
+    squadFrames,
+    players,
     onSave,
     onClose,
   }: {
@@ -45,6 +47,9 @@
     ctx: AnalyticsContext;
     /** Frames with at least one run, most-run first. */
     frames: string[];
+    /** Frames squadmates were seen on, and squadmates' names, most seen first. */
+    squadFrames: string[];
+    players: string[];
     onSave: (draft: Draft) => void;
     onClose: () => void;
   } = $props();
@@ -53,12 +58,40 @@
   const NO_SERIES = "";
   let seriesChoice = $state<string>(untrack(() => initial.seriesBy ?? NO_SERIES));
 
+  const MAX_CONDITIONS = 4;
+  type PlayerMode = "any" | "is" | "not";
+  interface ConditionRow {
+    has: boolean;
+    frame: string;
+    mode: PlayerMode;
+    player: string;
+  }
+  // Rows keep what is half typed; the spec only takes what is complete.
+  let conditions = $state<ConditionRow[]>(
+    untrack(() =>
+      initial.squadConditions.map((c) => ({
+        has: c.has,
+        frame: c.frame ?? "",
+        mode: c.player === null ? "any" : c.notPlayer ? "not" : "is",
+        player: c.player ?? "",
+      })),
+    ),
+  );
+  const SELECT =
+    "h-7 cursor-pointer rounded-[var(--radius-md)] border border-[color:var(--ui-control-border)] bg-bg-surface px-1.5 text-xs text-text-primary [&_option]:bg-bg-surface";
+
   // What gets saved: the draft after the store's own rules, so the preview never lies.
   const spec = $derived(
     normalizeChartSpec({
       ...draft,
       id: draft.id ?? "preview",
       seriesBy: seriesChoice || null,
+      squadConditions: conditions.map((row) => ({
+        has: row.has,
+        frame: row.frame || null,
+        player: row.mode === "any" ? null : row.player || null,
+        notPlayer: row.mode === "not",
+      })),
     }) as AnalyticsChartSpec,
   );
   const result = $derived(analyticsResult(runs, spec, ctx));
@@ -219,6 +252,66 @@
               >
             {/each}
           </div>
+        </div>
+
+        <div class="flex flex-col gap-1" data-analytics-condition-editor>
+          <span class="text-text-secondary">{$tr("analytics.field.squadConditions")}</span>
+          {#each conditions as row, i (i)}
+            <div
+              class="flex flex-wrap items-center gap-1 rounded-[var(--radius-md)] border border-border-subtle p-1.5"
+              data-analytics-condition={i}
+            >
+              <select class={SELECT} bind:value={row.has} data-condition-has>
+                <option value={true}>{$tr("analytics.cond.has")}</option>
+                <option value={false}>{$tr("analytics.cond.hasNot")}</option>
+              </select>
+              <select class={SELECT} bind:value={row.frame} data-condition-frame>
+                <option value="">{$tr("analytics.cond.anyFrame")}</option>
+                {#each squadFrames as frame (frame)}
+                  <option value={frame}>{frame}</option>
+                {/each}
+              </select>
+              <select class={SELECT} bind:value={row.mode} data-condition-mode>
+                <option value="any">{$tr("analytics.cond.anyPlayer")}</option>
+                <option value="is">{$tr("analytics.cond.playedBy")}</option>
+                <option value="not">{$tr("analytics.cond.notPlayedBy")}</option>
+              </select>
+              {#if row.mode !== "any"}
+                <input
+                  class="h-7 w-32 rounded-[var(--radius-md)] border border-[color:var(--ui-control-border)] bg-bg-surface px-2 text-xs text-text-primary"
+                  list="analytics-players"
+                  maxlength="64"
+                  placeholder={$tr("analytics.cond.playerName")}
+                  aria-label={$tr("analytics.cond.playerName")}
+                  bind:value={row.player}
+                  data-condition-player
+                />
+              {/if}
+              <button
+                type="button"
+                class="ml-auto rounded px-1.5 text-lg leading-none text-text-muted hover:text-[var(--danger)]"
+                aria-label={$tr("analytics.cond.remove")}
+                title={$tr("analytics.cond.remove")}
+                onclick={() => conditions.splice(i, 1)}>&times;</button
+              >
+            </div>
+          {/each}
+          {#if conditions.length < MAX_CONDITIONS}
+            <ThemedButton
+              size="compact"
+              className="self-start"
+              onClick={() => conditions.push({ has: true, frame: "", mode: "any", player: "" })}
+              >+ {$tr("analytics.cond.add")}</ThemedButton
+            >
+          {/if}
+          {#if draft.measure === "squadmates"}
+            <p class="m-0 text-text-muted">{$tr("analytics.cond.hint")}</p>
+          {/if}
+          <datalist id="analytics-players">
+            {#each players as name (name)}
+              <option value={name}></option>
+            {/each}
+          </datalist>
         </div>
 
         <div class="flex flex-col gap-1">

@@ -4,6 +4,7 @@
   import { analyticsTitle } from "../../lib/analytics/analyticsLabels.js";
   import {
     analyticsResult,
+    analyticsSquadChoices,
     type AnalyticsChartSpec,
     type AnalyticsContext,
   } from "../../lib/analytics/runAnalytics.js";
@@ -39,6 +40,7 @@
     now: Date.now(),
   });
   const frames = $derived(levelCapFrames(runs).map((row) => row.frame));
+  const squadChoices = $derived(analyticsSquadChoices(runs));
   const cards = $derived(
     $analyticsCharts.map((spec) => ({
       spec,
@@ -105,6 +107,8 @@
     {runs}
     {ctx}
     {frames}
+    squadFrames={squadChoices.frames}
+    players={squadChoices.players}
     onSave={save}
     onClose={() => (editing = null)}
   />

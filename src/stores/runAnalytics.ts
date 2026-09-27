@@ -8,6 +8,7 @@ import {
   ANALYTICS_SQUAD_FILTERS,
   isAnalyticsTimeSplit,
   type AnalyticsChartSpec,
+  type AnalyticsSquadCondition,
 } from "../lib/analytics/runAnalytics.js";
 import { readStoredJson, writeStorage } from "../lib/persistence.js";
 
@@ -15,6 +16,7 @@ const RUN_ANALYTICS_STORAGE_KEY = "wf_run_analytics_v1";
 
 const MAX_CHARTS = 40;
 const MAX_TITLE = 80;
+const MAX_CONDITIONS = 4;
 export const ANALYTICS_LIMITS = [5, 10, 15, 25] as const;
 
 type ChartDraft = Omit<AnalyticsChartSpec, "id">;
@@ -29,6 +31,7 @@ const BLANK: ChartDraft = {
   range: "all",
   squad: "all",
   frames: [],
+  squadConditions: [],
   limit: 10,
   wide: false,
 };
@@ -63,6 +66,22 @@ function pick<T extends string | number | null>(
   return (allowed as readonly unknown[]).includes(raw) ? (raw as T) : fallback;
 }
 
+/** A condition naming neither a frame nor a player matches everyone, so it is dropped. */
+function normalizeCondition(raw: unknown): AnalyticsSquadCondition | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 64) : null);
+  const frame = text(value.frame);
+  const player = text(value.player);
+  if (!frame && !player) return null;
+  return {
+    has: value.has !== false,
+    frame,
+    player,
+    notPlayer: !!player && value.notPlayer === true,
+  };
+}
+
 /** One card from storage; anything off the menu falls back to the blank card's choice. */
 export function normalizeChartSpec(raw: unknown): AnalyticsChartSpec | null {
   if (!raw || typeof raw !== "object") return null;
@@ -91,6 +110,9 @@ export function normalizeChartSpec(raw: unknown): AnalyticsChartSpec | null {
     squad: pick(ANALYTICS_SQUAD_FILTERS, value.squad, BLANK.squad),
     frames: Array.isArray(value.frames)
       ? value.frames.filter((f): f is string => typeof f === "string").slice(0, 100)
+      : [],
+    squadConditions: Array.isArray(value.squadConditions)
+      ? value.squadConditions.flatMap((c) => normalizeCondition(c) ?? []).slice(0, MAX_CONDITIONS)
       : [],
     limit: pick<number>(ANALYTICS_LIMITS, value.limit, BLANK.limit),
     wide: value.wide === true,

@@ -10,11 +10,13 @@ import {
   type AnalyticsMeasure,
   type AnalyticsRange,
   type AnalyticsSplit,
+  type AnalyticsSquadCondition,
   type AnalyticsSquadFilter,
 } from "./runAnalytics.js";
 
 export const MEASURE_LABEL: Record<AnalyticsMeasure, MessageKey> = {
   runs: "analytics.measure.runs",
+  squadmates: "analytics.measure.squadmates",
   exolizersAvg: "analytics.measure.exolizersAvg",
   exolizersBest: "analytics.measure.exolizersBest",
   durationAvg: "analytics.measure.durationAvg",
@@ -101,6 +103,21 @@ export function analyticsKeyLabel(
     });
   }
   return key;
+}
+
+/** "With Titania not played by WealthyPoet", for the card's subtitle. */
+export function analyticsConditionText(condition: AnalyticsSquadCondition, t: Translator): string {
+  const frame = condition.frame ?? t("analytics.cond.anyone");
+  let who = frame;
+  if (condition.player !== null && !condition.notPlayer && condition.frame === null) {
+    who = condition.player;
+  } else if (condition.player !== null) {
+    who = t(condition.notPlayer ? "analytics.cond.notBy" : "analytics.cond.by", {
+      frame,
+      player: condition.player,
+    });
+  }
+  return t(condition.has ? "analytics.cond.with" : "analytics.cond.without", { who });
 }
 
 export function formatAnalyticsValue(
