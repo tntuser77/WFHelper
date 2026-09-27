@@ -1,0 +1,177 @@
+import { describe, expect, it } from "vitest";
+
+import type { LevelCapRun } from "../../../config/shared/levelCapTypes.js";
+import {
+  ANALYTICS_OTHER,
+  ANALYTICS_SOLO,
+  ANALYTICS_SQUAD,
+  ANALYTICS_UNKNOWN,
+  analyticsResult,
+  type AnalyticsChartSpec,
+  type AnalyticsContext,
+} from "../../../src/lib/analytics/runAnalytics.js";
+
+const NOW = new Date(2026, 8, 27, 12).getTime();
+const day = (month: number, date: number) => new Date(2026, month - 1, date, 20).getTime();
+
+let seq = 0;
+function run(overrides: Partial<LevelCapRun> = {}): LevelCapRun {
+  return {
+    id: `r${seq++}`,
+    completedAt: day(9, 20),
+    frame: "Dante",
+    frameType: null,
+    source: "hotkey",
+    exolizers: 108,
+    durationSec: 3600,
+    squadSize: 1,
+    tile: null,
+    archgunUsed: false,
+    build: null,
+    screenshot: null,
+    ...overrides,
+  };
+}
+
+function spec(overrides: Partial<AnalyticsChartSpec> = {}): AnalyticsChartSpec {
+  return {
+    id: "c",
+    title: "",
+    source: "levelCap",
+    measure: "runs",
+    splitBy: "frame",
+    seriesBy: null,
+    chart: "ranked",
+    range: "all",
+    squad: "all",
+    frames: [],
+    limit: 10,
+    wide: false,
+    ...overrides,
+  };
+}
+
+const ctx: AnalyticsContext = { builds: [], itemName: (item) => item.type, now: NOW };
+
+describe("analyticsResult", () => {
+  it("ranks categories and folds the rest into Other", () => {
+    const runs = [
+      run({ frame: "Titania" }),
+      run({ frame: "Titania" }),
+      run({ frame: "Dante" }),
+      run({ frame: "Mesa" }),
+      run({ frame: "Saryn" }),
+    ];
+    const result = analyticsResult(runs, spec({ limit: 2 }), ctx);
+    expect(result.categories).toEqual(["Titania", "Dante", ANALYTICS_OTHER]);
+    expect(result.values).toEqual([[2, 1, 2]]);
+    expect(result.total).toBe(5);
+  });
+
+  it("fills quiet weeks with zero and starts weeks on Monday", () => {
+    // Tue 1 Sep and Sun 20 Sep 2026: weeks of Mon 31 Aug and Mon 14 Sep.
+    const runs = [run({ completedAt: day(9, 1) }), run({ completedAt: day(9, 20) })];
+    const result = analyticsResult(runs, spec({ splitBy: "week", chart: "columns" }), ctx);
+    expect(result.categories).toEqual(["2026-08-31", "2026-09-07", "2026-09-14"]);
+    expect(result.values).toEqual([[1, 0, 1]]);
+  });
+
+  it("stacks a second split without counting a run twice in the totals", () => {
+    const runs = [
+      run({ completedAt: day(8, 3), players: ["Kemani", "Alaric"], playersFromScreenshot: true }),
+      run({ completedAt: day(9, 3), players: ["Kemani"], playersFromScreenshot: true }),
+    ];
+    const result = analyticsResult(
+      runs,
+      spec({ splitBy: "month", seriesBy: "squadmate", chart: "columns" }),
+      ctx,
+    );
+    expect(result.categories).toEqual(["2026-08", "2026-09"]);
+    expect(result.series).toEqual(["Kemani", "Alaric"]);
+    expect(result.values).toEqual([
+      [1, 1],
+      [1, 0],
+    ]);
+    expect(result.totals).toEqual([1, 1]);
+  });
+
+  it("leaves your own name out of squadmates", () => {
+    const runs = [
+      run({ players: ["Me", "Kemani"], squadSize: 2 }),
+      run({ players: ["Me", "Alaric"], squadSize: 2 }),
+      run({ players: ["WealthyPoet"], playersFromScreenshot: true, squadSize: 2 }),
+    ];
+    const result = analyticsResult(runs, spec({ splitBy: "squadmate" }), ctx);
+    expect(result.categories.sort()).toEqual(["Alaric", "Kemani", "WealthyPoet"]);
+    // Solo runs have nobody to count, so the chart only covers squad runs.
+    expect(result.runCount).toBe(3);
+  });
+
+  it("names squadmates' frames and keeps unlabelled ones as unknown", () => {
+    const runs = [
+      run({
+        squadmates: [
+          { name: "A", portrait: "p1", frame: "Titania" },
+          { name: "B", portrait: "p2", frame: null },
+        ],
+      }),
+    ];
+    const result = analyticsResult(runs, spec({ splitBy: "squadmateFrame" }), ctx);
+    expect(result.categories.sort()).toEqual(["Titania", ANALYTICS_UNKNOWN].sort());
+  });
+
+  it("averages and takes the best Exolizer count, skipping runs without one", () => {
+    const runs = [
+      run({ exolizers: 110 }),
+      run({ exolizers: 120 }),
+      run({ exolizers: null }),
+      run({ frame: "Mesa", exolizers: null }),
+    ];
+    const avg = analyticsResult(runs, spec({ measure: "exolizersAvg" }), ctx);
+    expect(avg.categories).toEqual(["Dante", "Mesa"]);
+    expect(avg.values).toEqual([[115, null]]);
+    const best = analyticsResult(runs, spec({ measure: "exolizersBest", chart: "stat" }), ctx);
+    expect(best.total).toBe(120);
+  });
+
+  it("filters by date range, squad and frame", () => {
+    const runs = [
+      run({ completedAt: day(5, 1) }),
+      run({ squadSize: 3 }),
+      run({ frame: "Mesa" }),
+      run({ squadSize: null }),
+    ];
+    expect(analyticsResult(runs, spec({ range: "90d" }), ctx).total).toBe(3);
+    expect(analyticsResult(runs, spec({ squad: "squad" }), ctx).total).toBe(1);
+    expect(analyticsResult(runs, spec({ frames: ["Mesa"] }), ctx).total).toBe(1);
+    const split = analyticsResult(runs, spec({ splitBy: "squad" }), ctx);
+    expect(split.categories).toEqual([ANALYTICS_SOLO, ANALYTICS_SQUAD, ANALYTICS_UNKNOWN]);
+  });
+
+  it("names builds and gathers build and run tags", () => {
+    const build = {
+      id: "b1",
+      frame: "Dante",
+      name: "Build A",
+      tags: ["caster"],
+      build: {
+        suit: null,
+        primary: null,
+        secondary: null,
+        melee: null,
+        archgun: null,
+        companion: null,
+        focus: null,
+      },
+    };
+    const runs = [run({ buildId: "b1" }), run({ tags: ["comfy"] })];
+    const withBuilds = { ...ctx, builds: [build] };
+    expect(analyticsResult(runs, spec({ splitBy: "build" }), withBuilds).categories).toEqual([
+      "Dante · Build A",
+    ]);
+    expect(analyticsResult(runs, spec({ splitBy: "tag" }), withBuilds).categories.sort()).toEqual([
+      "caster",
+      "comfy",
+    ]);
+  });
+});
