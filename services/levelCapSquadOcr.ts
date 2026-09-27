@@ -15,6 +15,7 @@ const log = withScope("levelCapSquadOcr");
 // the band is loose. Your frame and companion sit above it, squadmates in it.
 const LEFT_PX = 440;
 const RIGHT_PX = 60;
+const TIGHT_RIGHT_PX = 20;
 const TOP = 0.05;
 const BOTTOM = 0.5;
 const BAND_PX: [number, number] = [135, 310];
@@ -264,74 +265,100 @@ async function rowCrop(mask: Uint8Array, width: number, row: Row): Promise<RgbCr
   return { data, width: cw * UPSCALE, height: ch * UPSCALE };
 }
 
+/** A read counts when every row has a word in it, not a stray digit or symbol. */
+function readsLikeNames(read: SquadScreenshotRead): boolean {
+  return (
+    read.names.length > 0 &&
+    read.names.every((variants) => variants.some((text) => /\p{L}.*\p{L}.*\p{L}/u.test(text)))
+  );
+}
+
 /** Names and portraits per squad row, or null when the screenshot is unreadable. */
 export async function readSquadFromScreenshot(file: string): Promise<SquadScreenshotRead | null> {
   if (!paddleRecognizerAvailable()) return null;
   try {
-    const sharp = loadSharp();
-    const meta = await sharp(file).metadata();
+    const meta = await loadSharp()(file).metadata();
     const W = meta.width ?? 0;
     const H = meta.height ?? 0;
     if (W < 400 || H < 300) return null;
-    const scale = H / 1080;
-    const left = Math.max(0, Math.round(W - LEFT_PX * scale));
-    const top = Math.round(H * TOP);
-    const width = Math.round(W - RIGHT_PX * scale) - left;
-    const height = Math.round(H * BOTTOM) - top;
-    const data: Buffer = await sharp(file)
-      .extract({ left, top, width, height })
-      .removeAlpha()
-      .raw()
-      .toBuffer();
-    const img = { data, width, height };
-    const masks = WHITE_CUTS.map((cut) => whiteMask(img, cut, scale));
-    // Disks survive bright scenes; the old line scan only covers screenshots without them.
-    // A disk touching its platform icon is missed, so the scan fills the gaps.
-    const byDisk = diskRows(findDisks(img, scale), masks[0], width, height, scale);
-    const mid = (row: Row) => (row.y0 + row.y1) / 2;
-    const scanned = nameRows(masks[0], width, height, scale).filter((row) =>
-      byDisk.every((disk) => Math.abs(mid(disk) - mid(row)) > NAME_HALF_PX * 1.5 * scale),
-    );
-    // A scanned row's disk sits in the same column as the found ones.
-    const column = byDisk[0]?.disk?.cx;
-    for (const row of scanned) if (column !== undefined) row.disk = { cx: column, cy: mid(row) };
-    const rows = [...byDisk, ...scanned.slice(0, MAX_SLOTS - byDisk.length)].sort(
-      (a, b) => a.y0 - b.y0,
-    );
-    if (!rows.length) return { names: [], portraits: [], thumbs: [] };
-    const crops = await Promise.all([
-      ...masks.flatMap((mask) => rows.map((row) => rowCrop(mask, width, row))),
-      ...rows.map((row) => plainCrop(img, row)),
-    ]);
-    const lines = await recognizePaddleCrops(crops);
-    const reads = rows.map((_, i) =>
-      [0, 1, 2].map((v) => lines[v * rows.length + i]?.text.trim() ?? "").filter(Boolean),
-    );
-    const faces = await Promise.all(
-      rows.map((row) =>
-        row.disk
-          ? portraitOf(
-              file,
-              W,
-              H,
-              {
-                x: left + row.disk.cx + PORTRAIT_FROM_DISK.x * scale,
-                y: top + row.disk.cy + PORTRAIT_FROM_DISK.y * scale,
-              },
-              scale,
-            )
-          : null,
-      ),
-    );
-    // A lone disk can be your own frame's level; its row names the frame.
-    const keep = reads.map((variants) => !variants.some((text) => /\[\d/.test(text)));
-    return {
-      names: reads.filter((_, i) => keep[i]),
-      portraits: faces.flatMap((face, i) => (keep[i] ? [face?.portrait ?? null] : [])),
-      thumbs: faces.flatMap((face, i) => (keep[i] ? [face?.thumb ?? null] : [])),
-    };
+    const first = await readBand(file, W, H, RIGHT_PX);
+    if (first.disks) return first.read;
+    // A snip cut close on the right can leave every slot disk in the margin; a
+    // wider band also takes in the level numbers, so it has to read as names.
+    const tight = await readBand(file, W, H, TIGHT_RIGHT_PX);
+    return tight.disks && readsLikeNames(tight.read) ? tight.read : first.read;
   } catch (err) {
     log.warn("[LevelCapOcr] squad read failed:", normalizeErrorMessage(err));
     return null;
   }
+}
+
+/** One pass over the squad band, `rightPx` short of the image's right edge. */
+async function readBand(
+  file: string,
+  W: number,
+  H: number,
+  rightPx: number,
+): Promise<{ read: SquadScreenshotRead; disks: number }> {
+  const sharp = loadSharp();
+  const scale = H / 1080;
+  const left = Math.max(0, Math.round(W - LEFT_PX * scale));
+  const top = Math.round(H * TOP);
+  const width = Math.round(W - rightPx * scale) - left;
+  const height = Math.round(H * BOTTOM) - top;
+  const data: Buffer = await sharp(file)
+    .extract({ left, top, width, height })
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+  const img = { data, width, height };
+  const masks = WHITE_CUTS.map((cut) => whiteMask(img, cut, scale));
+  // Disks survive bright scenes; the old line scan only covers screenshots without them.
+  // A disk touching its platform icon is missed, so the scan fills the gaps.
+  const byDisk = diskRows(findDisks(img, scale), masks[0], width, height, scale);
+  const mid = (row: Row) => (row.y0 + row.y1) / 2;
+  const scanned = nameRows(masks[0], width, height, scale).filter((row) =>
+    byDisk.every((disk) => Math.abs(mid(disk) - mid(row)) > NAME_HALF_PX * 1.5 * scale),
+  );
+  // A scanned row's disk sits in the same column as the found ones.
+  const column = byDisk[0]?.disk?.cx;
+  for (const row of scanned) if (column !== undefined) row.disk = { cx: column, cy: mid(row) };
+  const rows = [...byDisk, ...scanned.slice(0, MAX_SLOTS - byDisk.length)].sort(
+    (a, b) => a.y0 - b.y0,
+  );
+  if (!rows.length) return { read: { names: [], portraits: [], thumbs: [] }, disks: 0 };
+  const crops = await Promise.all([
+    ...masks.flatMap((mask) => rows.map((row) => rowCrop(mask, width, row))),
+    ...rows.map((row) => plainCrop(img, row)),
+  ]);
+  const lines = await recognizePaddleCrops(crops);
+  const reads = rows.map((_, i) =>
+    [0, 1, 2].map((v) => lines[v * rows.length + i]?.text.trim() ?? "").filter(Boolean),
+  );
+  const faces = await Promise.all(
+    rows.map((row) =>
+      row.disk
+        ? portraitOf(
+            file,
+            W,
+            H,
+            {
+              x: left + row.disk.cx + PORTRAIT_FROM_DISK.x * scale,
+              y: top + row.disk.cy + PORTRAIT_FROM_DISK.y * scale,
+            },
+            scale,
+          )
+        : null,
+    ),
+  );
+  // A lone disk can be your own frame's level; its row names the frame.
+  const keep = reads.map((variants) => !variants.some((text) => /\[\d/.test(text)));
+  return {
+    read: {
+      names: reads.filter((_, i) => keep[i]),
+      portraits: faces.flatMap((face, i) => (keep[i] ? [face?.portrait ?? null] : [])),
+      thumbs: faces.flatMap((face, i) => (keep[i] ? [face?.thumb ?? null] : [])),
+    },
+    disks: byDisk.length,
+  };
 }
