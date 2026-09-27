@@ -110,6 +110,11 @@
         {#if run.build?.loadoutName}
           <span>{$t("levelCap.build.loadout", { name: run.build.loadoutName })}</span>
         {/if}
+        {#if run.players?.length}
+          <span data-level-cap-players
+            >{$t("levelCap.players", { names: run.players.join(", ") })}</span
+          >
+        {/if}
         {#if run.source === "mission-end"}
           <span class="text-text-muted">{$t("levelCap.missionEnd")}</span>
         {/if}

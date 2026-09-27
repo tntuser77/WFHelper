@@ -74,6 +74,7 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
   }
   if (typeof run.completedAt !== "number" || !Number.isFinite(run.completedAt)) return null;
   const tags = normalizeRunTags(run.tags);
+  const players = normalizePlayers(run.players);
   const out: LevelCapRun = {
     ...run,
     frameType: typeof run.frameType === "string" ? run.frameType : null,
@@ -87,11 +88,22 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
     screenshot: typeof run.screenshot === "string" ? run.screenshot : null,
   };
   delete out.tags;
+  delete out.players;
+  if (players.length) out.players = players;
   delete (out as { notes?: unknown }).notes;
   delete out.buildId;
   if (tags.length) out.tags = tags;
   if (typeof run.buildId === "string" && run.buildId) out.buildId = run.buildId;
   return out;
+}
+
+function normalizePlayers(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const names = raw
+    .filter((name): name is string => typeof name === "string")
+    .map((name) => name.trim().slice(0, 64))
+    .filter(Boolean);
+  return [...new Set(names)].slice(0, 8);
 }
 
 function normalizeFrameNotes(raw: unknown): Record<string, string> {

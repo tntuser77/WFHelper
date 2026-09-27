@@ -59,6 +59,10 @@ export function getStatus(): LevelCapStatus {
   };
 }
 
+function playersOf(mission: LevelCapMission): { players?: string[] } {
+  return mission.players.length ? { players: [...mission.players] } : {};
+}
+
 function squadSize(mission: LevelCapMission): number | null {
   return mission.players.length || null;
 }
@@ -86,6 +90,7 @@ function finishMission(mission: LevelCapMission): void {
       run.rounds = mission.rounds ?? run.rounds ?? null;
       run.durationSec = durationSec;
       run.squadSize = squadSize(mission) ?? run.squadSize;
+      if (mission.players.length) run.players = [...mission.players];
       run.tile = mission.tile ?? run.tile;
       run.archgunUsed = archgunUsed;
       // The XP line names the frame that actually played; trust it over the
@@ -120,6 +125,7 @@ function finishMission(mission: LevelCapMission): void {
     rounds: mission.rounds,
     durationSec,
     squadSize: squadSize(mission),
+    ...playersOf(mission),
     tile: mission.tile,
     archgunUsed,
     build,
@@ -223,6 +229,7 @@ async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome |
     rounds: mission.rounds,
     durationSec: null,
     squadSize: squadSize(mission),
+    ...playersOf(mission),
     tile: mission.tile,
     archgunUsed: false,
     build,

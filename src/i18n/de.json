@@ -2575,6 +2575,7 @@
   "levelCap.importDone": "{count} Screenshots importiert.",
   "levelCap.importNone": "Keine neuen Screenshots gefunden.",
   "levelCap.notes.placeholder": "Notizen zu {frame}: was funktioniert, was du als Nächstes probierst...",
+  "levelCap.players": "Trupp: {names}",
   "levelCap.settings.hotkey": "Hotkey für Run-Ende",
   "levelCap.settings.hotkeyHint": "Wirkt nur in einer Void-Kaskade. Leer lassen zum Ausschalten.",
   "levelCap.settings.hotkeyUnbound": "{key} konnte nicht belegt werden. Eine andere App nutzt die Taste vielleicht, wähle eine andere.",

@@ -117,6 +117,7 @@ describe("levelCapTracker", () => {
     expect(done.exolizers).toBe(110);
     expect(done.durationSec).toBe(4200);
     expect(done.squadSize).toBe(1);
+    expect(done.players).toEqual(["Player1"]);
     expect(done.archgunUsed).toBe(true);
     // The archgun gained XP, so it joins the build and every run on it.
     expect(done.build?.archgun).not.toBeNull();

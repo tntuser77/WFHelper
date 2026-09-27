@@ -2575,6 +2575,7 @@
   "levelCap.importDone": "已导入 {count} 张截图。",
   "levelCap.importNone": "没有发现新截图。",
   "levelCap.notes.placeholder": "关于 {frame} 的笔记：哪些有效、下次想试什么...",
+  "levelCap.players": "小队：{names}",
   "levelCap.settings.hotkey": "结束记录快捷键",
   "levelCap.settings.hotkeyHint": "仅在虚空覆涌中生效。留空即关闭。",
   "levelCap.settings.hotkeyUnbound": "无法绑定 {key}，可能已被其他应用占用，请换一个按键。",

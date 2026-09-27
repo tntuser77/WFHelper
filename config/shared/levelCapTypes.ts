@@ -88,6 +88,8 @@ export interface LevelCapRun {
   durationSec: number | null;
   /** Players in the mission including you; null when the log never said. */
   squadSize: number | null;
+  /** Names the log gave for the squad, you included; only on runs logged live. */
+  players?: string[];
   tile: LevelCapTile | null;
   /** The archgun got kills this run, so it belongs in the build. */
   archgunUsed: boolean;
