@@ -7,21 +7,9 @@ import type {
   LevelCapItem,
   LevelCapSlotKind,
 } from "../../config/shared/levelCapTypes.js";
-import type {
-  LevelCapCatalog,
-  LevelCapPayload,
-  LevelCapRun,
-  LevelCapSettings,
-} from "../types/ipc.js";
+import type { LevelCapCatalog, LevelCapPayload, LevelCapSettings } from "../types/ipc.js";
 
 export const levelCap = writable<LevelCapPayload | null>(null);
-
-function patchRun(run: LevelCapRun | null): void {
-  if (!run) return;
-  levelCap.update((state) =>
-    state ? { ...state, runs: state.runs.map((r) => (r.id === run.id ? run : r)) } : state,
-  );
-}
 
 export async function loadLevelCap(): Promise<void> {
   levelCap.set(await invoke("getLevelCap"));
@@ -32,8 +20,8 @@ export function subscribeLevelCap(): () => void {
   return on("level-cap-updated", (payload) => levelCap.set(payload));
 }
 
-export async function setLevelCapNotes(id: string, notes: string): Promise<void> {
-  patchRun(await invoke("setLevelCapNotes", id, notes));
+export async function setLevelCapNotes(frame: string, notes: string): Promise<void> {
+  levelCap.set(await invoke("setLevelCapNotes", frame, notes));
 }
 
 /** Resolves to the new build's id, or null when the equipped frame is a different one. */

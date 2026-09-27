@@ -89,13 +89,15 @@ describe("levelCapStore", () => {
     expect(b.id).toBe(`${a.id}-2`);
   });
 
-  it("cleans build tags and run notes on the way in", async () => {
+  it("cleans build tags and frame notes on the way in", async () => {
     const store = await freshStore();
-    const { id, buildId } = store.addRun(run({ build: BUILD }));
+    const { buildId } = store.addRun(run({ build: BUILD }));
     store.updateBuild(buildId!, { tags: ["melee", " Melee ", "caster", 7] as string[] });
-    store.setRunNotes(id, "  comfy\u0007 run  ");
+    store.setFrameNotes("Dante", "  comfy\u0007 frame  ");
     expect(store.getBuilds()[0].tags).toEqual(["melee", "caster"]);
-    expect(store.getRuns()[0].notes).toBe("comfy run");
+    expect(store.getFrameNotes()).toEqual({ Dante: "comfy frame" });
+    store.setFrameNotes("Dante", "   ");
+    expect(store.getFrameNotes()).toEqual({});
     store.updateBuild(buildId!, { tags: [] });
     expect(store.getBuilds()[0].tags).toBeUndefined();
   });

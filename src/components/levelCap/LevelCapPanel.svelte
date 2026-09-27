@@ -210,6 +210,7 @@
     row={openRow}
     runs={runsByFrame[openRow.frame] ?? []}
     builds={buildsByFrame[openRow.frame] ?? []}
+    notes={$levelCap?.frameNotes[openRow.frame] ?? ""}
     {tagSuggestions}
     {abilityNames}
     onClose={() => (openFrame = null)}

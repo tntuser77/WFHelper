@@ -17,12 +17,14 @@
   import ModalShell from "../ModalShell.svelte";
   import ThemedButton from "../ThemedButton.svelte";
   import LevelCapBuildEditor from "./LevelCapBuildEditor.svelte";
+  import LevelCapFrameNotes from "./LevelCapFrameNotes.svelte";
   import LevelCapRunDetail from "./LevelCapRunDetail.svelte";
 
   let {
     row,
     runs,
     builds,
+    notes,
     tagSuggestions,
     abilityNames,
     onClose,
@@ -32,6 +34,7 @@
     runs: LevelCapRun[];
     /** This frame's builds only. */
     builds: LevelCapNamedBuild[];
+    notes: string;
     tagSuggestions: string[];
     abilityNames: Record<string, string>;
     onClose: () => void;
@@ -169,6 +172,9 @@
           />
         {/key}
       {:else}
+        {#key row.frame}
+          <LevelCapFrameNotes frame={row.frame} {notes} />
+        {/key}
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" data-level-cap-builds>
           {#each builds as build (build.id)}
             {@const active = filter === build.id}

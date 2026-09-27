@@ -1,12 +1,10 @@
 <script lang="ts">
-  import { onDestroy, untrack } from "svelte";
-
   import type { LevelCapItem } from "../../../config/shared/levelCapTypes.js";
   import type { LevelCapRun } from "../../types/ipc.js";
   import { tr as t, type MessageKey } from "../../lib/i18n.js";
   import { confirmWithDialog, invoke } from "../../lib/ipc.js";
   import { log } from "../../lib/log.js";
-  import { deleteLevelCapRun, setLevelCapNotes } from "../../stores/levelCap.js";
+  import { deleteLevelCapRun } from "../../stores/levelCap.js";
   import ThemedButton from "../ThemedButton.svelte";
   import LevelCapItemCard from "./LevelCapItemCard.svelte";
 
@@ -46,33 +44,6 @@
       live = false;
     };
   });
-
-  let notesDraft = $state(untrack(() => run.notes ?? ""));
-  let notesTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function saveNotes(): void {
-    void setLevelCapNotes(run.id, notesDraft).catch((err) =>
-      log.warn("[LevelCap] notes save failed", String(err)),
-    );
-  }
-
-  function onNotesInput(): void {
-    if (notesTimer) clearTimeout(notesTimer);
-    notesTimer = setTimeout(() => {
-      notesTimer = null;
-      saveNotes();
-    }, 600);
-  }
-
-  /** Collapsing the row inside the debounce window would drop the edit. */
-  function flushNotes(): void {
-    if (!notesTimer) return;
-    clearTimeout(notesTimer);
-    notesTimer = null;
-    saveNotes();
-  }
-
-  onDestroy(flushNotes);
 
   async function onDelete(): Promise<void> {
     if (!(await confirmWithDialog($t("levelCap.confirmDelete"), $t))) return;
@@ -129,19 +100,6 @@
           {/each}
         </div>
       {/if}
-
-      <label class="flex flex-col gap-1">
-        <span class="text-xs font-semibold uppercase tracking-wide text-text-muted"
-          >{$t("arbi.notes.label")}</span
-        >
-        <textarea
-          class="min-h-[4.5rem] w-full resize-y rounded border border-border bg-bg-raised px-2 py-1.5 text-sm text-text-primary outline-none focus:border-info"
-          maxlength="2000"
-          placeholder={$t("arbi.notes.placeholder")}
-          bind:value={notesDraft}
-          oninput={onNotesInput}
-          onblur={flushNotes}></textarea>
-      </label>
 
       <div class="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
         {#if run.build?.focus}

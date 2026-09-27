@@ -287,7 +287,7 @@ export interface PreloadAPI {
   onPtRunSaved: (callback: (run: IpcEventMap["pt-run-saved"]) => void) => () => void;
   getLevelCap: () => Promise<IpcInvokeMap["getLevelCap"]["return"]>;
   setLevelCapNotes: (
-    id: IpcInvokeMap["setLevelCapNotes"]["args"][0],
+    frame: IpcInvokeMap["setLevelCapNotes"]["args"][0],
     notes: IpcInvokeMap["setLevelCapNotes"]["args"][1],
   ) => Promise<IpcInvokeMap["setLevelCapNotes"]["return"]>;
   createLevelCapBuild: (

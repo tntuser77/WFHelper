@@ -109,6 +109,7 @@ function payload(): LevelCapPayload {
     builds,
     settings: store.getSettings(),
     status: tracker.getStatus(),
+    frameNotes: store.getFrameNotes(),
     hotkey: {
       bound: _boundHotkey !== "",
       canPassThrough: process.platform === "win32",
@@ -271,9 +272,11 @@ function register(): void {
   handleAuthorized(
     LEVEL_CAP_SET_NOTES,
     assertMainRendererSender,
-    (_e, id: unknown, notes: unknown) => {
-      const runId = asRunId(id);
-      return runId ? store.setRunNotes(runId, notes) : null;
+    (_e, frame: unknown, notes: unknown) => {
+      if (typeof frame === "string" && frame.trim() && frame.length <= 120) {
+        store.setFrameNotes(frame, notes);
+      }
+      return payload();
     },
   );
 

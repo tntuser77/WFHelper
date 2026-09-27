@@ -2594,6 +2594,7 @@
   "levelCap.import": "Import screenshots",
   "levelCap.importDone": "Imported {count} screenshots.",
   "levelCap.importNone": "No new screenshots found.",
+  "levelCap.notes.placeholder": "Notes about {frame}: what works, what to try next...",
   "levelCap.settings.hotkey": "Finish-run hotkey",
   "levelCap.settings.hotkeyHint": "Only acts inside a Void Cascade. Leave empty to turn it off.",
   "levelCap.settings.hotkeyUnbound": "{key} could not be bound. Another app may be using it, so pick a different key.",

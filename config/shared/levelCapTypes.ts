@@ -101,7 +101,6 @@ export interface LevelCapRun {
   screenshot: string | null;
   /** Only on runs without a named build; assigning one moves these onto the build. */
   tags?: string[];
-  notes?: string;
 }
 
 /** A frame's loadout under a name, shared by every run played with it. */
@@ -180,6 +179,8 @@ export interface LevelCapPayload {
   builds: LevelCapNamedBuild[];
   settings: LevelCapSettings;
   status: LevelCapStatus;
+  /** Free-form notes per frame, keyed by the frame's display name. */
+  frameNotes: Record<string, string>;
   /** Whether the finish-run key is live, and whether this platform can share it
    *  with the game (Linux shortcuts always take the key). */
   hotkey: { bound: boolean; canPassThrough: boolean };

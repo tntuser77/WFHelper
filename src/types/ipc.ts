@@ -720,8 +720,8 @@ export interface IpcInvokeMap {
     return: LevelCapPayload;
   };
   setLevelCapNotes: {
-    args: [id: string, notes: string];
-    return: LevelCapRun | null;
+    args: [frame: string, notes: string];
+    return: LevelCapPayload;
   };
   createLevelCapBuild: {
     args: [frame: string, source: LevelCapBuildSource, name?: string];

@@ -38,6 +38,7 @@ const IGNORED_DIRS = new Set(["__pycache__", "__init__"]);
 let _runs: LevelCapRun[] = [];
 let _builds: LevelCapNamedBuild[] = [];
 let _settings: LevelCapSettings | null = null;
+let _frameNotes: Record<string, string> = {};
 let _loaded = false;
 
 function defaultSettings(): LevelCapSettings {
@@ -73,7 +74,6 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
   }
   if (typeof run.completedAt !== "number" || !Number.isFinite(run.completedAt)) return null;
   const tags = normalizeRunTags(run.tags);
-  const notes = normalizeRunNotes(run.notes);
   const out: LevelCapRun = {
     ...run,
     frameType: typeof run.frameType === "string" ? run.frameType : null,
@@ -87,11 +87,20 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
     screenshot: typeof run.screenshot === "string" ? run.screenshot : null,
   };
   delete out.tags;
-  delete out.notes;
+  delete (out as { notes?: unknown }).notes;
   delete out.buildId;
   if (tags.length) out.tags = tags;
-  if (notes) out.notes = notes;
   if (typeof run.buildId === "string" && run.buildId) out.buildId = run.buildId;
+  return out;
+}
+
+function normalizeFrameNotes(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [frame, notes] of Object.entries(raw)) {
+    const clean = normalizeRunNotes(notes);
+    if (frame.trim() && clean) out[frame] = clean;
+  }
   return out;
 }
 
@@ -167,12 +176,14 @@ function ensureLoaded(): void {
       runs?: unknown;
       builds?: unknown;
       settings?: unknown;
+      frameNotes?: unknown;
     };
     _runs = Array.isArray(parsed.runs) ? parsed.runs.flatMap((raw) => normalizeRun(raw) ?? []) : [];
     _builds = Array.isArray(parsed.builds)
       ? parsed.builds.flatMap((raw) => normalizeNamedBuild(raw) ?? [])
       : [];
     _settings = normalizeSettings(parsed.settings);
+    _frameNotes = normalizeFrameNotes(parsed.frameNotes);
     const version = typeof parsed.schemaVersion === "number" ? parsed.schemaVersion : 1;
     if (version < 2) {
       // Keep the pre-migration index untouched in case the grouping is ever wrong.
@@ -192,12 +203,19 @@ function ensureLoaded(): void {
     _runs = [];
     _builds = [];
     _settings = defaultSettings();
+    _frameNotes = {};
   }
 }
 
 function serialize(): string {
   return JSON.stringify(
-    { schemaVersion: INDEX_SCHEMA_VERSION, settings: _settings, builds: _builds, runs: _runs },
+    {
+      schemaVersion: INDEX_SCHEMA_VERSION,
+      settings: _settings,
+      frameNotes: _frameNotes,
+      builds: _builds,
+      runs: _runs,
+    },
     null,
     1,
   );
@@ -348,12 +366,17 @@ export function relinkRun(id: string): LevelCapRun | null {
   });
 }
 
-export function setRunNotes(id: string, notes: unknown): LevelCapRun | null {
-  return updateRun(id, (run) => {
-    const clean = normalizeRunNotes(notes);
-    if (clean) run.notes = clean;
-    else delete run.notes;
-  });
+export function getFrameNotes(): Record<string, string> {
+  ensureLoaded();
+  return { ..._frameNotes };
+}
+
+export function setFrameNotes(frame: string, notes: unknown): void {
+  ensureLoaded();
+  const clean = normalizeRunNotes(notes);
+  if (clean) _frameNotes[frame] = clean;
+  else delete _frameNotes[frame];
+  save();
 }
 
 export function createBuild(
@@ -589,5 +612,6 @@ export function __resetLevelCapStoreForTest(): void {
   _runs = [];
   _builds = [];
   _settings = null;
+  _frameNotes = {};
   _loaded = false;
 }
