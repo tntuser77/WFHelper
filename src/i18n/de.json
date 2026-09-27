@@ -2576,6 +2576,7 @@
   "levelCap.importNone": "Keine neuen Screenshots gefunden.",
   "levelCap.settings.hotkey": "Hotkey für Run-Ende",
   "levelCap.settings.hotkeyHint": "Wirkt nur in einer Void-Kaskade. Leer lassen zum Ausschalten.",
+  "levelCap.settings.hotkeyUnbound": "{key} konnte nicht belegt werden. Eine andere App nutzt die Taste vielleicht, wähle eine andere.",
   "levelCap.settings.passthrough": "Taste an das Spiel weitergeben, damit Steam weiterhin seinen Screenshot macht",
   "levelCap.settings.screenshotDir": "Screenshot-Ordner",
   "levelCap.settings.backupDir": "Backup-Ordner",

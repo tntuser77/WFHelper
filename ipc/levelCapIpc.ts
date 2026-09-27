@@ -109,6 +109,10 @@ function payload(): LevelCapPayload {
     builds,
     settings: store.getSettings(),
     status: tracker.getStatus(),
+    hotkey: {
+      bound: _boundHotkey !== "",
+      canPassThrough: process.platform === "win32",
+    },
     abilityNames,
   };
 }

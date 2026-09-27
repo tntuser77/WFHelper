@@ -1,13 +1,16 @@
 <script lang="ts">
   import { untrack } from "svelte";
 
-  import type { LevelCapSettings } from "../../types/ipc.js";
+  import type { LevelCapPayload, LevelCapSettings } from "../../types/ipc.js";
   import { tr as t } from "../../lib/i18n.js";
   import { pickLevelCapFolder, updateLevelCapSettings } from "../../stores/levelCap.js";
   import ThemedButton from "../ThemedButton.svelte";
   import ThemedPanel from "../ThemedPanel.svelte";
 
-  let { settings }: { settings: LevelCapSettings } = $props();
+  let {
+    settings,
+    hotkey,
+  }: { settings: LevelCapSettings; hotkey: LevelCapPayload["hotkey"] | null } = $props();
 
   let hotkeyDraft = $state(untrack(() => settings.hotkey));
 
@@ -31,16 +34,23 @@
       onkeydown={(e) => e.key === "Enter" && commitHotkey()}
     />
     <span class="text-xs text-text-muted">{$t("levelCap.settings.hotkeyHint")}</span>
+    {#if settings.hotkey && hotkey && !hotkey.bound}
+      <span class="text-xs text-warning" data-level-cap-hotkey-unbound
+        >{$t("levelCap.settings.hotkeyUnbound", { key: settings.hotkey })}</span
+      >
+    {/if}
   </label>
 
-  <label class="flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
-    <input
-      type="checkbox"
-      checked={settings.passthrough}
-      onchange={(e) => updateLevelCapSettings({ passthrough: e.currentTarget.checked })}
-    />
-    {$t("levelCap.settings.passthrough")}
-  </label>
+  {#if hotkey?.canPassThrough !== false}
+    <label class="flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
+      <input
+        type="checkbox"
+        checked={settings.passthrough}
+        onchange={(e) => updateLevelCapSettings({ passthrough: e.currentTarget.checked })}
+      />
+      {$t("levelCap.settings.passthrough")}
+    </label>
+  {/if}
 
   {#each [["screenshotDir", "levelCap.settings.screenshotDir"], ["backupDir", "levelCap.settings.backupDir"]] as const as [kind, labelKey] (kind)}
     <div class="flex flex-col gap-1">

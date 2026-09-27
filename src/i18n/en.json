@@ -2596,6 +2596,7 @@
   "levelCap.importNone": "No new screenshots found.",
   "levelCap.settings.hotkey": "Finish-run hotkey",
   "levelCap.settings.hotkeyHint": "Only acts inside a Void Cascade. Leave empty to turn it off.",
+  "levelCap.settings.hotkeyUnbound": "{key} could not be bound. Another app may be using it, so pick a different key.",
   "levelCap.settings.passthrough": "Let the key through to the game, so Steam still takes its screenshot",
   "levelCap.settings.screenshotDir": "Screenshot folder",
   "levelCap.settings.backupDir": "Backup folder",

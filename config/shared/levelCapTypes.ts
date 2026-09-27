@@ -180,6 +180,9 @@ export interface LevelCapPayload {
   builds: LevelCapNamedBuild[];
   settings: LevelCapSettings;
   status: LevelCapStatus;
+  /** Whether the finish-run key is live, and whether this platform can share it
+   *  with the game (Linux shortcuts always take the key). */
+  hotkey: { bound: boolean; canPassThrough: boolean };
   /** English names of the Helminth abilities the runs use, keyed by ability path. */
   abilityNames: Record<string, string>;
 }

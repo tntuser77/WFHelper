@@ -2576,6 +2576,7 @@
   "levelCap.importNone": "没有发现新截图。",
   "levelCap.settings.hotkey": "结束记录快捷键",
   "levelCap.settings.hotkeyHint": "仅在虚空覆涌中生效。留空即关闭。",
+  "levelCap.settings.hotkeyUnbound": "无法绑定 {key}，可能已被其他应用占用，请换一个按键。",
   "levelCap.settings.passthrough": "按键同时传给游戏，Steam 仍会截图",
   "levelCap.settings.screenshotDir": "截图文件夹",
   "levelCap.settings.backupDir": "备份文件夹",

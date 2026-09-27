@@ -181,7 +181,7 @@
 </header>
 
 {#if showSettings && settings}
-  <LevelCapSettings {settings} />
+  <LevelCapSettings {settings} hotkey={$levelCap?.hotkey ?? null} />
 {/if}
 
 {#if $levelCap && !runs.length}
