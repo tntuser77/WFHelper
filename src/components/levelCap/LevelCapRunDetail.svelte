@@ -129,7 +129,7 @@
             data-level-cap-players
             title={run.playersFromScreenshot ? $t("levelCap.playersOcrHint") : undefined}
             >{$t("levelCap.players", { names: squadNames })}{#if run.playersFromScreenshot}
-              <span class="text-text-muted">{$t("levelCap.playersOcr")}</span>{/if}</span
+              <span class="ml-1 text-text-muted">{$t("levelCap.playersOcr")}</span>{/if}</span
           >
         {/if}
         {#if run.source === "mission-end"}
