@@ -100,7 +100,7 @@ describe("levelCap helpers", () => {
       run("2", "Caliban", 2, { build: carried }),
     ]);
     expect(gear.find((g) => g.slot === "archgun")?.items).toEqual([
-      { item: archgun, count: 1, builds: [{ id: null, count: 1 }] },
+      { item: archgun, count: 1, builds: [{ id: null, count: 1 }], sameMods: true, weapons: [] },
     ]);
   });
 
@@ -116,6 +116,44 @@ describe("levelCap helpers", () => {
       { id: "b", count: 2 },
       { id: "a", count: 1 },
     ]);
+  });
+
+  it("tells whether a slot item's mods match across builds, and what a companion carried", () => {
+    const melee = (rank: number, type = "/Mods/Reach"): LevelCapItem => ({
+      kind: "melee",
+      type: "/Melee/Magistar",
+      config: 0,
+      upgrades: [{ slot: 1, type, rank }],
+    });
+    const weapon: LevelCapItem = {
+      kind: "companion",
+      type: "/Sentinel/Laser",
+      config: 0,
+      upgrades: [],
+    };
+    const pet: LevelCapItem = {
+      kind: "companion",
+      type: "/Pets/Wyrm",
+      config: 0,
+      upgrades: [],
+      weapon,
+    };
+    const gear = (a: LevelCapItem, b: LevelCapItem) =>
+      levelCapGearUse([
+        run("1", "Equinox", 1, {
+          build: { ...build(SUIT), melee: a, companion: pet },
+          buildId: "a",
+        }),
+        run("2", "Equinox", 2, {
+          build: { ...build(SUIT), melee: b, companion: pet },
+          buildId: "b",
+        }),
+      ]);
+    // A rank apart is still the same setup.
+    expect(gear(melee(5), melee(3)).find((g) => g.slot === "melee")?.items[0].sameMods).toBe(true);
+    const differ = gear(melee(5), melee(5, "/Mods/Fury"));
+    expect(differ.find((g) => g.slot === "melee")?.items[0].sameMods).toBe(false);
+    expect(differ.find((g) => g.slot === "companion")?.items[0].weapons).toEqual([weapon]);
   });
 
   it("treats builds that differ only in mod ranks as the same build", () => {

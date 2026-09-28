@@ -124,29 +124,55 @@
     <span class="px-1 pb-0.5 text-[10px] uppercase tracking-wide text-text-muted"
       >{$t(SLOT_KEYS[slot])}</span
     >
-    {#each items as { item, builds: used } (item)}
+    {#each items as { item, count, builds: used, sameMods, weapons } (item)}
       {@const art = levelCapItemImage(item, $itemDb)}
-      {#each used as use (use.id)}
+      <!-- One row per item; clicking it opens its most-used build, a chip opens that one. -->
+      <div class="flex flex-col gap-1 rounded px-1 py-1 hover:bg-bg-raised">
         <button
           type="button"
-          class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-bg-raised"
+          class="flex cursor-pointer items-center gap-2 text-left"
           onclick={(event) => {
             event.stopPropagation();
-            openBuild(use.id, slot);
+            openBuild(used[0]?.id ?? null, slot);
           }}
         >
           <span class="flex h-6 w-6 shrink-0 items-center justify-center">
             {#if art}<img src={art} alt="" class="h-full w-full object-contain" />{/if}
           </span>
-          <span class="min-w-0 flex-1 truncate text-xs text-text-primary"
+          <span class="min-w-0 flex-1 truncate text-xs font-semibold text-text-primary"
             >{levelCapItemName(item, $itemDb)}</span
           >
-          <span class="max-w-[45%] truncate text-[11px] text-text-secondary"
-            >{use.id ? (buildNames.get(use.id) ?? "") : $t("levelCap.builds.noBuild")}</span
-          >
-          <span class="font-mono text-xs font-semibold text-accent">×{use.count}</span>
+          <span class="font-mono text-xs font-semibold text-accent">×{count}</span>
         </button>
-      {/each}
+        {#each weapons as weapon (weapon)}
+          {@const weaponArt = levelCapItemImage(weapon, $itemDb)}
+          <span class="flex items-center gap-1.5 pl-8 text-[11px] text-text-secondary">
+            {#if weaponArt}<img src={weaponArt} alt="" class="h-4 w-4 object-contain" />{/if}
+            <span class="truncate">{levelCapItemName(weapon, $itemDb)}</span>
+          </span>
+        {/each}
+        <div class="flex flex-wrap items-center gap-1 pl-8">
+          {#each used as use (use.id)}
+            <button
+              type="button"
+              class="cursor-pointer rounded border border-border bg-bg-surface px-1.5 py-0.5 text-[10px] text-text-secondary hover:border-accent hover:text-text-primary"
+              onclick={(event) => {
+                event.stopPropagation();
+                openBuild(use.id, slot);
+              }}
+              >{use.id ? (buildNames.get(use.id) ?? "") : $t("levelCap.builds.noBuild")}
+              <span class="font-mono text-accent">{use.count}</span></button
+            >
+          {/each}
+          {#if used.length > 1}
+            <span
+              class="text-[10px] {sameMods ? 'text-text-muted' : 'text-warning'}"
+              title={$t(sameMods ? "levelCap.gear.sameModsHint" : "levelCap.gear.modsDifferHint")}
+              >{$t(sameMods ? "levelCap.gear.sameMods" : "levelCap.gear.modsDiffer")}</span
+            >
+          {/if}
+        </div>
+      </div>
     {/each}
   </div>
 {/snippet}
