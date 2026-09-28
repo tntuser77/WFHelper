@@ -55,7 +55,16 @@
   }
 </script>
 
-<div use:toBody data-level-cap-screenshot-viewer>
+<!-- Right-click anywhere closes it, like the app's other right-click-to-clear spots. -->
+<div
+  use:toBody
+  role="presentation"
+  oncontextmenu={(event) => {
+    event.preventDefault();
+    onClose();
+  }}
+  data-level-cap-screenshot-viewer
+>
   <ModalShell ariaLabel={$t("levelCap.openScreenshot")} {onClose} overlayClass="!z-[1050]">
     <div
       class="relative flex max-h-[96vh] max-w-[96vw] flex-col gap-2 rounded-[var(--radius-lg)] border border-border-strong bg-[var(--ui-modal-bg)] p-2 shadow-[var(--ui-panel-shadow)]"

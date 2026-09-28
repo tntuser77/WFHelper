@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { dialog, nativeImage, shell } from "electron";
+import { dialog, nativeImage, shell, type NativeImage } from "electron";
 
 import { assertMainRendererSender, handleAuthorized } from "./ipcSecurity";
 import ctx from "./context";
@@ -25,8 +25,10 @@ import {
 import { captureScreenFast } from "../services/screenCapture";
 import { readExolizersFromScreenshot } from "../services/levelCapExolizerOcr";
 import { readSquadFromScreenshot } from "../services/levelCapSquadOcr";
+import { loadSharp } from "../services/sharpRuntime";
 import { withScope } from "../services/logger";
 import { loadRegionTranslation } from "../services/regionNames";
+import { normalizeErrorMessage } from "../config/shared/errors";
 import { fallbackNameFromUniqueName } from "../config/shared/displayName";
 import {
   LEVEL_CAP_ASSIGN_BUILD,
@@ -321,6 +323,20 @@ function isSquadFixPatch(raw: unknown): raw is LevelCapSquadFixPatch {
   );
 }
 
+/** Electron decodes PNG and JPEG only; a WebP or BMP screenshot goes through sharp. */
+async function loadScreenshotImage(file: string): Promise<NativeImage | null> {
+  const image = nativeImage.createFromPath(file);
+  if (!image.isEmpty()) return image;
+  try {
+    const png = await loadSharp()(file).png().toBuffer();
+    const decoded = nativeImage.createFromBuffer(png);
+    return decoded.isEmpty() ? null : decoded;
+  } catch (err) {
+    log.warn("[LevelCap] screenshot unreadable:", normalizeErrorMessage(err));
+    return null;
+  }
+}
+
 function register(): void {
   tracker.initLevelCapTracker({
     getInventory: () => ctx.currentInventoryData,
@@ -474,12 +490,12 @@ function register(): void {
     return payload();
   });
 
-  handleAuthorized(LEVEL_CAP_THUMBNAIL, assertMainRendererSender, (_e, id: unknown) => {
+  handleAuthorized(LEVEL_CAP_THUMBNAIL, assertMainRendererSender, async (_e, id: unknown) => {
     const runId = asRunId(id);
     const file = store.getRuns().find((run) => run.id === runId)?.screenshot;
     if (!file) return null;
-    const image = nativeImage.createFromPath(file);
-    if (image.isEmpty()) return null;
+    const image = await loadScreenshotImage(file);
+    if (!image) return null;
     const { width } = image.getSize();
     return (width > THUMBNAIL_WIDTH ? image.resize({ width: THUMBNAIL_WIDTH }) : image).toDataURL();
   });
@@ -499,12 +515,12 @@ function register(): void {
   });
 
   // The squad list's corner, at full size, so a person can read the names off it.
-  handleAuthorized(LEVEL_CAP_SQUAD_CROP, assertMainRendererSender, (_e, id: unknown) => {
+  handleAuthorized(LEVEL_CAP_SQUAD_CROP, assertMainRendererSender, async (_e, id: unknown) => {
     const runId = asRunId(id);
     const file = store.getRuns().find((run) => run.id === runId)?.screenshot;
     if (!file) return null;
-    const image = nativeImage.createFromPath(file);
-    if (image.isEmpty()) return null;
+    const image = await loadScreenshotImage(file);
+    if (!image) return null;
     const { width, height } = image.getSize();
     const scale = height / 1080;
     const x = Math.max(0, Math.round(width - SQUAD_CROP.width * scale));
