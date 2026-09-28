@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tr } from "../../lib/i18n.js";
+  import { wholeRowsPx } from "../../lib/analytics/wholeRows.js";
   import AnalyticsTooltip from "./AnalyticsTooltip.svelte";
 
   let {
@@ -36,6 +37,12 @@
   const C = SIZE / 2;
 
   let hover = $state<{ index: number; x: number; y: number } | null>(null);
+  let legendRoom = $state(0);
+  let legend = $state<HTMLUListElement | null>(null);
+  const legendFit = $derived.by(() => {
+    void labels;
+    return wholeRowsPx(legend, legendRoom);
+  });
 
   const total = $derived(values.reduce<number>((sum, v) => sum + (v ?? 0), 0));
   const share = (value: number | null) => (total > 0 ? ((value ?? 0) / total) * 100 : 0);
@@ -118,29 +125,38 @@
     {/if}
   </svg>
 
-  <!-- Beside, the legend centres on the pie; under it, it takes what is left. -->
-  <ul
-    class="m-0 flex max-h-full min-h-0 w-full min-w-0 list-none flex-col gap-1 overflow-y-auto p-0 pr-1 text-xs {beside
-      ? 'flex-1 self-center'
-      : 'flex-1 self-stretch'}"
+  <!-- Beside, the legend centres on the pie; under it, it takes what is left.
+       Either way it stops on a whole row. -->
+  <div
+    class="flex min-h-0 w-full min-w-0 flex-1 self-stretch {beside
+      ? 'items-center'
+      : 'items-start'}"
+    bind:clientHeight={legendRoom}
   >
-    {#each labels as label, i (i)}
-      <li
-        class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-[var(--radius-sm)] px-1 py-0.5 {hover?.index ===
-        i
-          ? 'bg-[var(--surface-hover)]'
-          : ''}"
-        onpointerenter={(e) => onEnter(i, e)}
-        onpointerleave={() => (hover = null)}
-      >
-        <span class="h-2.5 w-2.5 rounded-sm" style="background:{colors[i]}"></span>
-        <span class="truncate text-text-secondary" title={label}>{label}</span>
-        <span class="font-mono text-text-primary">{format(values[i])}</span>
-        <span class="w-10 text-right font-mono text-text-muted">{share(values[i]).toFixed(0)}%</span
+    <ul
+      class="m-0 flex max-h-full w-full list-none flex-col gap-1 overflow-y-auto p-0 pr-1 text-xs"
+      style:max-height={legendFit}
+      bind:this={legend}
+    >
+      {#each labels as label, i (i)}
+        <li
+          class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-[var(--radius-sm)] px-1 py-0.5 {hover?.index ===
+          i
+            ? 'bg-[var(--surface-hover)]'
+            : ''}"
+          onpointerenter={(e) => onEnter(i, e)}
+          onpointerleave={() => (hover = null)}
         >
-      </li>
-    {/each}
-  </ul>
+          <span class="h-2.5 w-2.5 rounded-sm" style="background:{colors[i]}"></span>
+          <span class="truncate text-text-secondary" title={label}>{label}</span>
+          <span class="font-mono text-text-primary">{format(values[i])}</span>
+          <span class="w-10 text-right font-mono text-text-muted"
+            >{share(values[i]).toFixed(0)}%</span
+          >
+        </li>
+      {/each}
+    </ul>
+  </div>
 </div>
 
 {#if hover}

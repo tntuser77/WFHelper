@@ -12,6 +12,7 @@
     type AnalyticsChartSpec,
     type AnalyticsResult,
   } from "../../lib/analytics/runAnalytics.js";
+  import { wholeRowsPx } from "../../lib/analytics/wholeRows.js";
   import { locale, tr as t } from "../../lib/i18n.js";
   import AnalyticsColumns from "./AnalyticsColumns.svelte";
   import AnalyticsPie from "./AnalyticsPie.svelte";
@@ -60,6 +61,13 @@
   const bodyPx = $derived(ANALYTICS_PLOT_PX[spec.height]);
   const listClass = "min-h-0 flex-1 overflow-y-auto pr-1";
   let plotPx = $state(0);
+  let rankedRoom = $state(0);
+  let rankedList = $state<HTMLUListElement | null>(null);
+  // Rows can change without the room changing, so the fit also follows the result.
+  const rankedFit = $derived.by(() => {
+    void result;
+    return wholeRowsPx(rankedList, rankedRoom);
+  });
 
   // Ranked bars: one row per category, longest first. "Other" lumps many
   // together, so it keeps its number but draws no bar and sets no scale.
@@ -128,40 +136,48 @@
       {format}
     />
   {:else if kind === "ranked"}
-    <ul class="m-0 flex list-none flex-col gap-1 p-0 {listClass}" data-analytics-scroll>
-      {#each result.categories as category, c (category)}
-        {@const value = result.values[0][c]}
-        <li
-          class="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-sm)] px-1 text-xs {rankedHover?.index ===
-          c
-            ? 'bg-[var(--surface-hover)]'
-            : ''}"
-          onpointerenter={(e) => (rankedHover = { index: c, x: e.clientX, y: e.clientY })}
-          onpointermove={(e) => (rankedHover = { index: c, x: e.clientX, y: e.clientY })}
-          onpointerleave={() => (rankedHover = null)}
-        >
-          <span class="truncate py-1 text-text-secondary" title={categoryLabels[c]}
-            >{categoryLabels[c]}</span
+    <!-- The list stops on a whole row; what is left of the box stays empty. -->
+    <div class="min-h-0 flex-1" bind:clientHeight={rankedRoom}>
+      <ul
+        class="m-0 flex max-h-full list-none flex-col gap-1 overflow-y-auto p-0 pr-1"
+        style:max-height={rankedFit}
+        bind:this={rankedList}
+        data-analytics-scroll
+      >
+        {#each result.categories as category, c (category)}
+          {@const value = result.values[0][c]}
+          <li
+            class="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-sm)] px-1 text-xs {rankedHover?.index ===
+            c
+              ? 'bg-[var(--surface-hover)]'
+              : ''}"
+            onpointerenter={(e) => (rankedHover = { index: c, x: e.clientX, y: e.clientY })}
+            onpointermove={(e) => (rankedHover = { index: c, x: e.clientX, y: e.clientY })}
+            onpointerleave={() => (rankedHover = null)}
           >
-          <span class="block h-3">
-            {#if value && rankedPeak > 0 && category !== ANALYTICS_OTHER}
-              <span
-                class="block h-full rounded-r-[4px]"
-                style="width:{Math.max(
-                  1,
-                  (value / rankedPeak) * 100,
-                )}%; background:{SERIES_COLORS[0]}"
-              ></span>
-            {/if}
-          </span>
-          <span
-            class="min-w-[2.5rem] text-right font-mono {category === ANALYTICS_OTHER
-              ? 'text-text-muted'
-              : 'text-text-primary'}">{format(value)}</span
-          >
-        </li>
-      {/each}
-    </ul>
+            <span class="truncate py-1 text-text-secondary" title={categoryLabels[c]}
+              >{categoryLabels[c]}</span
+            >
+            <span class="block h-3">
+              {#if value && rankedPeak > 0 && category !== ANALYTICS_OTHER}
+                <span
+                  class="block h-full rounded-r-[4px]"
+                  style="width:{Math.max(
+                    1,
+                    (value / rankedPeak) * 100,
+                  )}%; background:{SERIES_COLORS[0]}"
+                ></span>
+              {/if}
+            </span>
+            <span
+              class="min-w-[2.5rem] text-right font-mono {category === ANALYTICS_OTHER
+                ? 'text-text-muted'
+                : 'text-text-primary'}">{format(value)}</span
+            >
+          </li>
+        {/each}
+      </ul>
+    </div>
     {#if rankedHover}
       {@const c = rankedHover.index}
       <AnalyticsTooltip x={rankedHover.x} y={rankedHover.y}>
