@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { dialog, nativeImage, shell } from "electron";
 
@@ -45,6 +46,7 @@ import {
   LEVEL_CAP_PORTRAIT_THUMB,
   LEVEL_CAP_SET_NOTES,
   LEVEL_CAP_SQUAD_CROP,
+  LEVEL_CAP_SCREENSHOT,
   LEVEL_CAP_THUMBNAIL,
   LEVEL_CAP_UPDATE_BUILD,
   LEVEL_CAP_UPDATED,
@@ -67,6 +69,13 @@ import type {
 
 const log = withScope("levelCapIpc");
 const THUMBNAIL_WIDTH = 960;
+const SCREENSHOT_MIME: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".bmp": "image/bmp",
+};
 
 let _boundHotkey = "";
 let _readingScreenshots = false;
@@ -473,6 +482,20 @@ function register(): void {
     if (image.isEmpty()) return null;
     const { width } = image.getSize();
     return (width > THUMBNAIL_WIDTH ? image.resize({ width: THUMBNAIL_WIDTH }) : image).toDataURL();
+  });
+
+  // The whole picture for the in-app viewer; the file's own bytes, so nothing is re-encoded.
+  handleAuthorized(LEVEL_CAP_SCREENSHOT, assertMainRendererSender, (_e, id: unknown) => {
+    const runId = asRunId(id);
+    const file = store.getRuns().find((run) => run.id === runId)?.screenshot;
+    if (!file) return null;
+    const mime = SCREENSHOT_MIME[path.extname(file).toLowerCase()];
+    if (!mime) return null;
+    try {
+      return `data:${mime};base64,${fs.readFileSync(file).toString("base64")}`;
+    } catch {
+      return null;
+    }
   });
 
   // The squad list's corner, at full size, so a person can read the names off it.

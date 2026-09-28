@@ -821,6 +821,11 @@ export interface IpcInvokeMap {
     args: [id: string];
     return: string | null;
   };
+  /** A run's whole screenshot at full size, as a data URL, for the in-app viewer. */
+  getLevelCapScreenshot: {
+    args: [id: string];
+    return: string | null;
+  };
   /** Full-size PNG data URL of the squad list's corner of a run's screenshot. */
   getLevelCapSquadCrop: {
     args: [id: string];

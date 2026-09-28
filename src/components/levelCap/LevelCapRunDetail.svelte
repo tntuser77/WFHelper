@@ -8,6 +8,7 @@
   import { deleteLevelCapRun } from "../../stores/levelCap.js";
   import ThemedButton from "../ThemedButton.svelte";
   import LevelCapItemCard from "./LevelCapItemCard.svelte";
+  import LevelCapScreenshotViewer from "./LevelCapScreenshotViewer.svelte";
 
   let { run, abilityNames = {} }: { run: LevelCapRun; abilityNames?: Record<string, string> } =
     $props();
@@ -43,6 +44,7 @@
   });
 
   let thumbnail = $state<string | null>(null);
+  let viewing = $state(false);
   $effect(() => {
     const id = run.id;
     const shot = run.screenshot;
@@ -65,6 +67,10 @@
   }
 </script>
 
+{#if viewing}
+  <LevelCapScreenshotViewer runId={run.id} onClose={() => (viewing = false)} />
+{/if}
+
 <div class="flex flex-col gap-3 px-3 pb-3" data-level-cap-detail>
   {#if items.length}
     <div class="flex flex-col gap-2">
@@ -82,7 +88,7 @@
           type="button"
           class="cursor-zoom-in overflow-hidden rounded-[var(--radius-md)] border border-border p-0"
           title={$t("levelCap.openScreenshot")}
-          onclick={() => invoke("openLevelCapScreenshot", run.id)}
+          onclick={() => (viewing = true)}
         >
           <img src={thumbnail} alt="" class="block w-full" />
         </button>

@@ -356,6 +356,9 @@ export interface PreloadAPI {
   getLevelCapSquadCrop: (
     id: IpcInvokeMap["getLevelCapSquadCrop"]["args"][0],
   ) => Promise<IpcInvokeMap["getLevelCapSquadCrop"]["return"]>;
+  getLevelCapScreenshot: (
+    id: IpcInvokeMap["getLevelCapScreenshot"]["args"][0],
+  ) => Promise<IpcInvokeMap["getLevelCapScreenshot"]["return"]>;
   fixLevelCapSquadmate: (
     ...args: IpcInvokeMap["fixLevelCapSquadmate"]["args"]
   ) => Promise<IpcInvokeMap["fixLevelCapSquadmate"]["return"]>;
