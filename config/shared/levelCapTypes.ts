@@ -90,8 +90,23 @@ export interface LevelCapRun {
   durationSec: number | null;
   /** Players in the mission including you; null when the log never said. */
   squadSize: number | null;
-  /** Names the log gave for the squad, you included; only on runs logged live. */
+  /** Names the log gave for the squad, you included; on screenshot runs, the
+   *  squadmates read off the picture that could be pinned to someone. */
   players?: string[];
+  /** Screenshot runs: raw OCR of each squad row, variant reads per row. */
+  squadReads?: string[][];
+  squadOcr?: "read" | "unreadable";
+  /** `players` came from `squadReads` and is redone as names are learned. */
+  playersFromScreenshot?: boolean;
+  /** Screenshot runs: portrait fingerprint per squad row, in `squadReads` order. */
+  squadPortraits?: Array<string | null>;
+  /** Version of the squad reader behind `squadReads`; a newer one reads runs again. */
+  squadReader?: number;
+  /** Corrections the user made to squad rows the screenshot read got wrong. */
+  squadFixes?: LevelCapSquadFix[];
+  /** Who was in each squad row and what they played, as far as the screenshot
+   *  tells; redone as names and portrait labels are learned. For analytics. */
+  squadmates?: LevelCapSquadmate[];
   tile: LevelCapTile | null;
   /** The archgun got kills this run, so it belongs in the build. */
   archgunUsed: boolean;
@@ -159,6 +174,31 @@ export interface LevelCapCatalog {
   suitParents: Record<string, string>;
 }
 
+export interface LevelCapSquadmate {
+  /** Resolved player name; null for a one-off nobody could name. */
+  name: string | null;
+  /** Portrait group: squadmates sharing it played the same frame look. */
+  portrait: string | null;
+  /** Frame the portrait group was labelled with, once someone labels it. */
+  frame: string | null;
+}
+
+/** A correction to one squad row, by its place in `squadReads`; a slot past the
+ *  rows read adds a squadmate the read missed. */
+export interface LevelCapSquadFix {
+  slot: number;
+  name?: string;
+  frame?: string;
+  /** The row was HUD text or a nametag, not a player. */
+  notSquadmate?: true;
+}
+
+/** A portrait someone named; every portrait like it gets the same frame. */
+export interface LevelCapPortraitLabel {
+  portrait: string;
+  frame: string;
+}
+
 export interface LevelCapSettings {
   /** Electron accelerator for "finish run"; empty disables the hotkey. */
   hotkey: string;
@@ -168,6 +208,8 @@ export interface LevelCapSettings {
   screenshotDir: string;
   /** Mirror of the index and screenshots; empty disables the backup. */
   backupDir: string;
+  /** Exact names of players the user runs with, so screenshot reads snap to them. */
+  knownPlayers: string[];
 }
 
 export interface LevelCapStatus {

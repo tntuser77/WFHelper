@@ -3,8 +3,8 @@
 - [x] Make the note section apply to the frame, rather then the indivdual run. 
 - [x] Record which other players where in the run.
 - [x] Search/filter runs by which players were in them.
-- [ ] Name the squadmate portrait groups to collect data on what frames people were using.
-- [ ] Setup a deeper analytics based off of who else was in the runs, and what frames were in the runs. I'm thinking a section where I can create charts and bars and pie charts to view all the data to my hearts content
+- [x] Name the squadmate portrait groups to collect data on what frames people were using.
+- [x] Setup a deeper analytics based off of who else was in the runs, and what frames were in the runs. I'm thinking a section where I can create charts and bars and pie charts to view all the data to my hearts content
 - [x] Collect which Warframe each squadmate was running: portraits next to each name are fingerprinted and grouped across runs.
 - [ ] Read squadmates' frames from EE.log once a squad mission log sample is saved (the app now keeps them in level-cap-logs).
 - [x] See if there is anyway to get exolizer values off of the screenshot rather then the more generic round reached.

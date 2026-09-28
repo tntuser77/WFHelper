@@ -18,6 +18,18 @@
     const next = hotkeyDraft.trim();
     if (next !== settings.hotkey) void updateLevelCapSettings({ hotkey: next });
   }
+
+  let playersDraft = $state(untrack(() => settings.knownPlayers.join("\n")));
+
+  function commitPlayers(): void {
+    const next = playersDraft
+      .split("\n")
+      .map((name) => name.trim())
+      .filter(Boolean);
+    if (next.join("\n") !== settings.knownPlayers.join("\n")) {
+      void updateLevelCapSettings({ knownPlayers: next });
+    }
+  }
 </script>
 
 <ThemedPanel className="flex flex-col gap-3 p-4">
@@ -51,6 +63,18 @@
       {$t("levelCap.settings.passthrough")}
     </label>
   {/if}
+
+  <label class="flex flex-col gap-1">
+    <span class="text-xs font-semibold uppercase tracking-wide text-text-muted"
+      >{$t("levelCap.settings.knownPlayers")}</span
+    >
+    <textarea
+      class="h-24 w-64 resize-y rounded border border-border bg-bg-raised px-2 py-1 font-mono text-sm text-text-primary outline-none focus:border-info"
+      bind:value={playersDraft}
+      onblur={commitPlayers}
+      data-level-cap-known-players></textarea>
+    <span class="text-xs text-text-muted">{$t("levelCap.settings.knownPlayersHint")}</span>
+  </label>
 
   {#each [["screenshotDir", "levelCap.settings.screenshotDir"], ["backupDir", "levelCap.settings.backupDir"]] as const as [kind, labelKey] (kind)}
     <div class="flex flex-col gap-1">

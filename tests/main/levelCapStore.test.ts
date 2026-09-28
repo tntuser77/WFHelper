@@ -70,6 +70,7 @@ describe("levelCapStore", () => {
       passthrough: true,
       screenshotDir: path.join(tmpDir, "pictures", "WarframeCaps"),
       backupDir: "",
+      knownPlayers: [],
     });
   });
 
@@ -103,6 +104,166 @@ describe("levelCapStore", () => {
     const byId = new Map(store.getRuns().map((r) => [r.id, r]));
     expect(byId.get(a.id)).toMatchObject({ exolizers: 112, rounds: 29, exolizerOcr: "read" });
     expect(byId.get(b.id)).toMatchObject({ exolizers: null, exolizerOcr: "unreadable" });
+  });
+
+  it("names screenshot squads from known players and live runs", async () => {
+    const store = await freshStore();
+    store.updateSettings({ knownPlayers: ["WealthyPoet"] });
+    store.addRun(run({ players: ["Me", "Frozenos"] }));
+    store.addRun(run({ players: ["Me", "Kemani"] }));
+    const shot = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
+    const live = store.getRuns().find((r) => r.players?.includes("Kemani"))!;
+    expect(store.runsAwaitingSquadRead().map((r) => r.id)).toEqual([shot.id]);
+
+    const names = [["WealthyPoe...2"], ["Frozenosmo"], ["Me"], ["Pawcanale"]];
+    store.recordSquadRead(shot.id, { names, portraits: [], thumbs: [] });
+    const read = store.getRuns().find((r) => r.id === shot.id)!;
+    // Your own name is in every live run, so it is never offered as a match.
+    expect(read).toMatchObject({
+      players: ["WealthyPoet", "Frozenos"],
+      playersFromScreenshot: true,
+      squadOcr: "read",
+      squadSize: 5,
+    });
+    expect(store.runsAwaitingSquadRead()).toEqual([]);
+    expect(live.players).toEqual(["Me", "Kemani"]);
+  });
+
+  it("groups squad portraits across runs and names them from one label", async () => {
+    const store = await freshStore();
+    const portrait = (shade: number) => Buffer.alloc(16 * 16 * 3, shade).toString("base64");
+    const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
+    const b = store.addRun(run({ source: "import", squadSize: null, screenshot: "b.png" }));
+    store.recordSquadRead(a.id, {
+      names: [["Kemani"], ["x"]],
+      portraits: [portrait(200), portrait(40)],
+      thumbs: [Buffer.from("png"), null],
+    });
+    store.recordSquadRead(b.id, {
+      names: [["Kemani"]],
+      portraits: [portrait(205)],
+      thumbs: [null],
+    });
+    expect(
+      fs.existsSync(path.join(tmpDir, "userData", "level-cap-portraits", `${a.id}-0.png`)),
+    ).toBe(true);
+
+    const mates = () => new Map(store.getRuns().map((r) => [r.id, r.squadmates]));
+    const [first, second] = [mates().get(a.id)!, mates().get(b.id)!];
+    expect(first[0].portrait).toBe(second[0].portrait);
+    expect(first[1].portrait).not.toBe(first[0].portrait);
+    expect(first.map((m) => m.frame)).toEqual([null, null]);
+    expect(second[0].name).toBe("Kemani");
+
+    store.labelPortrait(portrait(202), "Titania Prime");
+    expect(
+      mates()
+        .get(a.id)!
+        .map((m) => m.frame),
+    ).toEqual(["Titania Prime", null]);
+    expect(mates().get(b.id)![0].frame).toBe("Titania Prime");
+  });
+
+  it("names squadmates on load from labels added while the app was closed", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const portrait = Buffer.alloc(16 * 16 * 3, 200).toString("base64");
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        schemaVersion: 2,
+        portraitLabels: [{ portrait, frame: "Titania" }],
+        runs: [
+          {
+            ...run({ source: "import", squadSize: null, screenshot: "a.png" }),
+            id: "a",
+            squadReads: [["Kemani"]],
+            squadOcr: "read",
+            squadPortraits: [portrait],
+            squadmates: [{ name: "Kemani", portrait: "a:0", frame: null }],
+          },
+        ],
+      }),
+    );
+    const store = await freshStore();
+    expect(store.getRuns()[0].squadmates?.[0].frame).toBe("Titania");
+  });
+
+  it("applies squad corrections: a frame, a name, and a row that was never a player", async () => {
+    const store = await freshStore();
+    const portrait = (shade: number) => Buffer.alloc(16 * 16 * 3, shade).toString("base64");
+    const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
+    store.recordSquadRead(a.id, {
+      names: [["62%"], ["Kemani"], ["x"]],
+      portraits: [portrait(10), portrait(200), null],
+      thumbs: [null, null, null],
+    });
+    store.labelPortrait(portrait(200), "Titania");
+    store.fixSquadmate(a.id, 0, { notSquadmate: true });
+    store.fixSquadmate(a.id, 2, { name: "Clapher", frame: "Cyte-09" });
+    store.fixSquadmate(a.id, 1, { frame: "Gauss" });
+    let fixed = store.getRuns().find((r) => r.id === a.id)!;
+    expect(fixed.squadmates?.map((m) => [m.name, m.frame])).toEqual([
+      [null, "Gauss"],
+      ["Clapher", "Cyte-09"],
+    ]);
+    expect(fixed.players).toEqual(["Clapher"]);
+    expect(fixed.squadSize).toBe(3);
+
+    // Clearing a correction hands the row back to what the screenshot says.
+    store.fixSquadmate(a.id, 1, null);
+    fixed = store.getRuns().find((r) => r.id === a.id)!;
+    expect(fixed.squadmates?.[0].frame).toBe("Titania");
+  });
+
+  it("adds a squadmate the screenshot read missed", async () => {
+    const store = await freshStore();
+    const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
+    store.recordSquadRead(a.id, { names: [["Kemani"]], portraits: [null], thumbs: [null] });
+    store.fixSquadmate(a.id, 1, { name: "xSavxage", frame: "Operator" });
+    // A row past the ones read only counts once it names someone or something.
+    store.fixSquadmate(a.id, 2, { notSquadmate: true });
+    const fixed = store.getRuns().find((r) => r.id === a.id)!;
+    expect(fixed.squadmates?.map((m) => [m.name, m.frame])).toEqual([
+      [null, null],
+      ["xSavxage", "Operator"],
+    ]);
+    expect(fixed.squadSize).toBe(3);
+    expect(fixed.players).toEqual(["xSavxage"]);
+  });
+
+  it("counts a run as solo once every squad row is ruled out", async () => {
+    const store = await freshStore();
+    const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
+    store.recordSquadRead(a.id, { names: [["Djinn"]], portraits: [null], thumbs: [null] });
+    store.fixSquadmate(a.id, 0, { notSquadmate: true });
+    const fixed = store.getRuns().find((r) => r.id === a.id)!;
+    expect(fixed.squadmates).toEqual([]);
+    expect(fixed.squadSize).toBe(1);
+    expect(fixed.players).toBeUndefined();
+  });
+
+  it("reads a squad again once when an older reader found no portraits", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const portrait = Buffer.alloc(16 * 16 * 3, 90).toString("base64");
+    const shot = (id: string, portraits: Array<string | null>) => ({
+      ...run({ source: "import", squadSize: null, screenshot: `${id}.png` }),
+      id,
+      squadOcr: "read",
+      squadReads: portraits.map(() => ["Kemani"]),
+      squadPortraits: portraits,
+    });
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        schemaVersion: 2,
+        runs: [shot("blank", [null, null]), shot("seen", [portrait, null]), shot("solo", [])],
+      }),
+    );
+    const store = await freshStore();
+    expect(store.runsAwaitingSquadRead().map((r) => r.id)).toEqual(["blank"]);
+    // The new reader has had its go; a second blank read is final.
+    store.recordSquadRead("blank", { names: [["Kemani"]], portraits: [null], thumbs: [null] });
+    expect(store.runsAwaitingSquadRead()).toEqual([]);
   });
 
   it("cleans build tags and frame notes on the way in", async () => {

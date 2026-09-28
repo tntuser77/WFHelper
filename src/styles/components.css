@@ -895,6 +895,9 @@
   .level-cap-frame-panel {
     width: 900px;
   }
+  .analytics-builder-panel {
+    width: 860px;
+  }
   .detail-close,
   .detail-wiki-btn {
     height: 2rem;

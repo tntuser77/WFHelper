@@ -23,6 +23,7 @@ import {
 } from "../services/levelCapBuild";
 import { captureScreenFast } from "../services/screenCapture";
 import { readExolizersFromScreenshot } from "../services/levelCapExolizerOcr";
+import { readSquadFromScreenshot } from "../services/levelCapSquadOcr";
 import { withScope } from "../services/logger";
 import { loadRegionTranslation } from "../services/regionNames";
 import { fallbackNameFromUniqueName } from "../config/shared/displayName";
@@ -60,9 +61,9 @@ const log = withScope("levelCapIpc");
 const THUMBNAIL_WIDTH = 960;
 
 let _boundHotkey = "";
-let _readingExolizers = false;
+let _readingScreenshots = false;
 // Startup has enough to load; the screenshot pass can wait a little.
-const EXOLIZER_READ_DELAY_MS = 15_000;
+const SCREENSHOT_READ_DELAY_MS = 15_000;
 
 function frameName(type: string): string {
   return itemDb.lookupItem(type)?.name || fallbackNameFromUniqueName(type);
@@ -179,11 +180,12 @@ function pushUpdate(): void {
   broadcastToRenderers(LEVEL_CAP_UPDATED, payload());
 }
 
-/** Reads the Exolizer count off imported screenshots, one at a time in the background. */
-async function readImportedExolizers(): Promise<void> {
-  if (_readingExolizers) return;
-  _readingExolizers = true;
+/** Reads the Exolizer count and the squad off screenshots, one at a time in the background. */
+async function readScreenshots(): Promise<void> {
+  if (_readingScreenshots) return;
+  _readingScreenshots = true;
   let read = 0;
+  let squads = 0;
   try {
     for (;;) {
       const pending = store.runsAwaitingExolizerRead();
@@ -196,8 +198,19 @@ async function readImportedExolizers(): Promise<void> {
       pushUpdate();
     }
     if (read) log.info(`[LevelCap] read ${read} Exolizer count(s) off screenshots`);
+    for (;;) {
+      const pending = store.runsAwaitingSquadRead();
+      if (!pending.length) break;
+      for (const { id, screenshot } of pending) {
+        const read = await readSquadFromScreenshot(screenshot);
+        store.recordSquadRead(id, read);
+        if (read?.names.length) squads++;
+      }
+      pushUpdate();
+    }
+    if (squads) log.info(`[LevelCap] read ${squads} squad list(s) off screenshots`);
   } finally {
-    _readingExolizers = false;
+    _readingScreenshots = false;
   }
 }
 
@@ -267,7 +280,8 @@ function isSettingsPatch(raw: unknown): raw is Partial<LevelCapSettings> {
     (value.hotkey === undefined || typeof value.hotkey === "string") &&
     (value.passthrough === undefined || typeof value.passthrough === "boolean") &&
     (value.screenshotDir === undefined || typeof value.screenshotDir === "string") &&
-    (value.backupDir === undefined || typeof value.backupDir === "string")
+    (value.backupDir === undefined || typeof value.backupDir === "string") &&
+    (value.knownPlayers === undefined || Array.isArray(value.knownPlayers))
   );
 }
 
@@ -283,10 +297,14 @@ function register(): void {
     onHotkey: (outcome) => {
       broadcastToRenderers(LEVEL_CAP_HOTKEY, outcome);
       showLevelCapNotification(toastCard(outcome));
+      // The new screenshot's squad list: names and what they played.
+      if (outcome.type === "logged" || outcome.type === "screenshot-replaced") {
+        void readScreenshots();
+      }
     },
   });
   bindHotkey();
-  setTimeout(() => void readImportedExolizers(), EXOLIZER_READ_DELAY_MS).unref?.();
+  setTimeout(() => void readScreenshots(), SCREENSHOT_READ_DELAY_MS).unref?.();
 
   handleAuthorized(LEVEL_CAP_GET, assertMainRendererSender, () => {
     backfillInventory(ctx.currentInventoryData);
@@ -397,7 +415,7 @@ function register(): void {
       buildForFrame: (type) => snapshotBuildForFrame(ctx.currentInventoryData, type),
     });
     log.info(`[LevelCap] imported ${result.imported} screenshot(s), ${result.skipped} known`);
-    if (result.imported) void readImportedExolizers();
+    if (result.imported) void readScreenshots();
     return { result, payload: payload() };
   });
 

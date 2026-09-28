@@ -77,6 +77,28 @@ afterEach(() => {
 });
 
 describe("levelCapTracker", () => {
+  it("keeps the EE.log of a squad mission, and none for a solo one", async () => {
+    const { tracker } = await setup();
+    const logs = () => {
+      const dir = path.join(tmpDir, "userData", "level-cap-logs");
+      return fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+    };
+    feed(tracker, [...START, exo(20, 108), ...END(30, false)]);
+    expect(logs()).toEqual([]);
+
+    const squad = START.flatMap((line) =>
+      line.includes("Player1") ? [line, line.replace("Player1", "WealthyPoet")] : [line],
+    );
+    feed(tracker, [...squad, exo(40, 108), ...END(50, false)]);
+    expect(logs()).toHaveLength(1);
+    const saved = fs.readFileSync(
+      path.join(tmpDir, "userData", "level-cap-logs", logs()[0]),
+      "utf8",
+    );
+    expect(saved).toContain("WealthyPoet");
+    expect(saved).toContain("Pillars used increased to: 108");
+  });
+
   it("ignores the hotkey outside a Void Cascade", async () => {
     const { tracker, store } = await setup();
     tracker.onLevelCapHotkey();

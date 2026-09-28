@@ -3,6 +3,7 @@
   import type { LevelCapRun } from "../../types/ipc.js";
   import { tr as t, type MessageKey } from "../../lib/i18n.js";
   import { confirmWithDialog, invoke } from "../../lib/ipc.js";
+  import { levelCapSquad } from "../../lib/levelCap.js";
   import { log } from "../../lib/log.js";
   import { deleteLevelCapRun } from "../../stores/levelCap.js";
   import ThemedButton from "../ThemedButton.svelte";
@@ -13,6 +14,19 @@
 
   // Tags live on builds; a run only keeps its own until it is put on one.
   const legacyTags = $derived(run.tags ?? []);
+  const squad = $derived(levelCapSquad(run));
+  const squadNames = $derived(
+    [
+      ...squad.names,
+      ...(squad.others
+        ? [
+            $t(squad.others === 1 ? "levelCap.squadOther" : "levelCap.squadOthers", {
+              count: String(squad.others),
+            }),
+          ]
+        : []),
+    ].join(", "),
+  );
   const items = $derived.by(() => {
     const build = run.build;
     if (!build) return [];
@@ -110,9 +124,12 @@
         {#if run.build?.loadoutName}
           <span>{$t("levelCap.build.loadout", { name: run.build.loadoutName })}</span>
         {/if}
-        {#if run.players?.length}
-          <span data-level-cap-players
-            >{$t("levelCap.players", { names: run.players.join(", ") })}</span
+        {#if squad.names.length}
+          <span
+            data-level-cap-players
+            title={run.playersFromScreenshot ? $t("levelCap.playersOcrHint") : undefined}
+            >{$t("levelCap.players", { names: squadNames })}{#if run.playersFromScreenshot}
+              <span class="ml-1 text-text-muted">{$t("levelCap.playersOcr")}</span>{/if}</span
           >
         {/if}
         {#if run.source === "mission-end"}

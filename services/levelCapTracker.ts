@@ -34,6 +34,17 @@ let _parser = createLevelCapParser();
 let _missionRunId: string | null = null;
 let _lastHotkeyAt = 0;
 let _hotkeyBusy = false;
+/** EE.log lines of the mission under way, plus the lead-in where squad loaders print. */
+let _logLines: string[] = [];
+let _inMission = false;
+const LEAD_IN_LINES = 3000;
+const MAX_MISSION_LINES = 200_000;
+
+function keepLogLine(line: string): void {
+  _logLines.push(line);
+  const cap = _inMission ? MAX_MISSION_LINES : LEAD_IN_LINES;
+  if (_logLines.length > cap * 1.2) _logLines = _logLines.slice(-cap);
+}
 
 export function initLevelCapTracker(deps: LevelCapDeps): void {
   _deps = deps;
@@ -140,11 +151,17 @@ export function processLevelCapLine(line: string, source: "dbwin" | "file"): voi
   // File-poll lines are complete, ordered and deduped; dbwin duplicates them.
   if (source !== "file") return;
   let changed = false;
+  keepLogLine(line);
   for (const event of _parser.feedLine(line)) {
     if (event.type === "start") {
       _missionRunId = null;
+      _inMission = true;
       changed = true;
     } else {
+      // Squadmates' frames are not read from the log yet; keep samples to learn from.
+      if (event.mission.players.length > 1) store.saveSquadLog(_logLines.join("\n"));
+      _logLines = [];
+      _inMission = false;
       finishMission(event.mission);
     }
   }
@@ -209,11 +226,12 @@ async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome |
   const existing = _missionRunId && store.getRuns().find((r) => r.id === _missionRunId);
   if (existing) {
     if (existing.screenshot) store.replaceScreenshot(existing.screenshot, png);
-    else
-      store.updateRun(
-        existing.id,
-        (run) => (run.screenshot = store.saveScreenshot(run.frame, png)),
-      );
+    store.updateRun(existing.id, (run) => {
+      run.screenshot ??= store.saveScreenshot(run.frame, png);
+      // The new picture's squad list is read afresh.
+      delete run.squadPortraits;
+      delete run.squadOcr;
+    });
     return { type: "screenshot-replaced", run: existing };
   }
 
@@ -266,4 +284,6 @@ export function __resetLevelCapTrackerForTest(): void {
   _missionRunId = null;
   _lastHotkeyAt = 0;
   _hotkeyBusy = false;
+  _logLines = [];
+  _inMission = false;
 }

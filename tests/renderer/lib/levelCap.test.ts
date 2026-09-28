@@ -17,7 +17,10 @@ import {
   levelCapItemImage,
   levelCapItemKey,
   levelCapItemName,
+  levelCapPlayerTerms,
+  levelCapRunHasPlayer,
   levelCapSearchTerms,
+  levelCapSquad,
   levelCapSlotLayout,
   levelCapTagSuggestions,
   levelCapUpgradeRole,
@@ -217,6 +220,36 @@ describe("level cap search", () => {
     expect(toggleLevelCapSearchTag("", "Melee")).toBe("Melee");
     expect(toggleLevelCapSearchTag("Melee", "Influence")).toBe("Melee, Influence");
     expect(toggleLevelCapSearchTag("melee, Influence", "Melee")).toBe("Influence");
+  });
+
+  it("matches squad players by part of their name", () => {
+    const run = { players: ["Me", "WealthyPoet", "Alaric.Saltzman"] };
+    expect(levelCapRunHasPlayer(run, "wealthy")).toBe(true);
+    expect(levelCapRunHasPlayer(run, "saltz")).toBe(true);
+    expect(levelCapRunHasPlayer(run, "melee")).toBe(false);
+    expect(levelCapRunHasPlayer({}, "wealthy")).toBe(false);
+  });
+
+  it("counts the squadmates a run could not name", () => {
+    // A screenshot run of four that named one squadmate: you plus two others.
+    expect(
+      levelCapSquad({ players: ["WealthyPoet"], squadSize: 4, playersFromScreenshot: true }),
+    ).toEqual({ names: ["WealthyPoet"], others: 2 });
+    expect(levelCapSquad({ squadSize: null, squadReads: [["a"], ["b"]] })).toEqual({
+      names: [],
+      others: 2,
+    });
+    // The log's list already includes you.
+    expect(levelCapSquad({ players: ["Me", "Kemani"], squadSize: 3 })).toEqual({
+      names: ["Me", "Kemani"],
+      others: 1,
+    });
+  });
+
+  it("keeps only the terms that name a player on some run", () => {
+    const runs = [{ players: ["WealthyPoet"] }, {}];
+    expect(levelCapPlayerTerms(runs, ["melee", "wealthy"])).toEqual(["wealthy"]);
+    expect(levelCapPlayerTerms(runs, ["melee"])).toEqual([]);
   });
 });
 
