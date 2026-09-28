@@ -23,7 +23,8 @@
 
 
 ## Analytics work
-- [ ] Do some more work on the Analytics UI. No way to see a graph of the amount of exolizers done by each squadmate. The Run Count by month table only having 6 catagories has being everything from september. I want to be able to scale the size of each card. 
+- [x] Do some more work on the Analytics UI. No way to see a graph of the amount of exolizers done by each squadmate. The Run Count by month table only having 6 catagories has being everything from september. I want to be able to scale the size of each card. 
+- [ ] Pie and donut charts don't support "All" on the top-N picker. Anything above 5 slices gets capped at 5 with the rest in "Other", because each slice needs its own palette colour.
 - [ ] Not sure exactly about this feature, but I feel like I want to be able to double click on somethings name in the analytics tab, and have it do something. Maybe show me the list of runs that have that? Double click on gauss, and it shows me all the runs that I did that had a guass in the squad? IDK, but right now it feels off
 - [x] When editing a chart, there is a weird gray bar that shows up at the bottem of the screen when hovering over the bar chart. 
 - [ ] When editing a chart, there is information overload. There are seemingly way to many options. I'm not entirely sure what to do about this. Maybe a querry style prompt would fix? 

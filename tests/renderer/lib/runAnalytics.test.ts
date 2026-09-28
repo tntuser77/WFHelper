@@ -142,6 +142,21 @@ describe("analyticsResult", () => {
     expect(result.runCount).toBe(3);
   });
 
+  it("totals Exolizers per squadmate, crediting each run to everyone in it", () => {
+    const runs = [
+      run({ players: ["Me", "Kemani", "Alaric"], squadSize: 3, exolizers: 110 }),
+      run({ players: ["Me", "Kemani"], squadSize: 2, exolizers: 120 }),
+      run({ players: ["Me", "Alaric"], squadSize: 2, exolizers: null }),
+    ];
+    const result = analyticsResult(
+      runs,
+      spec({ measure: "exolizersTotal", splitBy: "squadmate" }),
+      ctx,
+    );
+    expect(result.categories).toEqual(["Kemani", "Alaric"]);
+    expect(result.totals).toEqual([230, 110]);
+  });
+
   it("names squadmates' frames and keeps unlabelled ones as unknown", () => {
     const runs = [
       run({
