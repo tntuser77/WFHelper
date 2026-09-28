@@ -2750,5 +2750,15 @@
   "analytics.cond.notBy": "非{player}使用的{frame}",
   "analytics.cond.anyone": "任何人",
   "analytics.chart.pie": "饼图",
-  "analytics.chart.donut": "环形图"
+  "analytics.chart.donut": "环形图",
+  "analytics.names.open": "检查队友名字（{count}）",
+  "analytics.names.title": "检查队友名字",
+  "analytics.names.intro": "截图识别截断或未能确定的名字。请对照图片输入。",
+  "analytics.names.cutOff": "被截断的名字",
+  "analytics.names.cutOffRuns": "{name}，共 {count} 局",
+  "analytics.names.fullName": "完整名字",
+  "analytics.names.unnamed": "未命名的队友",
+  "analytics.names.row": "第 {row} 行",
+  "analytics.names.notPlayer": "不是玩家",
+  "analytics.names.done": "所有队友都有完整名字了。"
 }

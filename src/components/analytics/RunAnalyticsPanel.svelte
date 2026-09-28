@@ -26,6 +26,8 @@
   import ThemedButton from "../ThemedButton.svelte";
   import AnalyticsChartBuilder from "./AnalyticsChartBuilder.svelte";
   import AnalyticsChartCard from "./AnalyticsChartCard.svelte";
+  import AnalyticsNameReview from "./AnalyticsNameReview.svelte";
+  import { squadNameReview } from "../../lib/analytics/squadNameReview.js";
 
   type Draft = Omit<AnalyticsChartSpec, "id"> & { id?: string };
 
@@ -41,6 +43,14 @@
   });
   const frames = $derived(levelCapFrames(runs).map((row) => row.frame));
   const squadChoices = $derived(analyticsSquadChoices(runs));
+  const namesToReview = $derived.by(() => {
+    const review = squadNameReview(runs);
+    return (
+      review.cutOff.reduce((n, entry) => n + entry.rows.length, 0) +
+      review.unnamed.reduce((n, entry) => n + entry.rows.length, 0)
+    );
+  });
+  let reviewingNames = $state(false);
   const cards = $derived(
     $analyticsCharts.map((spec) => ({
       spec,
@@ -75,6 +85,11 @@
     <p class="m-0 text-sm text-text-secondary">{$tr("analytics.subtitle")}</p>
   </div>
   <div class="flex items-center gap-2">
+    {#if namesToReview}
+      <ThemedButton onClick={() => (reviewingNames = true)}
+        >{$tr("analytics.names.open", { count: String(namesToReview) })}</ThemedButton
+      >
+    {/if}
     <ThemedButton onClick={reset}>{$tr("analytics.resetCharts")}</ThemedButton>
     <ThemedButton active onClick={() => (editing = newChartDraft())}
       >{$tr("analytics.addChart")}</ThemedButton
@@ -111,5 +126,13 @@
     players={squadChoices.players}
     onSave={save}
     onClose={() => (editing = null)}
+  />
+{/if}
+
+{#if reviewingNames}
+  <AnalyticsNameReview
+    {runs}
+    settings={$levelCap?.settings ?? null}
+    onClose={() => (reviewingNames = false)}
   />
 {/if}
