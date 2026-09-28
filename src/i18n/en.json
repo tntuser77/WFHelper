@@ -2768,5 +2768,7 @@
   "analytics.cond.without": "Without {who}",
   "analytics.cond.by": "{frame} played by {player}",
   "analytics.cond.notBy": "{frame} not played by {player}",
-  "analytics.cond.anyone": "anyone"
+  "analytics.cond.anyone": "anyone",
+  "analytics.chart.pie": "Pie",
+  "analytics.chart.donut": "Donut"
 }

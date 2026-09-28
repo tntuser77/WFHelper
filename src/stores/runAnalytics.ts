@@ -6,6 +6,8 @@ import {
   ANALYTICS_RANGES,
   ANALYTICS_SPLITS,
   ANALYTICS_SQUAD_FILTERS,
+  analyticsMeasureCounts,
+  isAnalyticsPie,
   isAnalyticsTimeSplit,
   type AnalyticsChartSpec,
   type AnalyticsSquadCondition,
@@ -91,15 +93,17 @@ export function normalizeChartSpec(raw: unknown): AnalyticsChartSpec | null {
   const seriesBy =
     value.seriesBy === null ? null : pick([...ANALYTICS_SPLITS, null], value.seriesBy, null);
   let chart = pick(ANALYTICS_CHARTS, value.chart, BLANK.chart);
-  // A line needs time along the bottom.
+  const measure = pick(ANALYTICS_MEASURES, value.measure, BLANK.measure);
+  // A line needs time along the bottom; a pie needs a count to share out.
   if (chart === "line" && !isAnalyticsTimeSplit(splitBy)) chart = "columns";
+  if (isAnalyticsPie(chart) && !analyticsMeasureCounts(measure)) chart = "ranked";
   // Ranked bars and a single number have nowhere to draw a second split.
   const stacks = chart === "columns" || chart === "line" || chart === "table";
   return {
     id: value.id.slice(0, 40),
     title: typeof value.title === "string" ? value.title.trim().slice(0, MAX_TITLE) : "",
     source: "levelCap",
-    measure: pick(ANALYTICS_MEASURES, value.measure, BLANK.measure),
+    measure,
     splitBy,
     seriesBy:
       stacks && seriesBy && seriesBy !== splitBy && !isAnalyticsTimeSplit(seriesBy)

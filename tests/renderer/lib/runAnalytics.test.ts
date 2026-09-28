@@ -70,6 +70,14 @@ describe("analyticsResult", () => {
     expect(result.total).toBe(5);
   });
 
+  it("stops a pie at five slices plus Other", () => {
+    const runs = ["A", "B", "C", "D", "E", "F", "G"].map((frame) => run({ frame }));
+    const result = analyticsResult(runs, spec({ chart: "donut", limit: 10 }), ctx);
+    expect(result.categories).toHaveLength(6);
+    expect(result.categories[5]).toBe(ANALYTICS_OTHER);
+    expect(result.values[0][5]).toBe(2);
+  });
+
   it("fills quiet weeks with zero and starts weeks on Monday", () => {
     // Tue 1 Sep and Sun 20 Sep 2026: weeks of Mon 31 Aug and Mon 14 Sep.
     const runs = [run({ completedAt: day(9, 1) }), run({ completedAt: day(9, 20) })];

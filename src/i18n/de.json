@@ -2748,5 +2748,7 @@
   "analytics.cond.without": "Ohne {who}",
   "analytics.cond.by": "{frame}, gespielt von {player}",
   "analytics.cond.notBy": "{frame}, nicht gespielt von {player}",
-  "analytics.cond.anyone": "irgendwem"
+  "analytics.cond.anyone": "irgendwem",
+  "analytics.chart.pie": "Kreis",
+  "analytics.chart.donut": "Ring"
 }

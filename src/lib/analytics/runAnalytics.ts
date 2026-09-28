@@ -30,7 +30,15 @@ export const ANALYTICS_SPLITS = [
 ] as const;
 export type AnalyticsSplit = (typeof ANALYTICS_SPLITS)[number];
 
-export const ANALYTICS_CHARTS = ["columns", "line", "ranked", "stat", "table"] as const;
+export const ANALYTICS_CHARTS = [
+  "columns",
+  "line",
+  "ranked",
+  "pie",
+  "donut",
+  "stat",
+  "table",
+] as const;
 export type AnalyticsChartKind = (typeof ANALYTICS_CHARTS)[number];
 
 export const ANALYTICS_RANGES = ["all", "30d", "90d", "365d"] as const;
@@ -127,6 +135,15 @@ interface Acc {
 const newAcc = (): Acc => ({ runs: 0, sum: 0, n: 0, max: null });
 
 const counts = (measure: AnalyticsMeasure) => measure === "runs" || measure === "squadmates";
+
+/** Slices of a whole only add up when the measure counts something. */
+export function analyticsMeasureCounts(measure: AnalyticsMeasure): boolean {
+  return counts(measure);
+}
+
+export function isAnalyticsPie(chart: AnalyticsChartKind): boolean {
+  return chart === "pie" || chart === "donut";
+}
 
 function measureOf(run: LevelCapRun, measure: AnalyticsMeasure): number | null {
   if (measure === "durationAvg") return run.durationSec;
@@ -386,7 +403,11 @@ export function analyticsResult(
       units.map(({ run }) => run.completedAt),
     );
   } else {
-    categories = topKeys(units, catValues, spec.measure, spec.limit);
+    // A pie gets a colour per slice, so it stops where the palette does.
+    const limit = isAnalyticsPie(spec.chart)
+      ? Math.min(spec.limit, ANALYTICS_MAX_SERIES)
+      : spec.limit;
+    categories = topKeys(units, catValues, spec.measure, limit);
     catKept = new Set(categories);
     if (hasOther(units, catValues, catKept)) categories.push(ANALYTICS_OTHER);
   }

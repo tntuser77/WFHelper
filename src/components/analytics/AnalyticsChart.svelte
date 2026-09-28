@@ -12,6 +12,7 @@
   } from "../../lib/analytics/runAnalytics.js";
   import { locale, tr as t } from "../../lib/i18n.js";
   import AnalyticsColumns from "./AnalyticsColumns.svelte";
+  import AnalyticsPie from "./AnalyticsPie.svelte";
   import AnalyticsTooltip from "./AnalyticsTooltip.svelte";
 
   let {
@@ -109,6 +110,17 @@
       </tbody>
     </table>
   </div>
+{:else if kind === "pie" || kind === "donut"}
+  <AnalyticsPie
+    values={result.values[0]}
+    labels={categoryLabels}
+    colors={result.categories.map((key, i) =>
+      key === ANALYTICS_OTHER ? OTHER_COLOR : SERIES_COLORS[i],
+    )}
+    donut={kind === "donut"}
+    {title}
+    {format}
+  />
 {:else if kind === "ranked"}
   <ul class="m-0 flex list-none flex-col gap-1 p-0">
     {#each result.categories as category, c (category)}

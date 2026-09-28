@@ -51,6 +51,8 @@ describe("run analytics dashboard store", () => {
         { id: "b", splitBy: "nonsense", seriesBy: "week", measure: "exolizersBest" },
         { id: "c", splitBy: "month", seriesBy: "frame", chart: "ranked" },
         { id: "d", splitBy: "month", seriesBy: "frame", chart: "line" },
+        { id: "e", measure: "exolizersAvg", chart: "pie" },
+        { id: "f", measure: "squadmates", chart: "donut" },
       ],
     });
     expect(get(store.analyticsCharts)).toMatchObject([
@@ -59,6 +61,9 @@ describe("run analytics dashboard store", () => {
       // Ranked bars have nowhere to draw a second split; a line over time does.
       { id: "c", seriesBy: null },
       { id: "d", seriesBy: "frame" },
+      // An average does not share out into slices; a count does.
+      { id: "e", chart: "ranked" },
+      { id: "f", chart: "donut" },
     ]);
   });
 

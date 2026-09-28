@@ -41,6 +41,8 @@ export const CHART_LABEL: Record<AnalyticsChartKind, MessageKey> = {
   columns: "analytics.chart.columns",
   line: "analytics.chart.line",
   ranked: "analytics.chart.ranked",
+  pie: "analytics.chart.pie",
+  donut: "analytics.chart.donut",
   stat: "analytics.chart.stat",
   table: "analytics.chart.table",
 };

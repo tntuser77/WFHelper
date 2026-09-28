@@ -2748,5 +2748,7 @@
   "analytics.cond.without": "没有{who}",
   "analytics.cond.by": "{player}使用的{frame}",
   "analytics.cond.notBy": "非{player}使用的{frame}",
-  "analytics.cond.anyone": "任何人"
+  "analytics.cond.anyone": "任何人",
+  "analytics.chart.pie": "饼图",
+  "analytics.chart.donut": "环形图"
 }
