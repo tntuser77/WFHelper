@@ -78,6 +78,7 @@
     offX: number;
     offY: number;
     width: number;
+    height: number;
   } | null>(null);
   let order = $state<string[] | null>(null);
   const shownCards = $derived(
@@ -98,6 +99,7 @@
       offX: event.clientX - box.left,
       offY: event.clientY - box.top,
       width: box.width,
+      height: box.height,
     };
     const start = cards.map((c) => c.spec.id);
     order = start;
@@ -107,18 +109,18 @@
       if (!moving || !order) return;
       moving = { ...moving, x: e.clientX, y: e.clientY };
       if (performance.now() < settledAt) return;
-      const over = document
-        .elementFromPoint(e.clientX, e.clientY)
-        ?.closest<HTMLElement>("[data-analytics-slot]");
+      // The held card's centre decides, not the pointer, so where it was grabbed
+      // does not change how far it has to travel.
+      const cx = e.clientX - moving.offX + moving.width / 2;
+      const cy = e.clientY - moving.offY + moving.height / 2;
+      const over = document.elementFromPoint(cx, cy)?.closest<HTMLElement>("[data-analytics-slot]");
       const target = over?.dataset.analyticsSlot;
       if (!over || !target || target === moving.id) return;
       // Past the middle of the card underneath, the moved one goes after it; a
       // card spanning most of a row splits top and bottom instead.
       const box = over.getBoundingClientRect();
       const rowWide = box.width > (grid?.clientWidth ?? 0) * 0.6;
-      const after = rowWide
-        ? e.clientY > box.top + box.height / 2
-        : e.clientX > box.left + box.width / 2;
+      const after = rowWide ? cy > box.top + box.height / 2 : cx > box.left + box.width / 2;
       const rest = order.filter((cardId) => cardId !== moving!.id);
       const at = rest.indexOf(target) + (after ? 1 : 0);
       const next = [...rest.slice(0, at), moving.id, ...rest.slice(at)];
