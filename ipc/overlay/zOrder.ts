@@ -1,4 +1,4 @@
-import { app, type BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
 import { withScope } from "../../services/logger";
 import * as warframeStatus from "../../services/warframeStatus";
 import { HIDE_IMMINENT_MS } from "./windows";
@@ -8,25 +8,76 @@ const log = withScope("overlayZOrder");
 
 type OverlayWindow = InstanceType<typeof BrowserWindow>;
 
-export function canRaiseOverlayWindows(platform: NodeJS.Platform = process.platform): boolean {
-  if (platform !== "win32") return true;
-  const handles = [
+function overlayWindows(): OverlayWindow[] {
+  return [
     ctx.overlayWindow,
     ctx.plannerOverlayWindow,
     ctx.rivenOverlayLeftWindow,
     ctx.rivenOverlayRightWindow,
-  ]
-    .filter(
-      (win): win is OverlayWindow =>
-        !!win && !win.isDestroyed() && win.isVisible() && win.isFocusable(),
-    )
+    ctx.arbiSummaryWindow,
+    ctx.tradeNotificationWindow,
+  ].filter((win): win is OverlayWindow => !!win && !win.isDestroyed());
+}
+
+export function canRaiseOverlayWindows(platform: NodeJS.Platform = process.platform): boolean {
+  if (platform !== "win32") return true;
+  const handles = overlayWindows()
+    .filter((win) => win.isVisible() && win.isFocusable())
     .map((win) => win.getNativeWindowHandle());
   return warframeStatus.isWarframeOrWindowForeground(handles) === true;
+}
+
+/** Blank keep-mapped overlays count too: a Deactivate hands the foreground to whichever
+ *  visible window is next in z-order, and that is often another overlay. */
+export function returnFocusToWarframe(): boolean {
+  const handles = overlayWindows().map((win) => win.getNativeWindowHandle());
+  return warframeStatus.restoreWarframeFocus(handles);
 }
 
 interface ZOrderSubscriber {
   isActive: () => boolean;
   sync: (warframeFocused: boolean, foreground?: boolean | null) => void;
+}
+
+// The status poll can be cached, so linux asks the compositor or X11 directly;
+// unknowable (no libX11, native-wayland game) reads as focused.
+function unfocusHideFocused(
+  pollFocused: boolean,
+  foreground: boolean | null = null,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  if (platform === "win32") return pollFocused;
+  if (platform !== "linux") return true;
+  if (foreground !== null) return foreground;
+  return warframeStatus.isWarframeWindowFocusedLinux() !== false;
+}
+
+function isOwnWindowForeground(): boolean {
+  const own = warframeStatus.isOwnProcessForeground();
+  if (own !== null) return own;
+  return !!BrowserWindow.getFocusedWindow();
+}
+
+interface UnfocusHideController {
+  hideForUnfocus: () => boolean;
+  restoreAfterUnfocus: () => boolean;
+}
+
+export function syncUnfocusHide(
+  label: string,
+  controllers: UnfocusHideController[],
+  warframeFocused: boolean,
+  foreground: boolean | null = null,
+  platform: NodeJS.Platform = process.platform,
+): void {
+  if (unfocusHideFocused(warframeFocused, foreground, platform)) {
+    const restored = controllers.filter((controller) => controller.restoreAfterUnfocus());
+    if (restored.length > 0) log.info(`[ZOrder] ${label} restored - Warframe refocused`);
+    return;
+  }
+  if (isOwnWindowForeground()) return;
+  const hidden = controllers.filter((controller) => controller.hideForUnfocus());
+  if (hidden.length > 0) log.info(`[ZOrder] ${label} hidden - Warframe unfocused`);
 }
 
 const subscribers = new Set<ZOrderSubscriber>();
@@ -40,9 +91,9 @@ let lastFocused: boolean | null = null;
 // over the fullscreen game every tick. Off linux the live style is authority.
 const linuxRaiseApplied = new WeakMap<OverlayWindow, boolean>();
 // A compositor that does answer _NET_WM_STATE can also say the band was taken
-// away, and linux isFocused is only "warframe is running", so that answer is
-// the one signal that a raised overlay was buried. Once it has confirmed a
-// raise its live state outranks the remembered flag.
+// away while the game kept focus, the one signal that a raised overlay was
+// buried. Once it has confirmed a raise its live state outranks the
+// remembered flag.
 const linuxWmReportsBand = new WeakSet<OverlayWindow>();
 // A wm that keeps dropping the band the poll just re-asserted is flapping, not
 // reporting burials, and answering it every tick is the restack that cost
@@ -139,8 +190,7 @@ export function syncOverlayWindowZOrder(
     linuxDriftReraises.delete(win);
     return;
   }
-  // A released hold-open schedules its hide 2.5s out, and re-stacking a window
-  // already being torn down crashes under an injected hook.
+  // Re-stacking a window whose hide is due crashes under an injected hook.
   const hideDueIn = controller.overlayHideDueIn();
   if (hideDueIn !== null && hideDueIn <= HIDE_IMMINENT_MS) return;
   applyOverlayZOrder(win, warframeFocused, platform);

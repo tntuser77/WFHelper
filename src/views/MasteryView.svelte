@@ -66,7 +66,6 @@
   } from "../stores/masteryPins.js";
   import { addToast } from "../stores/toasts.js";
   import { setRootOf } from "../lib/inventory/fullSets.js";
-  import { parseOwnedRelics } from "../lib/relic.js";
   import { activeItem, activeComponent } from "../stores/modals.js";
   import { hideFounderMasteryItems, showVaultedBadges } from "../stores/preferences.js";
   import { locale, tr, type Translator } from "../lib/i18n.js";
@@ -83,9 +82,10 @@
     writeStorage,
   } from "../lib/persistence.js";
   import { applySharedFiltersAndSort } from "../lib/filters.js";
+  import { createWindowedGrid } from "../lib/windowedGrid.js";
   import { getCachedPriceState } from "../lib/wfm/priceCache.js";
   import { sharedFilters } from "../stores/filters.js";
-  import { relicDb } from "../stores/relics.js";
+  import { relicDb, relicOwnedCounts } from "../stores/relics.js";
   import ItemImage from "../components/ItemImage.svelte";
   import MasteryBreakdownRow from "../components/mastery/MasteryBreakdownRow.svelte";
   import MasteryRoadmap from "../components/mastery/MasteryRoadmap.svelte";
@@ -93,6 +93,7 @@
   import CodexPanel from "../components/mastery/CodexPanel.svelte";
   import ArchonShardPips from "../components/archon/ArchonShardPips.svelte";
   import ArchonShardSummary from "../components/archon/ArchonShardSummary.svelte";
+  import IncarnonTracker from "../components/incarnon/IncarnonTracker.svelte";
   import { parseArchonShards, summarizeArchonShards } from "../lib/inventory/archonShards.js";
   import { fallbackNameFromUniqueName } from "../../config/shared/displayName.js";
   import type { MasteryCategoryStats, ProgressPair } from "../types/inventory.js";
@@ -151,6 +152,7 @@
     { key: "roadmap", labelKey: "mastery.viewRoadmap" },
     { key: "planned", labelKey: "mastery.viewPlanned" },
     { key: "codex", labelKey: "mastery.viewCodex" },
+    { key: "incarnon", labelKey: "mastery.viewIncarnon" },
   ];
   const PLANNER_SORT_KEYS = ["mastery_xp", "completeness", "name"] as const;
   const plannerSort = persistedString<PlannerSort>(
@@ -485,8 +487,17 @@
       .filter((item) => statusFilter === "all" || item.status === statusFilter),
     $masteryFilters,
   );
-  $: masteryOwnedRelics = parseOwnedRelics($inventoryData, $relicDb);
-  $: masteryRoadmap = buildMasteryRoadmap(hydratedMasteryItems, $relicDb, masteryOwnedRelics);
+  // Every masterable item as a card was 17k nodes and an 843 ms task; only the
+  // rows near the viewport mount.
+  const collectionGrid = createWindowedGrid();
+  let viewRoot: HTMLElement | null = null;
+  $: collectionGrid.setItems(
+    filtered.length,
+    `${catFilter}|${statusFilter}|${JSON.stringify($masteryFilters)}`,
+  );
+  $: gridStart = $collectionGrid.start;
+  $: gridItems = filtered.slice(gridStart, $collectionGrid.end);
+  $: masteryRoadmap = buildMasteryRoadmap(hydratedMasteryItems, $relicDb, $relicOwnedCounts);
 
   function buildPlannerPins(
     pinList: string[],
@@ -627,7 +638,7 @@
   );
 </script>
 
-<section class="view active">
+<section class="view active" bind:this={viewRoot}>
   <div class="view-header">
     <h2>{$tr("mastery.title")}</h2>
     <div class="ml-auto"><EditLayoutBar view="mastery" /></div>
@@ -659,6 +670,8 @@
 
   {#if viewTab === "codex"}
     <CodexPanel />
+  {:else if viewTab === "incarnon"}
+    <IncarnonTracker />
   {:else if displayMasteryData}
     {@const stats = displayMasteryData.stats}
     {@const masteredPct = formatPercent(stats.mastered, stats.total)}
@@ -912,11 +925,24 @@
               {/if}
             </div>
           {:else}
-            <div class="item-grid">
+            <div
+              class="item-grid"
+              data-mastery-grid
+              data-item-count={filtered.length}
+              use:collectionGrid.attach={viewRoot}
+            >
               {#if filtered.length === 0}
                 <div class="empty-state col-span-full"><p>{$tr("mastery.noItemsMatch")}</p></div>
               {:else}
-                {#each filtered as item, itemIndex (`${item.uniqueName || item.internalName || item.name}-${itemIndex}`)}
+                {#if $collectionGrid.topSpacer !== null}
+                  <div
+                    class="col-span-full"
+                    style="height: {$collectionGrid.topSpacer}px"
+                    aria-hidden="true"
+                    data-grid-spacer
+                  ></div>
+                {/if}
+                {#each gridItems as item, sliceIndex (`${item.uniqueName || item.internalName || item.name}-${gridStart + sliceIndex}`)}
                   {@const shardCopies =
                     archonShards.bySuitType.get(item.uniqueName || item.internalName || "") ?? []}
                   {@const pinKey = pinKeyOf(item)}
@@ -1113,6 +1139,14 @@
                     </div>
                   </div>
                 {/each}
+                {#if $collectionGrid.bottomSpacer !== null}
+                  <div
+                    class="col-span-full"
+                    style="height: {$collectionGrid.bottomSpacer}px"
+                    aria-hidden="true"
+                    data-grid-spacer
+                  ></div>
+                {/if}
               {/if}
             </div>
           {/if}

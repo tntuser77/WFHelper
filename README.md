@@ -18,7 +18,7 @@
 - [ ] When more the 2 builds, the UI for new build gets smooshed to the bottem, which might not be the best option.
 - [x] When searching, the run count on each frame card should show how many runs match the search, not the frame's total (searching "slam" should show 3 on Follie, not 10).
 - [x] Even on my Caliban builds, where I kept the archgun, its not showing up in a box that makes it obvious that I was using the archgun heavily
-- [ ] Right click on the search box to clear it
+- [x] Right click on the search box to clear it
 - [ ] Show the amount of exolizers reached when opening the frames, not just the amount of runs
 
 

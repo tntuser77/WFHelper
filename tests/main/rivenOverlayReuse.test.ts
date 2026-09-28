@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { OVERLAY_INTERACTION_MODE } from "../../config/shared/ipcChannels";
 
 interface FakeController {
+  options: { onPresentationEnd?: () => void };
   anchor: { sourceDisplayId: string };
   positionOverlayWindow: ReturnType<typeof vi.fn>;
   showOverlayWindowInactive: ReturnType<typeof vi.fn>;
@@ -12,6 +14,9 @@ interface FakeController {
   markRendererReady: ReturnType<typeof vi.fn>;
   hideOverlayWindow: ReturnType<typeof vi.fn>;
   getOverlayBoundsForActiveDisplay: ReturnType<typeof vi.fn>;
+  isHiddenByUnfocus: () => boolean;
+  hideForUnfocus: ReturnType<typeof vi.fn>;
+  restoreAfterUnfocus: ReturnType<typeof vi.fn>;
 }
 
 const state = vi.hoisted(() => ({
@@ -20,6 +25,7 @@ const state = vi.hoisted(() => ({
   visible: true,
   destroyLeft: vi.fn(),
   destroyRight: vi.fn(),
+  returnFocus: vi.fn(() => true),
 }));
 
 vi.mock("electron", () => ({
@@ -38,9 +44,10 @@ vi.mock("../../ipc/ipcSecurity", () => ({
 }));
 vi.mock("../../ipc/overlay/windows", () => ({
   createOverlayWindowBoundsChangeHandler: () => vi.fn(),
-  createOverlayWindowsController: () => {
+  createOverlayWindowsController: (options: { onPresentationEnd?: () => void }) => {
     const label = state.controllers.length === 0 ? "left" : "right";
     const controller: FakeController = {
+      options,
       anchor: { sourceDisplayId: label },
       positionOverlayWindow: vi.fn(),
       showOverlayWindowInactive: vi.fn(),
@@ -52,6 +59,9 @@ vi.mock("../../ipc/overlay/windows", () => ({
       markRendererReady: vi.fn(),
       hideOverlayWindow: vi.fn(),
       getOverlayBoundsForActiveDisplay: vi.fn(),
+      isHiddenByUnfocus: () => false,
+      hideForUnfocus: vi.fn(() => false),
+      restoreAfterUnfocus: vi.fn(() => false),
     };
     state.controllers.push(controller);
     return controller;
@@ -61,7 +71,9 @@ vi.mock("../../ipc/overlay/zOrder", () => ({
   applyOverlayZOrder: vi.fn(),
   canRaiseOverlayWindows: () => true,
   registerZOrderSubscriber: vi.fn(),
+  returnFocusToWarframe: state.returnFocus,
   syncOverlayWindowZOrder: vi.fn(),
+  syncUnfocusHide: vi.fn(),
 }));
 vi.mock("../../ipc/overlay/rivenSession", () => ({
   setEventRecorder: vi.fn(),
@@ -130,13 +142,19 @@ vi.mock("../../ipc/context", () => ({
   default: {
     overlaySettings: { rivenOverlayEnabled: true },
     overlayThemeVars: {},
+    overlayInteractiveMode: false,
     rivenOverlayLeftWindow: null as unknown,
     rivenOverlayRightWindow: null as unknown,
   },
 }));
 
 import ctx from "../../ipc/context";
-import { onRivenSessionOpen } from "../../ipc/rivenOverlayIpc";
+import {
+  isRivenInteractiveMode,
+  onRivenSessionClose,
+  onRivenSessionOpen,
+  setRivenInteractiveMode,
+} from "../../ipc/rivenOverlayIpc";
 
 function controllers(): FakeController[] {
   return state.controllers as FakeController[];
@@ -201,5 +219,189 @@ describe("riven panels reused by a second session", () => {
     for (const controller of controllers()) {
       expect(controller.createOverlayWindow).toHaveBeenCalled();
     }
+  });
+});
+
+describe("riven interactive mode ends with the panels", () => {
+  type SendMock = ReturnType<typeof vi.fn>;
+  const panels = () =>
+    [ctx.rivenOverlayLeftWindow, ctx.rivenOverlayRightWindow] as unknown as Array<{
+      webContents: { send: SendMock };
+    }>;
+  const interactionEvents = (send: SendMock) =>
+    send.mock.calls.filter(([channel]) => channel === OVERLAY_INTERACTION_MODE);
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    state.visible = true;
+    state.keepMapped = true;
+    (ctx as unknown as Record<string, unknown>).rivenOverlayLeftWindow = fakeWindow(vi.fn());
+    (ctx as unknown as Record<string, unknown>).rivenOverlayRightWindow = fakeWindow(vi.fn());
+    setRivenInteractiveMode(true);
+    for (const controller of controllers()) controller.setOverlayInteractiveMode.mockClear();
+    for (const panel of panels()) panel.webContents.send.mockClear();
+    state.returnFocus.mockClear();
+  });
+
+  afterEach(() => {
+    ctx.overlayInteractiveMode = false;
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  it("leaves focus with a reward overlay the player is still using", () => {
+    ctx.overlayInteractiveMode = true;
+
+    onRivenSessionClose();
+
+    expect(isRivenInteractiveMode()).toBe(false);
+    expect(state.returnFocus).not.toHaveBeenCalled();
+  });
+
+  it("a closed session leaves both panels click-through and tells their renderers", () => {
+    onRivenSessionClose();
+
+    expect(isRivenInteractiveMode()).toBe(false);
+    for (const controller of controllers()) {
+      expect(controller.hideOverlayWindow).toHaveBeenCalled();
+      expect(controller.setOverlayInteractiveMode).toHaveBeenLastCalledWith(false, {
+        focus: true,
+      });
+    }
+    for (const panel of panels()) {
+      expect(interactionEvents(panel.webContents.send)).toEqual([
+        [OVERLAY_INTERACTION_MODE, { interactive: false }],
+      ]);
+    }
+    expect(state.returnFocus).toHaveBeenCalledOnce();
+  });
+
+  it("ends when the last panel is hidden for good, not while one is still up", () => {
+    controllers()[0].options.onPresentationEnd?.();
+    expect(isRivenInteractiveMode()).toBe(true);
+
+    state.visible = false;
+    controllers()[1].options.onPresentationEnd?.();
+
+    expect(isRivenInteractiveMode()).toBe(false);
+    expect(state.returnFocus).toHaveBeenCalledOnce();
+  });
+
+  it("a reopened session starts click-through", () => {
+    state.visible = false;
+
+    onRivenSessionOpen();
+
+    expect(isRivenInteractiveMode()).toBe(false);
+    for (const controller of controllers()) {
+      expect(controller.setOverlayInteractiveMode).toHaveBeenLastCalledWith(false);
+    }
+  });
+});
+
+describe("linux interactive default for riven panels", () => {
+  type SendMock = ReturnType<typeof vi.fn>;
+  const realPlatform = process.platform;
+  const settings = () => ctx.overlaySettings as Record<string, unknown>;
+  const setPlatform = (value: string) =>
+    Object.defineProperty(process, "platform", { value, configurable: true });
+  const panels = () =>
+    [ctx.rivenOverlayLeftWindow, ctx.rivenOverlayRightWindow] as unknown as Array<{
+      webContents: { send: SendMock };
+    }>;
+  const interactionEvents = (send: SendMock) =>
+    send.mock.calls.filter(([channel]) => channel === OVERLAY_INTERACTION_MODE);
+
+  function startWith(interactive: boolean): void {
+    setRivenInteractiveMode(interactive);
+    for (const controller of controllers()) {
+      controller.setOverlayInteractiveMode.mockClear();
+      controller.createOverlayWindow.mockClear();
+    }
+    for (const panel of panels()) panel.webContents.send.mockClear();
+    state.returnFocus.mockClear();
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    state.keepMapped = true;
+    state.visible = false;
+    (ctx as unknown as Record<string, unknown>).rivenOverlayLeftWindow = fakeWindow(vi.fn());
+    (ctx as unknown as Record<string, unknown>).rivenOverlayRightWindow = fakeWindow(vi.fn());
+    settings().linuxOverlaysInteractive = true;
+    setPlatform("linux");
+  });
+
+  afterEach(() => {
+    setPlatform(realPlatform);
+    delete settings().linuxOverlaysInteractive;
+    ctx.overlayInteractiveMode = false;
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  it("a reopened session starts interactive and tells the kept renderers", () => {
+    startWith(false);
+
+    onRivenSessionOpen();
+
+    expect(isRivenInteractiveMode()).toBe(true);
+    for (const controller of controllers()) {
+      expect(controller.setOverlayInteractiveMode).toHaveBeenCalledWith(true, { focus: false });
+      expect(controller.setOverlayInteractiveMode).toHaveBeenLastCalledWith(true);
+    }
+    for (const panel of panels()) {
+      expect(interactionEvents(panel.webContents.send)).toEqual([
+        [OVERLAY_INTERACTION_MODE, { interactive: true }],
+      ]);
+    }
+    expect(state.returnFocus).not.toHaveBeenCalled();
+  });
+
+  it("rebuilt panels open interactive and their new renderers are told", () => {
+    state.keepMapped = false;
+    startWith(true);
+
+    onRivenSessionOpen();
+
+    expect(isRivenInteractiveMode()).toBe(true);
+    for (const controller of controllers()) {
+      expect(controller.createOverlayWindow).toHaveBeenCalledOnce();
+      expect(controller.setOverlayInteractiveMode).toHaveBeenLastCalledWith(true);
+    }
+    for (const panel of panels()) {
+      expect(interactionEvents(panel.webContents.send)).toEqual([
+        [OVERLAY_INTERACTION_MODE, { interactive: true }],
+      ]);
+    }
+  });
+
+  it("a closed session stays interactive for the next one", () => {
+    startWith(true);
+
+    onRivenSessionClose();
+
+    expect(isRivenInteractiveMode()).toBe(true);
+    for (const panel of panels()) expect(interactionEvents(panel.webContents.send)).toEqual([]);
+    expect(state.returnFocus).not.toHaveBeenCalled();
+  });
+
+  it("is ignored on Windows", () => {
+    setPlatform("win32");
+    state.keepMapped = false;
+    startWith(true);
+
+    onRivenSessionOpen();
+
+    expect(isRivenInteractiveMode()).toBe(false);
+    for (const controller of controllers()) {
+      expect(controller.setOverlayInteractiveMode).toHaveBeenLastCalledWith(false);
+    }
+    for (const panel of panels()) {
+      expect(interactionEvents(panel.webContents.send)).toEqual([
+        [OVERLAY_INTERACTION_MODE, { interactive: false }],
+      ]);
+    }
+    expect(state.returnFocus).toHaveBeenCalledOnce();
   });
 });

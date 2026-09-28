@@ -1,4 +1,5 @@
 import { ORDER_SUMMARY_CATALOG_PREWARM_LAST_RUN_KEY, PREWARM_LAST_RUN_KEY, SNAPSHOT_KEY } from '../constants';
+import { getWorkerConfig } from '../config';
 import { emptyResponse, jsonResponse, rawJsonResponse, streamJsonResponse } from '../security/cors';
 import { isAdminAuthorized } from '../security/adminAuth';
 import { BOOTSTRAP_HEADER, bootstrapEnabled, bootstrapRequired, issueBootstrapToken, verifyBootstrapToken } from '../security/bootstrap';
@@ -13,6 +14,7 @@ import {
 } from '../services/readThrough';
 import { readAdversaryVendorsDoc } from '../services/adversaryVendors';
 import { readNightwaveOfferingsDoc } from '../services/nightwaveOfferings';
+import { readWfcdRelicsBody } from '../services/wfcdRelics';
 import { readBaroHistory } from '../services/baroHistory';
 import { isRelicSlug, normalizeOrderSubtype } from '../services/orderSubtype';
 import { readPublishedSupporters } from '../services/supporters';
@@ -47,6 +49,7 @@ const routeStats = {
 	priceHistoryRequests: 0,
 	adversaryVendorsRequests: 0,
 	nightwaveOfferingsRequests: 0,
+	wfcdRelicsRequests: 0,
 	baroHistoryRequests: 0,
 };
 
@@ -65,6 +68,9 @@ const ADVERSARY_VENDORS_CACHE_CONTROL = 'public, max-age=3600';
 const ADVERSARY_VENDORS_CACHE_VERSION = 1;
 const NIGHTWAVE_OFFERINGS_CACHE_CONTROL = 'public, max-age=3600';
 const NIGHTWAVE_OFFERINGS_CACHE_VERSION = 1;
+const WFCD_RELICS_CACHE_CONTROL = 'public, max-age=3600';
+// Bump when the trimmed row shape changes; the ETag otherwise follows the npm version only.
+const WFCD_RELICS_CACHE_VERSION = 1;
 const RANKED_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 
 let rankedCatalogCache: { expiresAt: number; bySlug: Map<string, number> } | null = null;
@@ -212,6 +218,36 @@ function requestHasMatchingEtag(req: Request, etag: string | null): etag is stri
 		.split(',')
 		.map((entry) => entry.trim())
 		.includes(etag);
+}
+
+function edgeCachedDocResponse(cached: Response, cacheControl: string, req: Request, env: Env): Response {
+	const cachedEtag = cached.headers.get('etag');
+	if (requestHasMatchingEtag(req, cachedEtag)) {
+		return annotateResponse(notModifiedResponse(cachedEtag, cacheControl, req, env), { cacheHit: true });
+	}
+	const headers: Record<string, string> = { 'cache-control': cacheControl };
+	if (cachedEtag) headers.etag = cachedEtag;
+	return annotateResponse(streamJsonResponse(cached.body, req, env, 200, headers), { cacheHit: true });
+}
+
+function freshDocResponse(
+	body: string,
+	etag: string,
+	cacheControl: string,
+	cacheKey: Request,
+	req: Request,
+	env: Env,
+	ctx?: ExecutionContext,
+): Response {
+	if (requestHasMatchingEtag(req, etag)) {
+		return annotateResponse(notModifiedResponse(etag, cacheControl, req, env), { cacheHit: true });
+	}
+	const headers: Record<string, string> = { 'cache-control': cacheControl, etag };
+	const response = rawJsonResponse(body, req, env, 200, headers);
+	if (ctx) {
+		ctx.waitUntil(caches.default.put(cacheKey, new Response(body, { status: 200, headers })));
+	}
+	return annotateResponse(response, { cacheHit: false });
 }
 
 export async function handlePublicRoutes(req: Request, url: URL, env: Env, ctx?: ExecutionContext): Promise<Response | null> {
@@ -528,17 +564,8 @@ export async function handlePublicRoutes(req: Request, url: URL, env: Env, ctx?:
 		const cacheKey = new Request(`${url.origin}/v1/adversary-vendors?v=${ADVERSARY_VENDORS_CACHE_VERSION}&b=${batch}`, {
 			method: 'GET',
 		});
-		const edgeCache = caches.default;
-		const cachedResponse = await edgeCache.match(cacheKey);
-		if (cachedResponse) {
-			const cachedEtag = cachedResponse.headers.get('etag');
-			if (requestHasMatchingEtag(req, cachedEtag)) {
-				return annotateResponse(notModifiedResponse(cachedEtag, ADVERSARY_VENDORS_CACHE_CONTROL, req, env), { cacheHit: true });
-			}
-			const cachedHeaders: Record<string, string> = { 'cache-control': ADVERSARY_VENDORS_CACHE_CONTROL };
-			if (cachedEtag) cachedHeaders.etag = cachedEtag;
-			return annotateResponse(streamJsonResponse(cachedResponse.body, req, env, 200, cachedHeaders), { cacheHit: true });
-		}
+		const cachedResponse = await caches.default.match(cacheKey);
+		if (cachedResponse) return edgeCachedDocResponse(cachedResponse, ADVERSARY_VENDORS_CACHE_CONTROL, req, env);
 
 		const doc = await readAdversaryVendorsDoc(env);
 		if (!doc) {
@@ -556,22 +583,7 @@ export async function handlePublicRoutes(req: Request, url: URL, env: Env, ctx?:
 			tenet: { items: doc.tenet },
 		});
 		const etag = await clientBodyEtag(body, `${ADVERSARY_VENDORS_CACHE_VERSION}-${batch}`);
-		if (requestHasMatchingEtag(req, etag)) {
-			return annotateResponse(notModifiedResponse(etag, ADVERSARY_VENDORS_CACHE_CONTROL, req, env), { cacheHit: true });
-		}
-
-		const responseHeaders: Record<string, string> = {
-			'cache-control': ADVERSARY_VENDORS_CACHE_CONTROL,
-			etag,
-		};
-
-		const response = rawJsonResponse(body, req, env, 200, responseHeaders);
-
-		if (ctx) {
-			ctx.waitUntil(edgeCache.put(cacheKey, new Response(body, { status: 200, headers: responseHeaders })));
-		}
-
-		return annotateResponse(response, { cacheHit: false });
+		return freshDocResponse(body, etag, ADVERSARY_VENDORS_CACHE_CONTROL, cacheKey, req, env, ctx);
 	}
 
 	if (req.method === 'GET' && url.pathname === '/v1/nightwave-offerings') {
@@ -581,17 +593,8 @@ export async function handlePublicRoutes(req: Request, url: URL, env: Env, ctx?:
 
 		routeStats.nightwaveOfferingsRequests += 1;
 		const cacheKey = new Request(`${url.origin}/v1/nightwave-offerings?v=${NIGHTWAVE_OFFERINGS_CACHE_VERSION}`, { method: 'GET' });
-		const edgeCache = caches.default;
-		const cachedResponse = await edgeCache.match(cacheKey);
-		if (cachedResponse) {
-			const cachedEtag = cachedResponse.headers.get('etag');
-			if (requestHasMatchingEtag(req, cachedEtag)) {
-				return annotateResponse(notModifiedResponse(cachedEtag, NIGHTWAVE_OFFERINGS_CACHE_CONTROL, req, env), { cacheHit: true });
-			}
-			const cachedHeaders: Record<string, string> = { 'cache-control': NIGHTWAVE_OFFERINGS_CACHE_CONTROL };
-			if (cachedEtag) cachedHeaders.etag = cachedEtag;
-			return annotateResponse(streamJsonResponse(cachedResponse.body, req, env, 200, cachedHeaders), { cacheHit: true });
-		}
+		const cachedResponse = await caches.default.match(cacheKey);
+		if (cachedResponse) return edgeCachedDocResponse(cachedResponse, NIGHTWAVE_OFFERINGS_CACHE_CONTROL, req, env);
 
 		const doc = await readNightwaveOfferingsDoc(env);
 		if (!doc) {
@@ -601,16 +604,28 @@ export async function handlePublicRoutes(req: Request, url: URL, env: Env, ctx?:
 
 		const body = JSON.stringify({ ok: true, generatedAt: doc.generatedAt, source: doc.source, tabs: doc.tabs });
 		const etag = await clientBodyEtag(body, NIGHTWAVE_OFFERINGS_CACHE_VERSION);
-		if (requestHasMatchingEtag(req, etag)) {
-			return annotateResponse(notModifiedResponse(etag, NIGHTWAVE_OFFERINGS_CACHE_CONTROL, req, env), { cacheHit: true });
+		return freshDocResponse(body, etag, NIGHTWAVE_OFFERINGS_CACHE_CONTROL, cacheKey, req, env, ctx);
+	}
+
+	if (req.method === 'GET' && url.pathname === '/v1/wfcd-relics') {
+		const guardResponse = await guardPublicRequest(req, env, 'wfcd-relics');
+		if (guardResponse) return guardResponse;
+
+		routeStats.wfcdRelicsRequests += 1;
+		if (!getWorkerConfig(env).wfcdRelicsEnabled) {
+			return annotateResponse(jsonResponse({ ok: false, error: 'wfcd_relics_not_ready' }, req, env, 404), { cacheHit: false });
+		}
+		const cacheKey = new Request(`${url.origin}/v1/wfcd-relics?v=${WFCD_RELICS_CACHE_VERSION}`, { method: 'GET' });
+		const cachedResponse = await caches.default.match(cacheKey);
+		if (cachedResponse) return edgeCachedDocResponse(cachedResponse, WFCD_RELICS_CACHE_CONTROL, req, env);
+
+		const doc = await readWfcdRelicsBody(env);
+		if (!doc) {
+			return annotateResponse(jsonResponse({ ok: false, error: 'wfcd_relics_not_ready' }, req, env, 404), { cacheHit: false });
 		}
 
-		const responseHeaders: Record<string, string> = { 'cache-control': NIGHTWAVE_OFFERINGS_CACHE_CONTROL, etag };
-		const response = rawJsonResponse(body, req, env, 200, responseHeaders);
-		if (ctx) {
-			ctx.waitUntil(edgeCache.put(cacheKey, new Response(body, { status: 200, headers: responseHeaders })));
-		}
-		return annotateResponse(response, { cacheHit: false });
+		const etag = `"wfcd-${doc.version}-${WFCD_RELICS_CACHE_VERSION}"`;
+		return freshDocResponse(doc.body, etag, WFCD_RELICS_CACHE_CONTROL, cacheKey, req, env, ctx);
 	}
 
 	const priceHistorySlug = getSlug(url.pathname, '/v1/price-history/');

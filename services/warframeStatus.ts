@@ -6,11 +6,21 @@ import {
   enumProcessNames,
   getProcessSessionId,
   isWarframeExePath,
+  queryCommandLine,
   queryExePath,
 } from "./win32Process";
-import { findWindowBoundsByTitle, isWindowFocusedByTitle } from "./x11WindowQuery";
+import { waylandGameBounds, waylandGameFocus } from "./waylandGameWindow";
+import { namesWarframeGame } from "./waylandCompositor";
+import {
+  findWindowBoundsMatching,
+  isActiveWindowMatching,
+  type X11WindowNames,
+} from "./x11WindowQuery";
 import { normalizeErrorMessage } from "../config/shared/errors";
-import { WARFRAME_STATUS_CACHE_TTL_MS } from "../config/runtime/cacheConfig";
+import {
+  WARFRAME_PROCESS_SAMPLE_TTL_MS,
+  WARFRAME_STATUS_CACHE_TTL_MS,
+} from "../config/runtime/cacheConfig";
 
 const log = withScope("warframeStatus");
 
@@ -24,7 +34,7 @@ function koffi(): typeof import("koffi") {
   return _koffi;
 }
 
-interface WindowBounds {
+export interface WindowBounds {
   x: number;
   y: number;
   width: number;
@@ -182,13 +192,21 @@ function isWarframeProcessName(processName: string | null): boolean {
     .includes("warframe");
 }
 
+// Warframe's launcher runs Warframe.x64.exe with -applet: for its content update.
+function readWarframeProcessKind(pid: number): "game" | "applet" | "exiting" {
+  const result = queryCommandLine(pid);
+  if (result.status === "exiting") return "exiting";
+  if (result.status !== "ok") return "game";
+  return result.commandLine.toLowerCase().includes("-applet:") ? "applet" : "game";
+}
+
 let lastProcessSample: { running: boolean | null; at: number } | null = null;
 
 /** Exact game in this Windows session; unknown never confirms an exit. */
 export function getWarframeProcessState(force = false): boolean | null {
   if (process.platform !== "win32") return null;
   const now = Date.now();
-  if (!force && lastProcessSample && now - lastProcessSample.at < WARFRAME_STATUS_CACHE_TTL_MS) {
+  if (!force && lastProcessSample && now - lastProcessSample.at < WARFRAME_PROCESS_SAMPLE_TTL_MS) {
     return lastProcessSample.running;
   }
   let running: boolean | null = null;
@@ -198,14 +216,18 @@ export function getWarframeProcessState(force = false): boolean | null {
       const processes = enumProcessNames();
       let unknown = processes == null;
       let found = false;
-      for (const { pid, name } of processes ?? []) {
-        if (name.toLowerCase() !== "warframe.x64.exe") continue;
+      const candidates = (processes ?? []).filter(
+        ({ name }) => name.toLowerCase() === "warframe.x64.exe",
+      );
+      for (const { pid } of candidates) {
         const processSession = getProcessSessionId(pid);
         if (processSession == null) {
           unknown = true;
           continue;
         }
-        if (processSession !== session) continue;
+        // Read on every sample: an applet can take over an exited game's pid
+        // before any sample misses that pid.
+        if (processSession !== session || readWarframeProcessKind(pid) !== "game") continue;
         found = true;
         break;
       }
@@ -332,21 +354,46 @@ function getDisplayIdForBounds(bounds: WindowBounds | null): string | null {
   }
 }
 
-/** Proton exposes Warframe as a regular, truncated /proc comm entry. */
-function isWarframeProcessRunningLinux(): boolean {
+/** Whether any process's /proc comm matches, or null when /proc cannot be read. */
+function anyProcessCommLinux(matches: (comm: string) => boolean): boolean | null {
   try {
     for (const entry of fs.readdirSync("/proc")) {
       if (!/^\d+$/.test(entry)) continue;
       try {
-        if (isWarframeProcessName(fs.readFileSync(`/proc/${entry}/comm`, "utf8"))) return true;
+        if (matches(fs.readFileSync(`/proc/${entry}/comm`, "utf8"))) return true;
       } catch {
         // process exited mid-scan
       }
     }
   } catch (err) {
     log.warn("[WarframeStatus] /proc scan failed:", normalizeErrorMessage(err));
+    return null;
   }
   return false;
+}
+
+/** Proton exposes Warframe as a regular, truncated /proc comm entry. */
+function isWarframeProcessRunningLinux(): boolean | null {
+  return anyProcessCommLinux(isWarframeProcessName);
+}
+
+// comm is cut to 15 characters, so xwayland-satellite reads as this.
+const SATELLITE_COMM = "xwayland-satell";
+const SATELLITE_CHECK_TTL_MS = 10_000;
+let _satelliteCheckedAt = 0;
+let _satelliteRunning = false;
+
+/** Why X11 window positions are not screen positions here, or null when they
+ *  are. xwayland-satellite (niri's X11 bridge, spawned by niri since 25.08)
+ *  moves every X window to the origin of its output; the X size stays right. */
+export function x11PositionDistrust(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.NIRI_SOCKET) return "niri session, X11 runs through xwayland-satellite";
+  const now = Date.now();
+  if (now - _satelliteCheckedAt >= SATELLITE_CHECK_TTL_MS) {
+    _satelliteCheckedAt = now;
+    _satelliteRunning = anyProcessCommLinux((comm) => comm.trim() === SATELLITE_COMM) === true;
+  }
+  return _satelliteRunning ? "xwayland-satellite is running" : null;
 }
 
 // Matches `0xID "name": ("res" "class")  WxH+rx+ry  +absX+absY` from xwininfo
@@ -383,6 +430,17 @@ let _linuxWindowProbeUnavailable = false;
 let _loggedGeometrySource: string | null = null;
 const WARFRAME_WINDOW_TITLE_RE = /warframe/i;
 
+// The last resort for geometry: a window that only mentions the game may be a
+// browser on warframe.market.
+function mentionsWarframe({ title, wmClass }: X11WindowNames): boolean {
+  return WARFRAME_WINDOW_TITLE_RE.test(`${title} ${wmClass}`);
+}
+
+// Focus and presence need the game itself: a browser on warframe.market is not it.
+function isWarframeGameWindow({ title, wmClass }: X11WindowNames): boolean {
+  return namesWarframeGame({ title, appId: wmClass });
+}
+
 // Named once per source so a support log says where the placement came from.
 function noteGeometrySource(source: string, bounds: WindowBounds): WindowBounds {
   if (_loggedGeometrySource !== source) {
@@ -394,19 +452,63 @@ function noteGeometrySource(source: string, bounds: WindowBounds): WindowBounds 
   return bounds;
 }
 
-/** X11-only focus read for the overlay unfocus-hide, which the permissive
- * status poll cannot answer. Null = unknowable, callers treat as focused. */
+/** Game focus on linux. A native wayland game has no X11 window, so the
+ * compositor is asked first. Null = unknowable, callers treat as focused. */
 export function isWarframeWindowFocusedLinux(): boolean | null {
+  const wayland = waylandGameFocus();
+  if (wayland !== null) return wayland;
   if (!process.env.DISPLAY) return null;
-  return isWindowFocusedByTitle(WARFRAME_WINDOW_TITLE_RE);
+  const focused = isActiveWindowMatching(isWarframeGameWindow);
+  if (focused !== false) return focused;
+  // GNOME leaves _NET_ACTIVE_WINDOW at 0 for a native wayland game, so a false
+  // only means "not focused" if the game has an X11 window to lose focus.
+  return hasX11GameWindow() ? false : null;
 }
 
+const X11_PRESENCE_TTL_MS = 10_000;
+let _x11GameWindowAt = 0;
+let _x11GameWindow = false;
+
+function hasX11GameWindow(): boolean {
+  const now = Date.now();
+  if (now - _x11GameWindowAt < X11_PRESENCE_TTL_MS) return _x11GameWindow;
+  _x11GameWindowAt = now;
+  _x11GameWindow = findWindowBoundsMatching(isWarframeGameWindow, MIN_GAME_WINDOW_EDGE_PX) !== null;
+  return _x11GameWindow;
+}
+
+/** X11 first: a window under XWayland is also visible to the wayland sources,
+ * but only X11 reports its real geometry rather than the output it covers. */
 export async function getWarframeWindowBoundsLinux(): Promise<WindowBounds | null> {
+  const own = x11GameWindowBounds();
+  if (own) return own;
+
+  // A native wayland game has no X11 window, so the compositor answers before
+  // an X11 window that merely mentions the game.
+  const wayland = await waylandGameBounds();
+  if (wayland) {
+    const { source, ...bounds } = wayland;
+    return noteGeometrySource(source, bounds);
+  }
+  return anyX11WarframeBounds();
+}
+
+function x11GameWindowBounds(): WindowBounds | null {
+  if (!process.env.DISPLAY) return null;
+  const own = findWindowBoundsMatching(isWarframeGameWindow, MIN_GAME_WINDOW_EDGE_PX);
+  return own ? noteGeometrySource("libX11", own) : null;
+}
+
+export async function getWarframeWindowBoundsX11(): Promise<WindowBounds | null> {
+  return x11GameWindowBounds() ?? (await anyX11WarframeBounds());
+}
+
+async function anyX11WarframeBounds(): Promise<WindowBounds | null> {
   if (!process.env.DISPLAY) return null;
 
   // libX11 needs nothing installed; xwininfo is the fallback because it also
   // matches WM_CLASS, which helps if the title is localised or empty.
-  const native = findWindowBoundsByTitle(WARFRAME_WINDOW_TITLE_RE, MIN_GAME_WINDOW_EDGE_PX);
+  const native = findWindowBoundsMatching(mentionsWarframe, MIN_GAME_WINDOW_EDGE_PX);
   if (native) return noteGeometrySource("libX11", native);
   if (_linuxWindowProbeUnavailable) return null;
 
@@ -433,16 +535,27 @@ export async function getWarframeWindowBoundsLinux(): Promise<WindowBounds | nul
   }
 }
 
+let lastKnownPresence: { running: boolean; at: number } | null = null;
+
+// An unknown sample must not read as an exit: it would unregister the overlay
+// hotkeys and flip warframe.market presence to invisible mid-session.
+function presenceFromSample(sampled: boolean | null): boolean {
+  if (sampled === null) return lastStatus?.processRunning ?? false;
+  lastKnownPresence = { running: sampled, at: Date.now() };
+  return sampled;
+}
+
 async function collectStatusLinux(needBounds: boolean): Promise<WarframeStatus> {
-  const processRunning = isWarframeProcessRunningLinux();
-  // Warframe is an XWayland client under Proton, so its X geometry is readable
-  // on both session types; focus itself has no portable query. The probe walks
-  // the X tree, so pollers that only read isFocused skip it.
+  const processRunning = presenceFromSample(isWarframeProcessRunningLinux());
+  // The bounds probe asks X11 and then the compositor, so pollers that only
+  // read isFocused skip it.
   const focusedWindowBounds =
     processRunning && needBounds ? await getWarframeWindowBoundsLinux() : null;
   return {
     isOpen: processRunning,
-    isFocused: processRunning,
+    // Only an answered "no" counts: nothing can ask GNOME or KDE about a native
+    // Wayland game, so there it stays focused while it runs.
+    isFocused: processRunning && isWarframeWindowFocusedLinux() !== false,
     processRunning,
     focusedProcessName: null,
     focusedWindowBounds,
@@ -461,9 +574,7 @@ async function collectStatus(
     getWarframeProcessState(forceProcessScan),
     getForegroundWindowInfo(),
   ]);
-  // An unknown sample must not read as an exit: it would unregister the overlay
-  // hotkeys and flip warframe.market presence to invisible mid-session.
-  const processRunning = sampledRunning ?? lastStatus?.processRunning ?? false;
+  const processRunning = presenceFromSample(sampledRunning);
 
   const focusedProcessName = foregroundWindow?.processName || null;
   const isFocused = isWarframeProcessName(focusedProcessName);
@@ -480,6 +591,20 @@ async function collectStatus(
     focusedDisplayId,
     checkedAt: Date.now(),
   };
+}
+
+// The hotkey gate polls getStatus every 3s for the whole app lifetime; beyond
+// this the last reading is treated as unknown rather than as an exit.
+const RUNNING_CACHE_MAX_AGE_MS = 30_000;
+
+/** Last polled presence of the game, sampling nothing: callers on the
+ *  notification path must not trigger a process scan. Null = unknown, which
+ *  never means the game is closed. */
+export function isWarframeRunningCached(): boolean | null {
+  if (!lastKnownPresence || Date.now() - lastKnownPresence.at > RUNNING_CACHE_MAX_AGE_MS) {
+    return null;
+  }
+  return lastKnownPresence.running;
 }
 
 /** `keepProcessSample` leaves the process scan on its own TTL even under `force`. */

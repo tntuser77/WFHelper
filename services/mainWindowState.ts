@@ -89,10 +89,11 @@ export function loadMainWindowState(min: MinWindowSize): MainWindowState | null 
   return fitted ? { ...fitted, maximized: raw.maximized } : null;
 }
 
-export function saveMainWindowState(win: BrowserWindow): void {
+export function saveMainWindowState(win: BrowserWindow, maximizePending = false): void {
   if (win.isDestroyed()) return;
   try {
-    const state: MainWindowState = { ...win.getNormalBounds(), maximized: win.isMaximized() };
+    const maximized = win.isMaximized() || maximizePending;
+    const state: MainWindowState = { ...win.getNormalBounds(), maximized };
     stateCache.write(state);
   } catch (err) {
     log.warn("[Main] window state save failed:", err);

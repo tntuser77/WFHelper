@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import { OVERLAY_CONTENT_VISIBLE } from "../../config/shared/ipcChannels";
+import {
+  OVERLAY_CONTENT_VISIBLE,
+  RELIC_REWARD_ITEMS,
+  RELIC_REWARD_TRIGGER,
+} from "../../config/shared/ipcChannels";
 
+import { createOverlayScanController } from "../../ipc/overlay/scan";
 import {
   createOverlayWindowBoundsChangeHandler,
   createOverlayWindowsController,
@@ -13,6 +18,13 @@ import type {
   OverlaySettings,
   OverlayWindowKey,
 } from "../../config/runtime/overlaySettings";
+
+const ocrHealth = vi.hoisted(() => ({ available: true, reason: null as string | null }));
+
+vi.mock("../../services/ocrServer", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../services/ocrServer")>()),
+  getWindowsOcrHealth: () => ({ ...ocrHealth }),
+}));
 
 function createController(overlaySettings: Record<string, unknown> = {}) {
   const display = {
@@ -233,6 +245,9 @@ describe("first-load zoom", () => {
       isFocused() {
         return false;
       }
+      isFocusable() {
+        return false;
+      }
       setFocusable() {}
       setIgnoreMouseEvents() {}
       loadFile() {
@@ -299,6 +314,7 @@ function createPresentationProbe(options: {
   persistBoundsWhenPassive?: boolean;
   onWindowBoundsChanged?: (key: OverlayWindowKey, bounds: OverlaySavedWindowBounds) => void;
   canRaise?: () => boolean;
+  onPresentationEnd?: () => void;
 }) {
   const display = {
     id: 1,
@@ -352,7 +368,11 @@ function createPresentationProbe(options: {
       this.focused = false;
     });
     isFocused = vi.fn(() => this.focused);
-    setFocusable = vi.fn();
+    focusable = false;
+    setFocusable = vi.fn((value: boolean) => {
+      this.focusable = value;
+    });
+    isFocusable = vi.fn(() => this.focusable);
     setIgnoreMouseEvents = vi.fn();
     setSkipTaskbar = vi.fn();
     setVisibleOnAllWorkspaces = vi.fn();
@@ -399,6 +419,7 @@ function createPresentationProbe(options: {
     persistBoundsWhenPassive: options.persistBoundsWhenPassive === true,
     onWindowBoundsChanged: options.onWindowBoundsChanged,
     canRaise: options.canRaise,
+    onPresentationEnd: options.onPresentationEnd,
   });
 
   const contentEvents = (win: FakePresentationWindow) =>
@@ -598,11 +619,71 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
 
     expect(contentEvents(win).at(-1)).toEqual([OVERLAY_CONTENT_VISIBLE, false]);
     expect(win.setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
-    expect(win.setFocusable).toHaveBeenLastCalledWith(false);
+    expect(win.isFocusable()).toBe(false);
     expect(ctx.overlayInteractiveMode).toBe(options.interactive);
     controller.showOverlayWindowInactive();
     expect(contentEvents(win).at(-1)).toEqual([OVERLAY_CONTENT_VISIBLE, true]);
-    expect(win.setFocusable).toHaveBeenLastCalledWith(options.interactive);
+    expect(win.setIgnoreMouseEvents).toHaveBeenLastCalledWith(
+      !(options.interactive || options.neverClickThrough),
+    );
+    expect(win.isFocusable()).toBe(false);
+  });
+
+  it("hides for unfocus and restores on refocus", () => {
+    const { controller, windows, contentEvents } = createPresentationProbe({
+      platform: "linux",
+      nativeWayland: true,
+    });
+
+    controller.createOverlayWindow();
+    controller.markRendererReady(1);
+    expect(controller.hideForUnfocus()).toBe(true);
+    expect(controller.isOverlayWindowVisible()).toBe(false);
+    expect(controller.isHiddenByUnfocus()).toBe(true);
+    expect(contentEvents(windows[0]).at(-1)).toEqual([OVERLAY_CONTENT_VISIBLE, false]);
+
+    expect(controller.restoreAfterUnfocus()).toBe(true);
+    expect(controller.isOverlayWindowVisible()).toBe(true);
+    expect(controller.isHiddenByUnfocus()).toBe(false);
+    expect(controller.restoreAfterUnfocus()).toBe(false);
+  });
+
+  it("does not restore an overlay that was hidden for good meanwhile", () => {
+    const { controller } = createPresentationProbe({ platform: "linux", nativeWayland: true });
+
+    controller.createOverlayWindow();
+    controller.markRendererReady(1);
+    controller.hideForUnfocus();
+    controller.hideOverlayWindow();
+
+    expect(controller.isHiddenByUnfocus()).toBe(false);
+    expect(controller.restoreAfterUnfocus()).toBe(false);
+    expect(controller.isOverlayWindowVisible()).toBe(false);
+  });
+
+  it("does not restore an overlay whose auto-hide passed while it was unfocused", () => {
+    vi.useFakeTimers();
+    const { controller } = createPresentationProbe({ platform: "linux", nativeWayland: true });
+
+    controller.createOverlayWindow();
+    controller.markRendererReady(1);
+    controller.scheduleOverlayAutoHide(500);
+    controller.hideForUnfocus();
+    vi.advanceTimersByTime(600);
+
+    expect(controller.restoreAfterUnfocus()).toBe(false);
+    expect(controller.isOverlayWindowVisible()).toBe(false);
+  });
+
+  it("leaves an overlay in interactive mode alone on unfocus", () => {
+    const { controller, ctx } = createPresentationProbe({ platform: "linux", nativeWayland: true });
+
+    controller.createOverlayWindow();
+    controller.markRendererReady(1);
+    ctx.overlayInteractiveMode = true;
+
+    expect(controller.hideForUnfocus()).toBe(false);
+    expect(controller.isOverlayWindowVisible()).toBe(true);
   });
 
   it("auto-hide uses the logical hide path", () => {
@@ -632,7 +713,7 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
     controller.createOverlayWindow();
     controller.markRendererReady(1);
     const win = windows[0];
-    controller.setOverlayInteractiveMode(true);
+    controller.setOverlayInteractiveMode(true, { focus: true });
     win.blur.mockClear();
 
     controller.hideOverlayWindow();
@@ -651,7 +732,7 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
     controller.markRendererReady(1);
     const win = windows[0];
 
-    controller.setOverlayInteractiveMode(true);
+    controller.setOverlayInteractiveMode(true, { focus: true });
     expect(win.setFocusable).toHaveBeenCalledWith(true);
     expect(win.focus).toHaveBeenCalledTimes(1);
 
@@ -815,7 +896,7 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
 
     expect(ctx.overlayInteractiveMode).toBe(true);
     expect(win.setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
-    expect(win.setFocusable).toHaveBeenLastCalledWith(false);
+    expect(win.isFocusable()).toBe(false);
     expect(win.focus).not.toHaveBeenCalled();
   });
 
@@ -831,10 +912,10 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
 
     expect(controller.isOverlayWindowVisible()).toBe(false);
     expect(windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
-    expect(windows[0].setFocusable).toHaveBeenLastCalledWith(false);
+    expect(windows[0].isFocusable()).toBe(false);
   });
 
-  it("re-asserts the interactive mode when a hidden window is shown again", () => {
+  it("re-shows a hidden interactive window clickable but never focusable or focused", () => {
     const { controller, windows } = createPresentationProbe({
       platform: "win32",
       nativeWayland: false,
@@ -848,8 +929,37 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
     win.focus.mockClear();
 
     controller.showOverlayWindowInactive();
+    controller.createOverlayWindow();
+    controller.setOverlayInteractiveMode(true);
+    controller.markRendererReady(1);
 
-    expect(win.focus).toHaveBeenCalledTimes(1);
+    expect(win.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
+    expect(win.setFocusable).not.toHaveBeenCalled();
+    expect(win.focus).not.toHaveBeenCalled();
+  });
+
+  it("makes a window focusable only on the hotkey's request, then focuses it", () => {
+    const { controller, windows } = createPresentationProbe({
+      platform: "win32",
+      nativeWayland: false,
+    });
+
+    controller.createOverlayWindow();
+    controller.markRendererReady(1);
+    const win = windows[0];
+    controller.setOverlayInteractiveMode(true);
+    expect(win.setFocusable).not.toHaveBeenCalled();
+
+    controller.setOverlayInteractiveMode(true, { focus: true });
+    expect(win.setFocusable).toHaveBeenCalledExactlyOnceWith(true);
+    expect(win.focus).toHaveBeenCalledOnce();
+    expect(win.setFocusable.mock.invocationCallOrder[0]).toBeLessThan(
+      win.focus.mock.invocationCallOrder[0]!,
+    );
+
+    controller.hideOverlayWindow();
+    controller.showOverlayWindowInactive();
+    expect(win.isFocusable()).toBe(false);
   });
 
   it("rebuilds a click-through window before it goes interactive on linux", () => {
@@ -877,6 +987,52 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
     expect(fresh.webContents.send).toHaveBeenCalledWith("relic-reward-items", [
       { name: "Forma Blueprint" },
     ]);
+  });
+
+  it("shows an interactive linux window again without a rebuild", () => {
+    const { controller, windows, ctx } = createPresentationProbe({
+      platform: "linux",
+      nativeWayland: false,
+    });
+    ctx.overlayInteractiveMode = true;
+
+    controller.createOverlayWindow();
+    controller.hideOverlayWindow();
+    controller.createOverlayWindow({ show: false });
+    controller.showOverlayWindowInactive();
+
+    expect(windows).toHaveLength(1);
+    expect(windows[0].setIgnoreMouseEvents).not.toHaveBeenCalledWith(true);
+    expect(controller.isOverlayWindowVisible()).toBe(true);
+  });
+
+  it("shows a pre-warmed interactive linux window without a rebuild", () => {
+    const { controller, windows, ctx } = createPresentationProbe({
+      platform: "linux",
+      nativeWayland: false,
+    });
+    ctx.overlayInteractiveMode = true;
+
+    controller.createOverlayWindow({ show: false });
+    controller.markRendererReady(1);
+    controller.showOverlayWindowInactive();
+
+    expect(windows).toHaveLength(1);
+    expect(windows[0].setIgnoreMouseEvents).not.toHaveBeenCalledWith(true);
+  });
+
+  it("still makes a hidden passive linux window click-through", () => {
+    const { controller, windows } = createPresentationProbe({
+      platform: "linux",
+      nativeWayland: false,
+    });
+
+    controller.createOverlayWindow();
+    controller.hideOverlayWindow();
+    windows[0].setIgnoreMouseEvents.mockClear();
+    controller.createOverlayWindow({ show: false });
+
+    expect(windows[0].setIgnoreMouseEvents).toHaveBeenCalledWith(true);
   });
 
   it("ignores a late closed event from the window the rebuild replaced", () => {
@@ -1056,12 +1212,11 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
     controller.createOverlayWindow();
     controller.hideOverlayWindow();
     windows[0].setIgnoreMouseEvents.mockClear();
-    windows[0].setFocusable.mockClear();
 
     controller.markRendererReady(1);
 
     expect(windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
-    expect(windows[0].setFocusable).toHaveBeenLastCalledWith(false);
+    expect(windows[0].isFocusable()).toBe(false);
   });
 
   it("restores clicks when a visible never-click-through window reports ready", () => {
@@ -1128,16 +1283,43 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
     controller.markRendererReady(1);
     const win = windows[0];
     win.setIgnoreMouseEvents.mockClear();
-    win.blur.mockClear();
 
     controller.hideOverlayWindow();
 
     expect(contentEvents(win).at(-1)).toEqual([OVERLAY_CONTENT_VISIBLE, false]);
     expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true);
-    expect(win.blur).toHaveBeenCalledTimes(1);
-    expect(win.setFocusable).toHaveBeenLastCalledWith(false);
+    expect(win.isFocusable()).toBe(false);
     expect(win.isVisible()).toBe(true);
     expect(controller.isOverlayWindowVisible()).toBe(false);
+  });
+
+  // Each blur() or setFocusable(false) on a mapped window is a SetForegroundWindow on
+  // the window below it, so a passive overlay must never make either call.
+  it("shows and hides a passive Windows overlay without blur or a focusable flip", () => {
+    vi.useFakeTimers();
+    const { controller, windows } = createPresentationProbe({
+      platform: "win32",
+      nativeWayland: false,
+    });
+
+    controller.createOverlayWindow();
+    controller.markRendererReady(1);
+    const win = windows[0];
+    for (let crack = 0; crack < 3; crack += 1) {
+      controller.hideOverlayWindow();
+      controller.createOverlayWindow();
+      controller.setOverlayInteractiveMode(false);
+      controller.scheduleOverlayAutoHide(500);
+      vi.advanceTimersByTime(600);
+      controller.showOverlayWindowInactive();
+      controller.markRendererReady(1);
+    }
+    controller.hideForUnfocus();
+    controller.restoreAfterUnfocus();
+
+    expect(win.blur).not.toHaveBeenCalled();
+    expect(win.setFocusable).not.toHaveBeenCalled();
+    expect(win.focus).not.toHaveBeenCalled();
   });
 
   it("takes clicks on Windows without rebuilding the window", () => {
@@ -1150,7 +1332,7 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
     controller.markRendererReady(1);
     const win = windows[0];
 
-    controller.setOverlayInteractiveMode(true);
+    controller.setOverlayInteractiveMode(true, { focus: true });
 
     expect(win.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
     expect(win.setFocusable).toHaveBeenLastCalledWith(true);
@@ -1209,6 +1391,187 @@ describe("keep-mapped presentation mode (Windows and native Wayland)", () => {
     controller.setOverlayInteractiveMode(false);
 
     expect(win.showInactive.mock.calls.length).toBe(showsBefore + 1);
+  });
+});
+
+describe("presentation end", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function probe() {
+    const onPresentationEnd = vi.fn();
+    return {
+      onPresentationEnd,
+      ...createPresentationProbe({ platform: "win32", nativeWayland: false, onPresentationEnd }),
+    };
+  }
+
+  it("reports a dismiss and an auto-hide of a shown overlay once each", () => {
+    vi.useFakeTimers();
+    const { controller, onPresentationEnd } = probe();
+    controller.createOverlayWindow();
+    controller.markRendererReady(1);
+
+    controller.hideOverlayWindow();
+    controller.hideOverlayWindow();
+    expect(onPresentationEnd).toHaveBeenCalledTimes(1);
+
+    controller.createOverlayWindow();
+    controller.scheduleOverlayAutoHide(500);
+    vi.advanceTimersByTime(600);
+    expect(onPresentationEnd).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not report unfocus or transient hides", () => {
+    const { controller, onPresentationEnd } = probe();
+    controller.createOverlayWindow();
+    controller.markRendererReady(1);
+
+    controller.hideForUnfocus();
+    controller.restoreAfterUnfocus();
+    controller.hideOverlayWindow({ transient: true });
+
+    expect(onPresentationEnd).not.toHaveBeenCalled();
+    expect(controller.isOverlayWindowVisible()).toBe(false);
+  });
+});
+
+describe("automatic reward scan outcomes", () => {
+  type Status = { isOpen: boolean; isFocused: boolean; focusedDisplayId?: string | null };
+  type Scan = { items: unknown[]; meta: Record<string, unknown> };
+
+  const focused: Status = { isOpen: true, isFocused: true, focusedDisplayId: "1" };
+  const noLayout: Scan = { items: [], meta: { layoutCount: 0 } };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    Object.assign(ocrHealth, { available: true, reason: null });
+    vi.useRealTimers();
+  });
+
+  function afterShownRound(
+    scan: Scan | (() => Scan),
+    status: Status,
+    settings: Record<string, unknown> = {},
+  ) {
+    const probe = createPresentationProbe({ platform: "win32", nativeWayland: false });
+    probe.ctx.overlaySettings = {
+      autoTriggerEnabled: true,
+      warframeUiScaleAuto: false,
+      ...settings,
+    } as OverlaySettings;
+    const scanController = createOverlayScanController({
+      log: { info: () => {}, warn: () => {}, error: () => {} },
+      rewardScanner: {
+        scanRewardsDetailed: async () => (typeof scan === "function" ? scan() : scan),
+      },
+      ctx: probe.ctx,
+      windows: probe.controller,
+      warframeStatus: { getStatus: async () => status },
+    });
+    probe.controller.createOverlayWindow();
+    probe.controller.markRendererReady(1);
+    probe.controller.sendOverlayEvent(RELIC_REWARD_ITEMS, [{ name: "Last Round Prime Barrel" }]);
+    probe.controller.hideOverlayWindow();
+    const win = probe.windows[0];
+    win.webContents.send.mockClear();
+    return { ...probe, scanController, win };
+  }
+
+  it.each([
+    {
+      label: "unread cards",
+      scan: { items: [], meta: { layoutCount: 4 } },
+      ocrMissing: false,
+      settleMs: 5_000,
+      sent: [],
+    },
+    {
+      label: "Windows OCR missing",
+      scan: { items: [], meta: { layoutCount: 4 } },
+      ocrMissing: true,
+      settleMs: 5_000,
+      sent: { items: [], failureReason: "ocr-unavailable" },
+    },
+  ])("an EE.log scan with $label shows its hint, not the last round's cards", async (c) => {
+    if (c.ocrMissing) Object.assign(ocrHealth, { available: false, reason: "fixture" });
+    const { controller, scanController, win } = afterShownRound(c.scan, focused);
+
+    scanController.onRelicRewardTrigger("eelog");
+    expect(controller.isOverlayWindowVisible()).toBe(false);
+    await vi.advanceTimersByTimeAsync(c.settleMs);
+
+    expect(controller.isOverlayWindowVisible()).toBe(true);
+    const channels = win.webContents.send.mock.calls.map(([channel]) => channel);
+    expect(channels.indexOf(RELIC_REWARD_TRIGGER)).toBeGreaterThanOrEqual(0);
+    expect(channels.indexOf(RELIC_REWARD_TRIGGER)).toBeLessThan(
+      channels.indexOf(OVERLAY_CONTENT_VISIBLE),
+    );
+    expect(win.webContents.send).toHaveBeenLastCalledWith(RELIC_REWARD_ITEMS, c.sent);
+  });
+
+  it.each([
+    { label: "Warframe is closed", status: { isOpen: false, isFocused: false }, settings: {} },
+    {
+      label: "no game display has focus",
+      status: { isOpen: true, isFocused: false, focusedDisplayId: null },
+      settings: {},
+    },
+    { label: "auto scans are off", status: focused, settings: { autoTriggerEnabled: false } },
+    { label: "a plain pause shows no reward layout", status: focused, settings: {} },
+  ])("an EE.log trigger stays hidden when $label", async ({ status, settings }) => {
+    const { controller, scanController } = afterShownRound(noLayout, status, settings);
+
+    scanController.onRelicRewardTrigger("eelog");
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(controller.isOverlayWindowVisible()).toBe(false);
+  });
+
+  it("an EE.log scan whose reward screen closes mid-read shows the hint, not part of the set", async () => {
+    const reads: Scan[] = [
+      {
+        items: [{ name: "Axi A1 Relic" }, { name: "Lith B2 Relic" }],
+        meta: { layoutCount: 1, cardCount: 4 },
+      },
+    ];
+    const { controller, scanController, win } = afterShownRound(
+      () => reads.shift() ?? noLayout,
+      focused,
+    );
+
+    scanController.onRelicRewardTrigger("eelog");
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(controller.isOverlayWindowVisible()).toBe(true);
+    expect(win.webContents.send).toHaveBeenLastCalledWith(RELIC_REWARD_ITEMS, []);
+  });
+
+  it("an EE.log trigger stays hidden when one layout sighting read nothing before it vanished", async () => {
+    const reads: Scan[] = [{ items: [], meta: { layoutCount: 1 } }];
+    const { controller, scanController } = afterShownRound(
+      () => reads.shift() ?? noLayout,
+      focused,
+    );
+
+    scanController.onRelicRewardTrigger("eelog");
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(controller.isOverlayWindowVisible()).toBe(false);
+  });
+
+  it("an EE.log plain pause with Windows OCR missing stays hidden", async () => {
+    Object.assign(ocrHealth, { available: false, reason: "fixture" });
+    const { controller, scanController } = afterShownRound(noLayout, focused);
+
+    scanController.onRelicRewardTrigger("eelog");
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(controller.isOverlayWindowVisible()).toBe(false);
   });
 });
 
@@ -1390,6 +1753,7 @@ function createResizeProbe(
     isDestroyed = vi.fn(() => false);
     isVisible = vi.fn(() => false);
     isFocused = vi.fn(() => false);
+    isFocusable = vi.fn(() => false);
     showInactive = vi.fn();
     moveTop = vi.fn();
     hide = vi.fn();
@@ -1483,6 +1847,17 @@ describe("overlay resize", () => {
     vi.advanceTimersByTime(300);
     expect(probe.window().getBounds().height).toBe(236);
     expect(probe.saves.every((bounds) => bounds.width == null && bounds.height == null)).toBe(true);
+  });
+
+  it("saves a drag still pending when the overlay hides and leaves interactive mode", () => {
+    const probe = createResizeProbe(236);
+    probe.moveTo(350, 450);
+
+    probe.controller.hideOverlayWindow();
+    probe.ctx.overlayInteractiveMode = false;
+    vi.advanceTimersByTime(300);
+
+    expect(probe.saves.at(-1)).toMatchObject({ x: 350, y: 450 });
   });
 
   it.each(["width", "height"] as const)("preserves manually saved %s", (dimension) => {

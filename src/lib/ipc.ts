@@ -1,4 +1,5 @@
 import type { IpcEventMap, IpcInvokeMap, IpcSendMap } from "../types/ipc.js";
+import type { RelicOverlayFilterPush } from "../../config/shared/relicPlannerView.js";
 import type { Translator } from "./i18n.js";
 
 type InvokeKey = keyof IpcInvokeMap;
@@ -6,6 +7,7 @@ type TradeInvokeKey =
   | "wfmCreateOrder"
   | "wfmUpdateOrder"
   | "wfmDeleteOrder"
+  | "wfmCloseOrder"
   | "wfmSetVisible"
   | "wfmSetStatus"
   | "createRivenAuction"
@@ -86,6 +88,8 @@ const eventApiMap: Record<
     ),
   "item-db-updated": (cb) =>
     window.api.onItemDbUpdated(cb as (data: IpcEventMap["item-db-updated"]) => void),
+  "relic-db-updated": (cb) =>
+    window.api.onRelicDbUpdated(cb as (data: IpcEventMap["relic-db-updated"]) => void),
   "app-update-status": (cb) =>
     window.api.onAppUpdateStatus(cb as (state: IpcEventMap["app-update-status"]) => void),
   "wfm:notification": (cb) =>
@@ -101,6 +105,10 @@ const eventApiMap: Record<
   "arbi-open-run": (cb) =>
     window.api.onArbiOpenRun(cb as (runId: IpcEventMap["arbi-open-run"]) => void),
   "pt-run-saved": (cb) => window.api.onPtRunSaved(cb as (run: IpcEventMap["pt-run-saved"]) => void),
+  "mission-rewards-updated": (cb) =>
+    window.api.onMissionRewardsUpdated(
+      cb as (payload: IpcEventMap["mission-rewards-updated"]) => void,
+    ),
   "level-cap-updated": (cb) =>
     window.api.onLevelCapUpdated(cb as (p: IpcEventMap["level-cap-updated"]) => void),
   "level-cap-hotkey": (cb) =>
@@ -109,6 +117,8 @@ const eventApiMap: Record<
     window.api.onWarframeUiScaleUpdated(
       cb as (scale: IpcEventMap["warframe-ui-scale-updated"]) => void,
     ),
+  "riven-similar-auctions": (cb) =>
+    window.api.onRivenSimilarAuctions(cb as (shown: IpcEventMap["riven-similar-auctions"]) => void),
   "notification-history-added": (cb) =>
     window.api.onNotificationHistoryAdded(
       cb as (entry: IpcEventMap["notification-history-added"]) => void,
@@ -144,7 +154,7 @@ const sendApiMap: Record<SendChannel, (...args: never[]) => void> = {
     window.api.updateOverlayTheme(themeVars),
   "overlay-locale-updated": (locale: string) => window.api.updateOverlayLocale(locale),
   "game-locale-updated": (locale: string) => window.api.updateGameLocale(locale),
-  "overlay:push-relic-filters": (filters: { squadSize: number; tierFilter: string | null }) =>
+  "overlay:push-relic-filters": (filters: RelicOverlayFilterPush) =>
     window.api.pushRelicFilters(filters),
   "open-external": (url: string) => window.api.openExternal(url),
 };

@@ -6,6 +6,7 @@ import { safeStorage } from "electron";
 
 import { createJsonCache } from "./jsonCache";
 import { withScope } from "./logger";
+import { isWarframeRunningCached } from "./warframeStatus";
 import { normalizeErrorMessage } from "../config/shared/errors";
 import { withAbortTimeout } from "../config/shared/fetchWithTimeout";
 import {
@@ -16,6 +17,7 @@ import {
 import type {
   NotificationChannelState,
   NotificationSource,
+  SetDiscordPingResult,
   SetWebhookResult,
   SourceChannelToggles,
   WebhookChannel,
@@ -34,6 +36,7 @@ const MAX_SEND_ATTEMPTS = 3;
 const MAX_RETRY_DELAY_MS = 60_000;
 const DEFAULT_RETRY_DELAY_MS = 1_000;
 const DISCORD_CONTENT_LIMIT = 2_000;
+const DISCORD_USER_ID = /^[0-9]{17,20}$/;
 
 export interface NotificationDispatch {
   source: NotificationSource;
@@ -48,6 +51,24 @@ export type ValidatedWebhookUrl = { ok: true; url: string } | { ok: false; error
 interface StoredChannelConfig {
   webhooks: Partial<Record<WebhookChannel, string>>;
   sources: Record<NotificationSource, SourceChannelToggles>;
+  nativeOnlyWhileGameRunning: boolean;
+  discordPingUserId: string;
+}
+
+function emptyConfig(): StoredChannelConfig {
+  return {
+    webhooks: {},
+    sources: defaultSources(),
+    nativeOnlyWhileGameRunning: false,
+    discordPingUserId: "",
+  };
+}
+
+/** Empty clears the ping; null is anything that is not a Discord user ID. */
+function parseDiscordUserId(raw: string): string | null {
+  const text = raw.trim();
+  if (!text) return "";
+  return DISCORD_USER_ID.test(text) ? text : null;
 }
 
 function byChannel<T>(make: () => T): Record<WebhookChannel, T> {
@@ -106,10 +127,11 @@ function encryptWebhooks(
   webhooks: Partial<Record<WebhookChannel, string>>,
 ): Partial<Record<WebhookChannel, string>> {
   const out: Partial<Record<WebhookChannel, string>> = {};
-  const available = encryptionAvailable();
+  let available: boolean | undefined;
   for (const channel of WEBHOOK_CHANNELS) {
     const url = webhooks[channel];
     if (!url) continue;
+    available ??= encryptionAvailable();
     if (!available) {
       log.warn(`[Channels] safeStorage unavailable - ${channel} webhook not persisted to disk`);
       continue;
@@ -130,7 +152,13 @@ function encryptWebhooks(
 function reviveConfig(parsed: unknown): StoredChannelConfig | null {
   if (!parsed || typeof parsed !== "object") return null;
   const raw = parsed as Record<string, unknown>;
-  const config: StoredChannelConfig = { webhooks: {}, sources: defaultSources() };
+  const config = emptyConfig();
+  if (typeof raw.nativeOnlyWhileGameRunning === "boolean") {
+    config.nativeOnlyWhileGameRunning = raw.nativeOnlyWhileGameRunning;
+  }
+  if (typeof raw.discordPingUserId === "string") {
+    config.discordPingUserId = parseDiscordUserId(raw.discordPingUserId) ?? "";
+  }
 
   const webhooks = raw.webhooks;
   if (webhooks && typeof webhooks === "object") {
@@ -169,14 +197,21 @@ const cache = createJsonCache<StoredChannelConfig>("notification-channels.json",
 let config: StoredChannelConfig | null = null;
 
 function load(): StoredChannelConfig {
-  if (!config) config = cache.read() ?? { webhooks: {}, sources: defaultSources() };
+  if (!config) config = cache.read() ?? emptyConfig();
   return config;
 }
 
 // Every write re-encrypts the whole map, so a legacy plaintext file is upgraded
 // by the next settings change.
 function persist(): void {
-  if (config) cache.write({ webhooks: encryptWebhooks(config.webhooks), sources: config.sources });
+  if (config) {
+    cache.write({
+      webhooks: encryptWebhooks(config.webhooks),
+      sources: config.sources,
+      nativeOnlyWhileGameRunning: config.nativeOnlyWhileGameRunning,
+      discordPingUserId: config.discordPingUserId,
+    });
+  }
 }
 
 export function maskWebhookUrl(raw: string): string {
@@ -197,7 +232,12 @@ export function getChannelState(): NotificationChannelState {
   }
   const sources = {} as Record<NotificationSource, SourceChannelToggles>;
   for (const source of NOTIFICATION_SOURCES) sources[source] = { ...current.sources[source] };
-  return { webhooks, sources };
+  return {
+    webhooks,
+    sources,
+    nativeOnlyWhileGameRunning: current.nativeOnlyWhileGameRunning,
+    discordPingUserId: current.discordPingUserId,
+  };
 }
 
 const BLOCKED_HOSTNAMES: ReadonlySet<string> = new Set([
@@ -378,10 +418,12 @@ function buildBody(channel: WebhookChannel, payload: NotificationDispatch, at: s
     const title = payload.title.trim();
     const body = payload.body.trim();
     const content = body ? `**${title}**\n${body}` : `**${title}**`;
-    // Item and player names reach Discord verbatim, so nothing in them may ping.
+    const userId = load().discordPingUserId;
+    const mention = userId ? `<@${userId}> ` : "";
+    // Item and player names reach Discord verbatim, so only the configured user may be pinged.
     return JSON.stringify({
-      content: content.slice(0, DISCORD_CONTENT_LIMIT),
-      allowed_mentions: { parse: [] },
+      content: mention + content.slice(0, DISCORD_CONTENT_LIMIT - mention.length),
+      allowed_mentions: userId ? { parse: [], users: [userId] } : { parse: [] },
     });
   }
   const generic: Record<string, unknown> = {
@@ -529,12 +571,28 @@ function enqueue(channel: WebhookChannel, body: string): void {
   });
 }
 
+let nativeHoldLogged = false;
+
+/** Desktop delivery only. An unknown game state delivers: a failed or missing
+ *  reading must not silence notifications. */
+function holdNative(): boolean {
+  if (!load().nativeOnlyWhileGameRunning || isWarframeRunningCached() !== false) {
+    nativeHoldLogged = false;
+    return false;
+  }
+  if (!nativeHoldLogged) {
+    nativeHoldLogged = true;
+    log.info("[Channels] Warframe is not running - holding desktop notifications");
+  }
+  return true;
+}
+
 /** Routes one notification. `deliverNative` is the caller's existing desktop
  *  path and runs synchronously, so a dead or slow webhook cannot delay it. */
 export function dispatch(payload: NotificationDispatch, deliverNative?: () => void): void {
   const routes = load().sources[payload.source] ?? DEFAULT_SOURCE_CHANNELS[payload.source];
 
-  if (routes.native && deliverNative) {
+  if (routes.native && deliverNative && !holdNative()) {
     try {
       deliverNative();
     } catch (err) {
@@ -576,6 +634,22 @@ export function setSourceChannels(
   toggles: SourceChannelToggles,
 ): NotificationChannelState {
   load().sources[source] = { native: toggles.native, webhook: toggles.webhook };
+  persist();
+  return getChannelState();
+}
+
+export function setDiscordPingUserId(raw: string): SetDiscordPingResult {
+  const userId = parseDiscordUserId(raw);
+  if (userId === null) return { ok: false, error: "invalid-user-id" };
+  load().discordPingUserId = userId;
+  persist();
+  log.info(`[Channels] discord ping ${userId ? "set" : "cleared"}`);
+  return { ok: true, state: getChannelState() };
+}
+
+export function setNativeOnlyWhileGameRunning(enabled: boolean): NotificationChannelState {
+  load().nativeOnlyWhileGameRunning = enabled;
+  nativeHoldLogged = false;
   persist();
   return getChannelState();
 }

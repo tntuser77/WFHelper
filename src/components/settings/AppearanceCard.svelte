@@ -8,72 +8,68 @@
   import FontSizeSection from "./FontSizeSection.svelte";
   import AppScaleSection from "./AppScaleSection.svelte";
   import ThemedControlCard from "../ThemedControlCard.svelte";
+  import SettingsSection from "./SettingsSection.svelte";
 
-  const panelClass =
-    "w-full rounded-[var(--radius-xl)] border border-[var(--ui-panel-border)] bg-[var(--ui-panel-bg)] p-4 shadow-[var(--ui-panel-shadow)] [backdrop-filter:var(--ui-backdrop-blur)]";
+  export let section: "theme" | "colors";
 
   $: contrastSafe = $themeSettings.contrastSafeMode;
 </script>
 
-<!-- Clear sibling card stacking contexts. -->
-<article class="appearance-card relative z-20 {panelClass}">
-  <div class="mb-2.5">
-    <h3
-      class="m-0 mb-1.5 font-display text-[var(--font-heading-size,0.95rem)] font-semibold tracking-[0.03em] text-text-primary"
-    >
-      {$tr("common.appearance")}
-    </h3>
-    <p class="m-0 text-[var(--font-small-size,0.82rem)] text-text-secondary">
-      {$tr("appearance.description")}
-    </p>
-  </div>
-  <PresetSelector />
-</article>
+{#if section === "theme"}
+  <!-- Clear sibling card stacking contexts. -->
+  <SettingsSection class="appearance-card relative z-20">
+    <PresetSelector />
 
-<article class="appearance-card {panelClass}">
-  <StyleSection />
-</article>
+    <div class="flex flex-wrap gap-1.5">
+      <button class="btn-danger btn-sm" on:click={() => themeSettings.resetAll()}>
+        {$tr("appearance.restoreAll")}
+      </button>
+    </div>
+  </SettingsSection>
 
-<article class="appearance-card {panelClass}">
-  <ColorSection />
-  <ViewOverridesSection />
-</article>
+  <SettingsSection class="appearance-card">
+    <StyleSection />
+  </SettingsSection>
 
-<article class="appearance-card {panelClass}">
-  <AppScaleSection />
-  <FontSizeSection />
+  <SettingsSection class="appearance-card">
+    <AppScaleSection />
+    <FontSizeSection />
+  </SettingsSection>
+{:else}
+  <SettingsSection class="appearance-card">
+    <ColorSection />
 
-  <div class="appearance-section">
-    <ThemedControlCard as="label">
-      <span class="text-text-secondary text-xs font-medium">
-        {$tr("appearance.contrastSafeMode")}
-        <span class="block text-xs text-text-muted font-normal mt-0.5"
-          >{$tr("appearance.contrastSafeModeHint")}</span
-        >
-      </span>
-      <input
-        type="checkbox"
-        checked={contrastSafe}
-        on:change={(e) => themeSettings.setContrastSafeMode((e.target as HTMLInputElement).checked)}
-      />
-    </ThemedControlCard>
-  </div>
+    <div class="appearance-section">
+      <ThemedControlCard as="label">
+        <span class="text-text-secondary text-xs font-medium">
+          {$tr("appearance.contrastSafeMode")}
+          <span class="block text-xs text-text-muted font-normal mt-0.5"
+            >{$tr("appearance.contrastSafeModeHint")}</span
+          >
+        </span>
+        <input
+          type="checkbox"
+          checked={contrastSafe}
+          on:change={(e) =>
+            themeSettings.setContrastSafeMode((e.target as HTMLInputElement).checked)}
+        />
+      </ThemedControlCard>
+    </div>
+  </SettingsSection>
 
-  <div class="flex flex-wrap gap-1.5">
-    <button class="btn-danger btn-sm" on:click={() => themeSettings.resetAll()}>
-      {$tr("appearance.restoreAll")}
-    </button>
-  </div>
-</article>
+  <SettingsSection class="appearance-card">
+    <ViewOverridesSection />
+  </SettingsSection>
+{/if}
 
 <style>
-  .appearance-card :global(.appearance-section) {
+  :global(.appearance-card .appearance-section) {
     margin-bottom: 0.75rem;
   }
-  .appearance-card :global(.appearance-section:last-child) {
+  :global(.appearance-card .appearance-section:last-child) {
     margin-bottom: 0;
   }
-  .appearance-card :global(.appearance-section-label) {
+  :global(.appearance-card .appearance-section-label) {
     margin: 0 0 0.35rem;
     font-family: var(--font-display);
     font-size: 0.85rem;
@@ -81,7 +77,7 @@
     letter-spacing: 0.03em;
     color: var(--text-primary);
   }
-  .appearance-card :global(.appearance-section-head) {
+  :global(.appearance-card .appearance-section-head) {
     display: flex;
     align-items: center;
     justify-content: space-between;

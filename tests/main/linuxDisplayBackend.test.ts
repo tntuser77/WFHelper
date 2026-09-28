@@ -12,7 +12,15 @@ import {
   isTilingCompositor,
   isXServerReachable,
   rememberXWaylandFailure,
+  usesCapturePortal,
+  usesScreenCopy,
 } from "../../services/linuxDisplayBackend";
+
+const screenCopy = vi.hoisted(() => ({ available: false }));
+
+vi.mock("../../services/layerShell", () => ({
+  screenCopyAvailable: () => screenCopy.available,
+}));
 
 const WAYLAND = { XDG_SESSION_TYPE: "wayland", WAYLAND_DISPLAY: "wayland-1", DISPLAY: ":0" };
 
@@ -138,6 +146,66 @@ describe("isNativeWayland", () => {
   it("is false off linux", () => {
     start(WAYLAND, "win32");
     expect(isNativeWayland()).toBe(false);
+  });
+});
+
+describe("usesCapturePortal", () => {
+  it("is true on native wayland, where the share dialog asks", () => {
+    start({ XDG_SESSION_TYPE: "wayland", WAYLAND_DISPLAY: "wayland-1" });
+    expect(usesCapturePortal()).toBe(true);
+    expect(info().capturePortal).toBe(true);
+  });
+
+  // Measured on niri: the share dialog opened in XWayland mode despite the X11 switch.
+  it("is true on XWayland in a wayland session, where chromium still asks the portal", () => {
+    start(WAYLAND);
+    expect(usesCapturePortal()).toBe(true);
+    expect(info().capturePortal).toBe(true);
+  });
+
+  it("keeps XWayland on the X11 capturer without the wayland session type", () => {
+    const bare = { WAYLAND_DISPLAY: "wayland-0", DISPLAY: ":0" };
+    start(bare);
+    expect(usesCapturePortal()).toBe(false);
+    start({ ...bare, WFHELPER_PORTAL_CAPTURE: "1" });
+    expect(usesCapturePortal()).toBe(true);
+  });
+
+  it("is false on a plain X11 session and off linux", () => {
+    start({ DISPLAY: ":0", WFHELPER_PORTAL_CAPTURE: "1" });
+    expect(usesCapturePortal()).toBe(false);
+    start({ XDG_SESSION_TYPE: "wayland", WAYLAND_DISPLAY: "wayland-1" }, "win32");
+    expect(usesCapturePortal()).toBe(false);
+  });
+
+  // Settings shows the setup button off capturePortal, so it disappears too.
+  it("is false where a native Wayland client copies the screen itself", () => {
+    screenCopy.available = true;
+    try {
+      start({ XDG_SESSION_TYPE: "wayland", WAYLAND_DISPLAY: "wayland-1" });
+      expect(usesScreenCopy()).toBe(true);
+      expect(usesCapturePortal()).toBe(false);
+      expect(info().capturePortal).toBe(false);
+    } finally {
+      screenCopy.available = false;
+    }
+  });
+
+  it("copies the screen in XWayland mode too, even with the portal forced", () => {
+    screenCopy.available = true;
+    try {
+      start(WAYLAND);
+      expect(isNativeWayland()).toBe(false);
+      expect(usesScreenCopy()).toBe(true);
+      expect(usesCapturePortal()).toBe(false);
+      start({ ...WAYLAND, WFHELPER_PORTAL_CAPTURE: "1" });
+      expect(usesScreenCopy()).toBe(true);
+      expect(usesCapturePortal()).toBe(false);
+      start({ DISPLAY: ":0" });
+      expect(usesScreenCopy()).toBe(false);
+    } finally {
+      screenCopy.available = false;
+    }
   });
 });
 

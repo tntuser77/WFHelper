@@ -15,6 +15,12 @@ interface FakeAddon {
   sizeOf?: ReturnType<typeof vi.fn>;
   setInteractive: ReturnType<typeof vi.fn>;
   pollEvents: ReturnType<typeof vi.fn>;
+  toplevels?: ReturnType<typeof vi.fn>;
+  takeDropReason?: ReturnType<typeof vi.fn>;
+  screencopyAvailable?: ReturnType<typeof vi.fn>;
+  screencopyStart?: ReturnType<typeof vi.fn>;
+  screencopyPoll?: ReturnType<typeof vi.fn>;
+  screencopyCancel?: ReturnType<typeof vi.fn>;
 }
 
 // The loader's own require is the only seam a native addon can be injected
@@ -45,6 +51,14 @@ vi.mock("../../services/logger", () => ({
   withScope: () => ({ ...logged, time: () => {}, timeEnd: () => {} }),
 }));
 
+vi.mock("../../services/warframeStatus", () => ({
+  getWarframeWindowBoundsLinux: vi.fn(async () => null),
+}));
+
+vi.mock("../../services/waylandCompositor", () => ({
+  resolveGameOutput: vi.fn(async () => null),
+}));
+
 // The module caches its load, so each case needs a fresh copy of it.
 async function freshProbe() {
   vi.resetModules();
@@ -56,6 +70,12 @@ async function freshCreate() {
   vi.resetModules();
   const module = await import("../../services/layerShell");
   return module.createLayerSurface;
+}
+
+async function freshToplevels() {
+  vi.resetModules();
+  const module = await import("../../services/layerShell");
+  return module.layerToplevels;
 }
 
 const realPlatform = process.platform;
@@ -94,6 +114,11 @@ const surfaceOptions = (extra: Partial<LayerSurfaceOptions> = {}): LayerSurfaceO
 
 /** The frame the 4x2 fixture surface expects: BGRA, four bytes a pixel. */
 const fullFrame = (): Buffer => Buffer.alloc(4 * 2 * 4);
+
+const connectionLostLines = (): unknown[] =>
+  logged.warn.mock.calls
+    .map(([message]) => message as unknown)
+    .filter((message) => String(message).startsWith("[LayerShell] compositor connection lost"));
 
 afterEach(() => {
   setPlatform(realPlatform);
@@ -346,6 +371,34 @@ describe("LayerSurface", () => {
     expect(surface.isClosed()).toBe(true);
     expect(() => surface.destroy()).not.toThrow();
   });
+
+  it("logs why the compositor connection dropped, once however many calls see it", async () => {
+    let dropped = false;
+    let reason: string | null = null;
+    const { surface } = await open({
+      // The first frame finds the display dead; later calls find no display at all.
+      commit: vi.fn(() => {
+        if (!dropped) reason = "protocol error 2 on zwlr_layer_surface_v1@12";
+        dropped = true;
+        return false;
+      }),
+      isClosed: vi.fn(() => dropped),
+      takeDropReason: vi.fn(() => {
+        const taken = reason;
+        reason = null;
+        return taken;
+      }),
+    });
+
+    for (let i = 0; i < 5; i++) {
+      expect(surface.commit(fullFrame())).toBe(false);
+      expect(surface.isClosed()).toBe(true);
+    }
+
+    expect(connectionLostLines()).toEqual([
+      "[LayerShell] compositor connection lost: protocol error 2 on zwlr_layer_surface_v1@12",
+    ]);
+  });
 });
 
 describe("pointer input", () => {
@@ -443,5 +496,767 @@ describe("pointer input", () => {
     const surface = create(surfaceOptions());
 
     expect(surface?.setInteractive(true, vi.fn())).toBe(false);
+  });
+});
+
+interface RawEvent {
+  handle: number;
+  type: number;
+  x: number;
+  y: number;
+  button: number;
+  pressed: boolean;
+  dx: number;
+  dy: number;
+}
+
+interface NativeSlot {
+  handle: number;
+  closed: boolean;
+  frames: number;
+  width: number;
+  height: number;
+}
+
+/** addon.c's surface table: eight slots, all freed at once when the display
+ *  drops, and handles that carry the slot's generation above its index. A
+ *  crashed compositor goes unnoticed until an entry point that talks to the
+ *  display reaches it, and a reconnect waits out INIT_RETRY_COOLDOWN_MS. */
+function nativeTable() {
+  const SLOTS = 8;
+  const COOLDOWN_MS = 5000;
+  const generations = new Array<number>(SLOTS).fill(0);
+  const slots = new Array<NativeSlot | null>(SLOTS).fill(null);
+  const issued: number[] = [];
+  let queued: RawEvent[] = [];
+  let connected = true;
+  let socketDead = false;
+  let compositorUp = true;
+  let lastAttempt = Number.NEGATIVE_INFINITY;
+  let connections = 1;
+  let dropReason: string | null = null;
+  const live = (handle: number): NativeSlot | null =>
+    slots.find((slot) => slot?.handle === handle) ?? null;
+  const clearTable = (): void => {
+    slots.fill(null);
+    queued = [];
+  };
+  /** flush_or_drop: true when this call found the display dead and dropped it. */
+  const noticed = (): boolean => {
+    if (!connected || !socketDead) return false;
+    clearTable();
+    connected = false;
+    lastAttempt = Date.now();
+    dropReason = "errno 32 (Broken pipe)";
+    return true;
+  };
+  const event = (handle: number, type: number, pressed: boolean): RawEvent => ({
+    handle,
+    type,
+    x: 2,
+    y: 1,
+    button: 0,
+    pressed,
+    dx: 0,
+    dy: 0,
+  });
+  const addon = useAddon({
+    available: vi.fn(() => {
+      if (connected) return true;
+      if (Date.now() - lastAttempt < COOLDOWN_MS) return false;
+      lastAttempt = Date.now();
+      if (!compositorUp) return false;
+      connected = true;
+      socketDead = false;
+      connections++;
+      return true;
+    }),
+    create: vi.fn((_output: string | null, width: number, height: number) => {
+      if (!connected) return -1;
+      const index = slots.indexOf(null);
+      if (index < 0) return -1;
+      generations[index] = (generations[index] ?? 0) + 1;
+      const handle = (generations[index] ?? 0) * SLOTS + index;
+      if (noticed()) return -1;
+      slots[index] = { handle, closed: false, frames: 0, width, height };
+      issued.push(handle);
+      return handle;
+    }),
+    commit: vi.fn((handle: number) => {
+      const slot = live(handle);
+      if (!slot || slot.closed || noticed()) return false;
+      slot.frames++;
+      return true;
+    }),
+    destroy: vi.fn((handle: number) => {
+      const index = slots.findIndex((slot) => slot?.handle === handle);
+      if (index < 0) return;
+      slots[index] = null;
+      noticed();
+    }),
+    isClosed: vi.fn((handle: number) => {
+      const slot = live(handle);
+      return !slot || noticed() || slot.closed;
+    }),
+    scaleOf: vi.fn((handle: number) => (live(handle) ? 1 : 0)),
+    sizeOf: vi.fn((handle: number) => {
+      const slot = live(handle);
+      return slot ? { width: slot.width, height: slot.height } : null;
+    }),
+    setInteractive: vi.fn((handle: number) => {
+      const slot = live(handle);
+      return slot !== null && !slot.closed && !noticed();
+    }),
+    pollEvents: vi.fn(() => (!connected || noticed() ? [] : queued.splice(0))),
+    takeDropReason: vi.fn(() => {
+      const reason = dropReason;
+      dropReason = null;
+      return reason;
+    }),
+  });
+  return {
+    addon,
+    latest: (): number => issued[issued.length - 1] ?? -1,
+    slotOf: (handle: number): number => handle % SLOTS,
+    live,
+    slotsInUse: (): number => slots.filter(Boolean).length,
+    connections: (): number => connections,
+    /** drop_connection: the compositor went away and took every surface along. */
+    drop: clearTable,
+    /** SIGKILL: the socket is dead, and nothing has read from it yet. */
+    crash(): void {
+      socketDead = connected;
+      compositorUp = false;
+    },
+    restart(): void {
+      compositorUp = true;
+    },
+    /** layer_surface.closed, as when the surface's output is unplugged. */
+    close(handle: number): void {
+      const slot = live(handle);
+      if (slot) slot.closed = true;
+    },
+    press(handle: number): void {
+      queued.push(event(handle, 3, true));
+    },
+    move(handle: number): void {
+      queued.push(event(handle, 2, false));
+    },
+  };
+}
+
+type PaintListener = (event: unknown, dirty: unknown, image: { toBitmap: () => Buffer }) => void;
+
+function offscreenWindow() {
+  let paint: PaintListener | undefined;
+  const window = {
+    setSize: vi.fn(),
+    webContents: {
+      setFrameRate: vi.fn(),
+      setZoomFactor: vi.fn(),
+      sendInputEvent: vi.fn(),
+      on: vi.fn((_event: "paint", listener: PaintListener) => {
+        paint = listener;
+      }),
+    },
+  };
+  return { window, paint: (bitmap: Buffer) => paint?.(null, null, { toBitmap: () => bitmap }) };
+}
+
+// Two overlays kept by their owners across a compositor restart, through the
+// real wrapper and the real presentation that retains it.
+describe("a display reset under retained overlays", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function retainedOverlays() {
+    vi.useFakeTimers();
+    const table = nativeTable();
+    vi.resetModules();
+    const { createLayerSurface } = await import("../../services/layerShell");
+    const { createLayerPresentation } = await import("../../ipc/overlay/layerPresentation");
+    const overlay = (label: string) => {
+      const { window, paint } = offscreenWindow();
+      const presentation = createLayerPresentation({
+        label,
+        anchor: "top-left",
+        createSurface: createLayerSurface,
+        resolveOutput: async () => "DP-1",
+      });
+      presentation.attach(window, 4, 2);
+      presentation.setInteractive(true);
+      return { presentation, window, paint, handle: -1 };
+    };
+    return { table, overlays: [overlay("reward"), overlay("toast")] as const };
+  }
+
+  it("keeps an idle overlay's dead surface off the overlay that took its slot", async () => {
+    const { table, overlays } = await retainedOverlays();
+    for (const overlay of overlays) {
+      expect(await overlay.presentation.show()).toBe(true);
+      overlay.handle = table.latest();
+    }
+
+    for (let cycle = 0; cycle < 3; cycle++) {
+      const [idle, first] = cycle % 2 === 0 ? overlays : [overlays[1], overlays[0]];
+      // A press lands, then the compositor dies before its release can.
+      table.press(idle.handle);
+      vi.advanceTimersByTime(20);
+      table.drop();
+
+      expect(await first.presentation.show()).toBe(true);
+      const firstHandle = table.latest();
+      expect(table.slotOf(firstHandle)).toBe(table.slotOf(idle.handle));
+      first.handle = firstHandle;
+
+      // The idle owner only looks now, with its old slot already reused.
+      expect(idle.presentation.isShowing()).toBe(false);
+      idle.paint(Buffer.alloc(4 * 2 * 4));
+      expect(table.live(firstHandle)).toEqual(
+        expect.objectContaining({ closed: false, frames: 0 }),
+      );
+
+      const idleInputs = idle.window.webContents.sendInputEvent.mock.calls.length;
+      table.move(firstHandle);
+      vi.advanceTimersByTime(20);
+      expect(first.window.webContents.sendInputEvent).toHaveBeenLastCalledWith(
+        expect.objectContaining({ type: "mouseMove", modifiers: [] }),
+      );
+      expect(idle.window.webContents.sendInputEvent).toHaveBeenCalledTimes(idleInputs);
+
+      expect(await idle.presentation.show()).toBe(true);
+      idle.handle = table.latest();
+      table.move(idle.handle);
+      vi.advanceTimersByTime(20);
+      // The press died with the old surface; the new one never saw it.
+      expect(idle.window.webContents.sendInputEvent).toHaveBeenLastCalledWith(
+        expect.objectContaining({ type: "mouseMove", modifiers: [] }),
+      );
+      first.paint(Buffer.alloc(4 * 2 * 4));
+      expect(table.live(firstHandle)?.frames).toBe(1);
+    }
+
+    for (const overlay of overlays) overlay.presentation.hide();
+    expect(table.slotsInUse()).toBe(0);
+    table.addon.pollEvents.mockClear();
+    vi.advanceTimersByTime(100);
+    // No sink of any dead surface is left keeping the input drain alive.
+    expect(table.addon.pollEvents).not.toHaveBeenCalled();
+  });
+
+  it("frees the slot of a surface the compositor closed under an idle overlay", async () => {
+    const { table, overlays } = await retainedOverlays();
+    const [overlay] = overlays;
+    expect(await overlay.presentation.show()).toBe(true);
+
+    for (let unplug = 0; unplug < 8; unplug++) {
+      table.close(table.latest());
+      expect(await overlay.presentation.show()).toBe(true);
+      expect(table.slotsInUse()).toBe(1);
+    }
+  });
+
+  type Overlays = Awaited<ReturnType<typeof retainedOverlays>>["overlays"];
+  const crashRoutes: Array<[string, (overlays: Overlays) => unknown]> = [
+    ["a frame", (overlays) => overlays[0].paint(Buffer.alloc(4 * 2 * 4))],
+    ["the input drain", () => vi.advanceTimersByTime(20)],
+    ["a show", (overlays) => overlays[1].presentation.show()],
+  ];
+
+  // Nothing polls toplevels here, as on niri, so the loss is noticed by whichever
+  // surface call reaches the dead socket first.
+  it.each(crashRoutes)(
+    "rebuilds every overlay after a crash that %s noticed",
+    async (_route, notice) => {
+      const { table, overlays } = await retainedOverlays();
+      for (const overlay of overlays) expect(await overlay.presentation.show()).toBe(true);
+
+      for (let cycle = 0; cycle < 3; cycle++) {
+        table.crash();
+        await notice(overlays);
+
+        expect(table.slotsInUse()).toBe(0);
+        for (const overlay of overlays) expect(overlay.presentation.isShowing()).toBe(false);
+        // Still down and inside the reconnect cooldown: no surface, not a dead one.
+        expect(await overlays[0].presentation.show()).toBe(false);
+        expect(connectionLostLines()).toEqual(
+          new Array(cycle + 1).fill(
+            "[LayerShell] compositor connection lost: errno 32 (Broken pipe)",
+          ),
+        );
+
+        table.restart();
+        vi.advanceTimersByTime(5000);
+        const connections = table.connections();
+        for (const overlay of overlays) {
+          expect(await overlay.presentation.show()).toBe(true);
+          overlay.handle = table.latest();
+        }
+        expect(table.connections()).toBe(connections + 1);
+        overlays[0].paint(Buffer.alloc(4 * 2 * 4));
+        expect(table.live(overlays[0].handle)?.frames).toBe(1);
+      }
+    },
+  );
+});
+
+// Null and an empty array mean different things here: null is "the compositor
+// cannot be asked", which sends the caller to the next focus source.
+describe("layerToplevels", () => {
+  it("is null with no addon at all", async () => {
+    setPlatform("linux");
+    vi.spyOn(fs, "existsSync").mockReturnValue(false);
+
+    expect((await freshToplevels())()).toBeNull();
+  });
+
+  // The addon answers this one without layer-shell, so a compositor that
+  // refuses a surface can still report its windows.
+  it("asks even when the compositor offers no layer-shell", async () => {
+    const addon = useAddon({ available: vi.fn(() => false), toplevels: vi.fn(() => []) });
+
+    expect((await freshToplevels())()).toEqual([]);
+    expect(addon.toplevels).toHaveBeenCalled();
+  });
+
+  it("is null on an addon built before the export existed", async () => {
+    useAddon();
+
+    expect((await freshToplevels())()).toBeNull();
+  });
+
+  it("is null when the compositor has no foreign-toplevel manager", async () => {
+    useAddon({ toplevels: vi.fn(() => null) });
+
+    expect((await freshToplevels())()).toBeNull();
+  });
+
+  it("hands back the windows the addon reports", async () => {
+    const windows = [
+      {
+        title: "Warframe",
+        appId: "steam_app_230410",
+        activated: true,
+        fullscreen: true,
+        outputs: ["DP-2"],
+      },
+    ];
+    useAddon({ toplevels: vi.fn(() => windows) });
+
+    expect((await freshToplevels())()).toEqual(windows);
+  });
+
+  // Without layer-shell no surface exists, so toplevels() is the only call left
+  // to notice a dead compositor.
+  it("logs a drop that the toplevel poll noticed", async () => {
+    const reasons = ["errno 104 (Connection reset by peer)"];
+    useAddon({
+      available: vi.fn(() => false),
+      toplevels: vi.fn(() => null),
+      takeDropReason: vi.fn(() => reasons.shift() ?? null),
+    });
+    const toplevels = await freshToplevels();
+
+    for (let i = 0; i < 3; i++) expect(toplevels()).toBeNull();
+
+    expect(connectionLostLines()).toEqual([
+      "[LayerShell] compositor connection lost: errno 104 (Connection reset by peer)",
+    ]);
+  });
+
+  it("is null and warns once when the addon throws", async () => {
+    useAddon({
+      toplevels: vi.fn(() => {
+        throw new Error("display gone");
+      }),
+    });
+    const toplevels = await freshToplevels();
+
+    expect(toplevels()).toBeNull();
+    expect(toplevels()).toBeNull();
+    expect(logged.warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+async function freshShell() {
+  vi.resetModules();
+  return import("../../services/layerShell");
+}
+
+const XRGB8888 = 1;
+const XBGR8888 = 0x34324258;
+const XRGB2101010 = 0x30335258;
+const XBGR2101010 = 0x30334258;
+
+/** A finished copy as the addon hands it out: one little-endian word a pixel,
+ *  every row padded past its pixels the way a compositor's stride can be. */
+function readyCopy(rows: number[][], format: number, yInvert = false) {
+  const height = rows.length;
+  const width = rows[0].length;
+  const stride = width * 4 + 8;
+  const pixels = Buffer.alloc(stride * height, 0xee);
+  rows.forEach((row, y) => {
+    row.forEach((word, x) => pixels.writeUInt32LE(word >>> 0, y * stride + x * 4));
+  });
+  return { state: "ready", width, height, stride, format, yInvert, pixels };
+}
+
+/** The handed-over bitmap as [b, g, r, a] per pixel, row by row. */
+function bgraRows(copy: { width: number; height: number; bitmap: Buffer }): number[][][] {
+  const rows: number[][][] = [];
+  for (let y = 0; y < copy.height; y++) {
+    const row: number[][] = [];
+    for (let x = 0; x < copy.width; x++) {
+      const at = (y * copy.width + x) * 4;
+      row.push([...copy.bitmap.subarray(at, at + 4)]);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function copyAddon(poll: ReturnType<typeof vi.fn>, extra: Partial<FakeAddon> = {}): FakeAddon {
+  return useAddon({
+    screencopyAvailable: vi.fn(() => true),
+    screencopyStart: vi.fn(() => true),
+    screencopyPoll: poll,
+    screencopyCancel: vi.fn(),
+    ...extra,
+  });
+}
+
+const copyFailures = (): string[] =>
+  logged.warn.mock.calls
+    .map(([message]) => String(message))
+    .filter((message) => message.startsWith("[LayerShell] screen copy failed"));
+
+describe("screen copy", () => {
+  it("stays off until the startup probe has connected", async () => {
+    const addon = copyAddon(vi.fn());
+    const shell = await freshShell();
+
+    expect(shell.screenCopyAvailable()).toBe(false);
+    expect(addon.screencopyAvailable).not.toHaveBeenCalled();
+    shell.probeLayerShell();
+    expect(shell.screenCopyAvailable()).toBe(true);
+  });
+
+  // A drop answers no until the addon reconnects; the portal must not step in then.
+  it("stays on through a dropped connection once seen, and a copy then just fails", async () => {
+    const answers = [true, false];
+    const addon = copyAddon(
+      vi.fn(() => ({ state: "failed", reason: "compositor offers no screen copy" })),
+      { screencopyAvailable: vi.fn(() => answers.shift() ?? false) },
+    );
+    const shell = await freshShell();
+    shell.probeLayerShell();
+
+    expect(shell.screenCopyAvailable()).toBe(true);
+    expect(shell.screenCopyAvailable()).toBe(true);
+    expect(await shell.copyOutput("DP-1")).toBeNull();
+    expect(shell.screenCopyAvailable()).toBe(true);
+    expect(addon.screencopyAvailable).toHaveBeenCalledTimes(1);
+  });
+
+  it("names why the last copy failed until one succeeds", async () => {
+    const answers: unknown[] = [{ state: "failed", reason: "compositor refused the copy" }];
+    copyAddon(vi.fn(() => answers.shift() ?? readyCopy([[0]], XRGB8888)));
+    const shell = await freshShell();
+
+    expect(shell.screenCopyFailure()).toBeNull();
+    expect(await shell.copyOutput("DP-1")).toBeNull();
+    expect(shell.screenCopyFailure()).toBe("compositor refused the copy");
+    expect(await shell.copyOutput("DP-1")).not.toBeNull();
+    expect(shell.screenCopyFailure()).toBeNull();
+  });
+
+  it("is off when the compositor or the addon has none", async () => {
+    copyAddon(vi.fn(), { screencopyAvailable: vi.fn(() => false) });
+    let shell = await freshShell();
+    shell.probeLayerShell();
+    expect(shell.screenCopyAvailable()).toBe(false);
+
+    useAddon();
+    shell = await freshShell();
+    shell.probeLayerShell();
+    expect(shell.screenCopyAvailable()).toBe(false);
+    expect(await shell.copyOutput("DP-1")).toBeNull();
+  });
+
+  it("hands XRGB8888 over as opaque BGRA without the row padding", async () => {
+    const addon = copyAddon(vi.fn(() => readyCopy([[0x00112233, 0x80445566]], XRGB8888)));
+    const shell = await freshShell();
+
+    const copy = await shell.copyOutput("DP-1");
+
+    expect(addon.screencopyStart).toHaveBeenCalledWith("DP-1");
+    expect(copy?.bitmap.length).toBe(2 * 4);
+    expect(bgraRows(copy!)).toEqual([
+      [
+        [0x33, 0x22, 0x11, 0xff],
+        [0x66, 0x55, 0x44, 0xff],
+      ],
+    ]);
+    expect(addon.screencopyCancel).not.toHaveBeenCalled();
+  });
+
+  it("reads pixels that start off a word boundary", async () => {
+    const ready = readyCopy([[0x00112233]], XRGB8888);
+    const shifted = Buffer.alloc(ready.pixels.length + 1);
+    ready.pixels.copy(shifted, 1);
+    copyAddon(vi.fn(() => ({ ...ready, pixels: shifted.subarray(1) })));
+    const shell = await freshShell();
+
+    expect(bgraRows((await shell.copyOutput("DP-1"))!)).toEqual([[[0x33, 0x22, 0x11, 0xff]]]);
+  });
+
+  it("swaps red and blue for the XBGR byte order", async () => {
+    copyAddon(vi.fn(() => readyCopy([[0x00332211]], XBGR8888)));
+    const shell = await freshShell();
+
+    expect(bgraRows((await shell.copyOutput("DP-1"))!)).toEqual([[[0x33, 0x22, 0x11, 0xff]]]);
+  });
+
+  it("reads both 10-bit orders at 8-bit depth", async () => {
+    // Red 0x3ff, green 0x200, blue 0x004 in each order.
+    const rgb10 = (0x3ff << 20) | (0x200 << 10) | 0x004;
+    const bgr10 = (0x004 << 20) | (0x200 << 10) | 0x3ff;
+    copyAddon(vi.fn(() => readyCopy([[rgb10]], XRGB2101010)));
+    let shell = await freshShell();
+    expect(bgraRows((await shell.copyOutput("DP-1"))!)).toEqual([[[0x01, 0x80, 0xff, 0xff]]]);
+
+    copyAddon(vi.fn(() => readyCopy([[bgr10]], XBGR2101010)));
+    shell = await freshShell();
+    expect(bgraRows((await shell.copyOutput("DP-1"))!)).toEqual([[[0x01, 0x80, 0xff, 0xff]]]);
+  });
+
+  it("turns a y-inverted copy top row first", async () => {
+    copyAddon(vi.fn(() => readyCopy([[0x000000aa], [0x000000bb]], XRGB8888, true)));
+    const shell = await freshShell();
+
+    const rows = bgraRows((await shell.copyOutput("DP-1"))!);
+
+    expect(rows.map((row) => row[0][0])).toEqual([0xbb, 0xaa]);
+  });
+
+  // Each buffer is the upright picture turned by hand the way the protocol says
+  // the compositor turns it: counter-clockwise, flipped ones mirrored first.
+  const upright = [
+    [1, 2, 3],
+    [4, 5, 6],
+  ];
+  const uprightTall = [
+    [1, 2],
+    [3, 4],
+    [5, 6],
+  ];
+  it.each([
+    ["normal", 0, upright, upright],
+    [
+      "180",
+      2,
+      [
+        [6, 5, 4],
+        [3, 2, 1],
+      ],
+      upright,
+    ],
+    [
+      "flipped",
+      4,
+      [
+        [3, 2, 1],
+        [6, 5, 4],
+      ],
+      upright,
+    ],
+    [
+      "flipped-180",
+      6,
+      [
+        [4, 5, 6],
+        [1, 2, 3],
+      ],
+      upright,
+    ],
+    [
+      "90",
+      1,
+      [
+        [2, 4, 6],
+        [1, 3, 5],
+      ],
+      uprightTall,
+    ],
+    [
+      "270",
+      3,
+      [
+        [5, 3, 1],
+        [6, 4, 2],
+      ],
+      uprightTall,
+    ],
+    [
+      "flipped-90",
+      5,
+      [
+        [1, 3, 5],
+        [2, 4, 6],
+      ],
+      uprightTall,
+    ],
+    [
+      "flipped-270",
+      7,
+      [
+        [6, 4, 2],
+        [5, 3, 1],
+      ],
+      uprightTall,
+    ],
+  ])("turns a %s output's copy upright", async (_name, transform, buffer, expected) => {
+    copyAddon(vi.fn(() => ({ ...readyCopy(buffer, XRGB8888), transform })));
+    const shell = await freshShell();
+
+    const copy = await shell.copyOutput("DP-1");
+
+    expect([copy?.width, copy?.height]).toEqual([expected[0].length, expected.length]);
+    expect(bgraRows(copy!).map((row) => row.map(([blue]) => blue))).toEqual(expected);
+  });
+
+  it("undoes the y-invert before the output transform", async () => {
+    const buffer = [
+      [1, 3, 5],
+      [2, 4, 6],
+    ];
+    copyAddon(vi.fn(() => ({ ...readyCopy(buffer, XRGB8888, true), transform: 1 })));
+    const shell = await freshShell();
+
+    const rows = bgraRows((await shell.copyOutput("DP-1"))!);
+
+    expect(rows.map((row) => row.map(([blue]) => blue))).toEqual(uprightTall);
+  });
+
+  it("refuses a transform the protocol does not have, and names it", async () => {
+    copyAddon(vi.fn(() => ({ ...readyCopy([[0]], XRGB8888), transform: 8 })));
+    const shell = await freshShell();
+
+    expect(await shell.copyOutput("DP-1")).toBeNull();
+    expect(copyFailures()).toEqual([
+      "[LayerShell] screen copy failed: unreadable frame 1x1 stride 12 format 0x1 transform 8",
+    ]);
+  });
+
+  it("refuses a pixel format it cannot read, and names it", async () => {
+    copyAddon(vi.fn(() => readyCopy([[0]], 0x36314752)));
+    const shell = await freshShell();
+
+    expect(await shell.copyOutput("DP-1")).toBeNull();
+    expect(copyFailures()).toEqual([
+      "[LayerShell] screen copy failed: unreadable frame 1x1 stride 12 format 0x36314752",
+    ]);
+  });
+
+  it("polls a pending copy until the compositor answers", async () => {
+    const answers = [{ state: "pending" }, { state: "pending" }];
+    const poll = vi.fn(() => answers.shift() ?? readyCopy([[0]], XRGB8888));
+    const addon = copyAddon(poll);
+    const shell = await freshShell();
+
+    expect(await shell.copyOutput("DP-1")).not.toBeNull();
+    expect(poll).toHaveBeenCalledTimes(3);
+    expect(addon.screencopyCancel).not.toHaveBeenCalled();
+  });
+
+  it("gives up at its deadline and frees the copy", async () => {
+    vi.useFakeTimers();
+    try {
+      const addon = copyAddon(vi.fn(() => ({ state: "pending" })));
+      const shell = await freshShell();
+
+      const copy = shell.copyOutput("DP-1");
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(await copy).toBeNull();
+      expect(addon.screencopyCancel).toHaveBeenCalledTimes(1);
+      expect(copyFailures()).toEqual([
+        "[LayerShell] screen copy failed: DP-1 sent no frame within 1000ms",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("logs a refusal once however often a scan retries", async () => {
+    copyAddon(vi.fn(() => ({ state: "failed", reason: "compositor refused the copy" })));
+    const shell = await freshShell();
+
+    for (let i = 0; i < 3; i++) expect(await shell.copyOutput("DP-1")).toBeNull();
+
+    expect(copyFailures()).toEqual([
+      "[LayerShell] screen copy failed: compositor refused the copy",
+    ]);
+  });
+
+  it("fails cleanly when the compositor dies mid-copy", async () => {
+    const answers = [
+      { state: "pending" },
+      { state: "failed", reason: "compositor connection lost" },
+    ];
+    const drops = ["socket hangup"];
+    const addon = copyAddon(
+      vi.fn(() => answers.shift()),
+      { takeDropReason: vi.fn(() => drops.shift() ?? null) },
+    );
+    const shell = await freshShell();
+
+    expect(await shell.copyOutput("DP-1")).toBeNull();
+    expect(connectionLostLines()).toEqual([
+      "[LayerShell] compositor connection lost: socket hangup",
+    ]);
+    expect(copyFailures()).toEqual(["[LayerShell] screen copy failed: compositor connection lost"]);
+    // A failed copy frees itself in the addon; cancelling it again would be a no-op.
+    expect(addon.screencopyCancel).not.toHaveBeenCalled();
+  });
+
+  it("shares one copy between overlapping callers of the same output", async () => {
+    const answers = [{ state: "pending" }];
+    const addon = copyAddon(vi.fn(() => answers.shift() ?? readyCopy([[0]], XRGB8888)));
+    const shell = await freshShell();
+
+    const [first, second] = await Promise.all([shell.copyOutput("DP-1"), shell.copyOutput("DP-1")]);
+
+    expect(addon.screencopyStart).toHaveBeenCalledTimes(1);
+    expect(second).toBe(first);
+  });
+
+  it("copies another output only once the copy in flight is done", async () => {
+    const answers = [{ state: "pending" }];
+    const addon = copyAddon(vi.fn(() => answers.shift() ?? readyCopy([[0]], XRGB8888)));
+    const shell = await freshShell();
+
+    const first = shell.copyOutput("DP-1");
+    const second = shell.copyOutput("HDMI-A-1");
+    expect(addon.screencopyStart).toHaveBeenCalledTimes(1);
+    await Promise.all([first, second]);
+
+    expect(addon.screencopyStart?.mock.calls.map(([output]) => output)).toEqual([
+      "DP-1",
+      "HDMI-A-1",
+    ]);
+  });
+
+  it("never lets a throwing addon escape, and frees what it started", async () => {
+    const addon = copyAddon(vi.fn(), {
+      screencopyStart: vi.fn(() => {
+        throw new Error("display gone");
+      }),
+    });
+    const shell = await freshShell();
+
+    expect(await shell.copyOutput("DP-1")).toBeNull();
+    expect(addon.screencopyCancel).toHaveBeenCalledTimes(1);
   });
 });

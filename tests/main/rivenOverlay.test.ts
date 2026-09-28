@@ -11,6 +11,7 @@ import {
 } from "../../services/rivenLogStateMachine";
 import {
   looksLikeStaleCardRead,
+  looksLikeWholeStatLine,
   parseRivenStats,
   rollRescanReason,
   type RivenStat,
@@ -1089,6 +1090,24 @@ describe("parseRivenStats", () => {
     expect(matches[0].multiplier).toBe(true);
   });
 
+  it("a stat name inside the riven title does not shadow that stat's value line", () => {
+    const stats = parseRivenStats(
+      [
+        "Laetum Hexa-toxinok",
+        "+46.4% Status Chance",
+        "+1.2 Punch Through",
+        "+42.7% 然:Toxin",
+        "x0.82 Damage to Grineer",
+      ].join("\n"),
+    );
+    expect(stats).toMatchObject([
+      { name: "Status Chance", positive: true, value: 46.4 },
+      { name: "Punch Through", positive: true, value: 1.2 },
+      { name: "Toxin", positive: true, value: 42.7 },
+      { name: "Damage to Grineer", positive: false, value: 0.82, multiplier: true },
+    ]);
+  });
+
   it("deduplication does NOT replace when integer parts differ (value=2 vs value=62.2)", () => {
     // Precision replacement is safe only when both readings share an integer part.
     const text = "+2% Heat\n+62.2% Heat";
@@ -1182,6 +1201,47 @@ describe("findWeaponInText", () => {
 
 // Real roll-right OCR outputs from 2026-07-07 main.log: the stat crop clips the
 // card's right edge, truncating stat names mid-word.
+describe("parseRivenStats trait-locked stats", () => {
+  // PaddleOCR drops the leading padlock and reads the trailing one as a letter.
+  it("reads a locked stat that wraps onto a second line", () => {
+    expect(
+      parseRivenStats("Soma Argicron\nx1.5 Damage to Grineer\n+167.2% Critical\nChancee"),
+    ).toMatchObject([
+      { name: "Damage to Grineer", positive: true, value: 1.5, multiplier: true },
+      { name: "Critical Chance", positive: true, value: 167.2 },
+    ]);
+    expect(
+      parseRivenStats("Soma Critacak\n+133.7%×Puncture\n+167.2% Critical\nChancee"),
+    ).toMatchObject([
+      { name: "Puncture", positive: true, value: 133.7 },
+      { name: "Critical Chance", positive: true, value: 167.2 },
+    ]);
+  });
+
+  // Legacy menu scale screenshots of 2026-09-27 put the padlock before the value;
+  // one read of a locked Status Duration line gave "8 +99,5%".
+  it("reads a leading padlock as junk before the sign or the multiplier", () => {
+    expect(
+      parseRivenStats("Hate Tempides\n+9,1s Combo Duration\n8 +99,5% Status Duration"),
+    ).toEqual([
+      { name: "Combo Duration", positive: true, value: 9.1 },
+      { name: "Status Duration", positive: true, value: 99.5 },
+    ]);
+    for (const lock of ["8", "8 ", "0", "a"]) {
+      expect(
+        parseRivenStats(
+          `Hate Manti-argisus\nx1,48 Damage to Grineer\n+111,1% ( slash\n${lock}x1,51 Damage to\nCorpus\n-48,1% Attack Speed`,
+        ),
+      ).toEqual([
+        { name: "Damage to Grineer", positive: true, value: 1.48, multiplier: true },
+        { name: "Slash", positive: true, value: 111.1 },
+        { name: "Damage to Corpus", positive: true, value: 1.51, multiplier: true },
+        { name: "Attack Speed", positive: false, value: 48.1 },
+      ]);
+    }
+  });
+});
+
 describe("parseRivenStats truncated roll crops", () => {
   it("completes right-truncated names on the new-roll card (Boar Critadra)", () => {
     const stats = parseRivenStats(
@@ -1224,6 +1284,129 @@ describe("parseRivenStats truncated roll crops", () => {
 
   it("detects the weapon from the roll card title text", () => {
     expect(findWeaponInText("Boar Critadra\n+150.6% Fire Rate (x)\nBows).")).toBe("Boar");
+  });
+});
+
+// Roll-card OCR lines from a 2026-09-26 field log (Laetum, trait-locked Toxin).
+describe("parseRivenStats field roll lines", () => {
+  const names = (text: string) => parseRivenStats(text).map((s) => `${s.value} ${s.name}`);
+
+  it("completes a clipped name whose last glyph or first letter went wrong", () => {
+    expect(names("-32.4% Status Char")).toEqual(["32.4 Status Chance"]);
+    expect(names("-32.4% tatus Chan")).toEqual(["32.4 Status Chance"]);
+    expect(names("+42.8% Status Durai")).toEqual(["42.8 Status Duration"]);
+    expect(names("+24.9% Rel0ad Speed")).toEqual(["24.9 Reload Speed"]);
+  });
+
+  it("names faction damage from the multiplier and the faction word", () => {
+    expect(names("x1.22 Dato Corpus")).toEqual(["1.22 Damage to Corpus"]);
+    expect(names("x1.23 D.Corpus")).toEqual(["1.23 Damage to Corpus"]);
+    expect(names("x1.23 D.to Grineer")).toEqual(["1.23 Damage to Grineer"]);
+    expect(names("x1.22 Dall cge to Corpus")).toEqual(["1.22 Damage to Corpus"]);
+  });
+
+  it("resolves a garbled head word before Damage or Recoil", () => {
+    expect(names("+44.3% C...ical Damage")).toEqual(["44.3 Critical Damage"]);
+    expect(names("-45.2% capon Recoil")).toEqual(["45.2 Weapon Recoil"]);
+    expect(names("+103.3% Damage")).toEqual(["103.3 Damage"]);
+  });
+
+  // Replay scan 14 shows the double space: "+44.6% Ste  Chance".
+  it("keeps a whole name that only a double space kept from matching", () => {
+    expect(names("+45.1% Critical  Chance")).toEqual(["45.1 Critical Chance"]);
+    expect(names("+45.1% Critica  Chance")).toEqual(["45.1 Critical Chance"]);
+    expect(names("+45% Heavy  Attack")).toEqual(["45 Heavy Attack"]);
+  });
+
+  it("reads a junk letter after a whole name as junk, not as a longer stat", () => {
+    expect(names("+45.1% Critical Chance a")).toEqual(["45.1 Critical Chance"]);
+    expect(names("+45.1% Critical Chance f")).toEqual(["45.1 Critical Chance"]);
+    expect(names("+45.1% Critical Chance fo")).toEqual(["45.1 Critical Chance for Slide Attack"]);
+    expect(names("+45.1% Critical Chance for")).toEqual(["45.1 Critical Chance for Slide Attack"]);
+    // Magazine alone names no stat, so one letter of its tail is enough.
+    expect(names("+60.2% Magazine C")).toEqual(["60.2 Magazine Capacity"]);
+    expect(names("-41.2% Heavy Attack E")).toEqual(["41.2 Heavy Attack Efficiency"]);
+  });
+
+  it("counts a word fragment before Damage as an unread line, not base Damage", () => {
+    const diagnostics = { droppedLines: [] as string[] };
+    expect(parseRivenStats("+45% criti al damage", diagnostics)).toEqual([]);
+    expect(parseRivenStats("+45% C al Damage", diagnostics)).toEqual([]);
+    expect(diagnostics.droppedLines).toEqual(["+45% criti al damage", "+45% C al Damage"]);
+    expect(diagnostics.droppedLines.every(looksLikeWholeStatLine)).toBe(true);
+    expect(names("+276.2% :Damage")).toEqual(["276.2 Damage"]);
+    expect(names("x1.24 Damage to Corpus")).toEqual(["1.24 Damage to Corpus"]);
+  });
+
+  it("drops a line rather than guess its stat", () => {
+    const diagnostics = { droppedLines: [] as string[] };
+    // A pistol cannot roll Chance to Gain Combo Count; the head word is gone.
+    expect(parseRivenStats("+40.5% Chance", diagnostics)).toEqual([]);
+    expect(parseRivenStats("+45.5% Lr.car Damage", diagnostics)).toEqual([]);
+    expect(parseRivenStats("+5pact", diagnostics)).toEqual([]);
+    expect(diagnostics.droppedLines).toEqual(["+40.5% Chance", "+45.5% Lr.car Damage", "+5pact"]);
+    expect(names("+42.7% :Toxir")).toEqual(["42.7 Toxin"]);
+  });
+
+  it("reads a trait-locked line whose band clipped the wrapped qualifier", () => {
+    expect(
+      names(
+        "Corufell Igni-crita\n+110.1% Finisher Damage\n+88.1% WHeat\n+166.4% Critica\n" +
+          "Chance (x2 for Hea)\nAttacks)\n-101.5% Punctu",
+      ),
+    ).toEqual(["110.1 Finisher Damage", "88.1 Heat", "166.4 Critical Chance", "101.5 Puncture"]);
+  });
+
+  it("reports whether the riven title sits above the first stat", () => {
+    const seen = (text: string) => {
+      const diagnostics: { droppedLines: string[]; titleSeen?: boolean } = { droppedLines: [] };
+      parseRivenStats(text, diagnostics);
+      return diagnostics.titleSeen;
+    };
+    expect(seen("Laetum Zeti-toxia\n+103.3% Damage\n-44.3% Weapon Reco")).toBe(true);
+    expect(seen("-44.3% Weapon Re\n+42.7% @Toxin\n-32.4% Status Char")).toBe(false);
+    // A wrapped qualifier tail is not a title.
+    expect(seen("Bows)\n-66.2% Weapon Recoil\n+85.7% Multishot")).toBe(false);
+  });
+});
+
+// OCR lines of the 263-screenshot benchmark, a production read and a Windows OCR read.
+describe("parseRivenStats benchmark lines", () => {
+  const names = (text: string) => parseRivenStats(text).map((s) => `${s.value} ${s.name}`);
+
+  it("repairs a value digit read as a letter instead of cutting the value short", () => {
+    expect(
+      names(
+        "Hate Argi-loctides\nx1,4g Damage to Grineer\n+2,1 Range\n+104% Status Duration\n" +
+          "x0,6 Damage to Corpus",
+      ),
+    ).toEqual([
+      "1.49 Damage to Grineer",
+      "2.1 Range",
+      "104 Status Duration",
+      "0.6 Damage to Corpus",
+    ]);
+    expect(
+      names(
+        "Hate Locti-plecicta\n+89,6% Finisher Damage\n+102,4% Critical Chance for Slide Attack\n" +
+          "+l,7 Range",
+      ),
+    ).toEqual(["89.6 Finisher Damage", "102.4 Critical Chance for Slide Attack", "1.7 Range"]);
+    expect(names("+1,7Range")).toEqual(["1.7 Range"]);
+  });
+
+  it("leaves a value unread when a glyph it ends on is no digit", () => {
+    expect(parseRivenStats("x1,4k Damage to Grineer")).toMatchObject([
+      { name: "Damage to Grineer", value: null },
+    ]);
+    expect(names("+7,2S Combo Duration")).toEqual(["7.2 Combo Duration"]);
+  });
+
+  it("does not read an icon letter after Critical Chance as Slide Attack", () => {
+    expect(names("Furis Vexicron +188,5% Critical Chance f Electricity")).toEqual([
+      "188.5 Critical Chance",
+      "null Electricity",
+    ]);
   });
 });
 
@@ -1511,6 +1694,25 @@ describe("looksLikeStaleCardRead", () => {
     expect(looksLikeStaleCardRead(single, [currentCard])).toBe(false);
     expect(looksLikeStaleCardRead(currentCard, [[]])).toBe(false);
     expect(looksLikeStaleCardRead([], [currentCard])).toBe(false);
+  });
+
+  // Field log: the kept card had x1.22 Infested and a trait-locked +42.7% Toxin,
+  // so a genuine x1.21 Infested roll was thrown away as a stale read.
+  it("tells x1.21 from x1.22 on a reroll that keeps a locked stat", () => {
+    const kept: RivenStat[] = [
+      { name: "Damage to Infested", positive: true, value: 1.22, multiplier: true },
+      { name: "Multishot", positive: true, value: 59.3 },
+      { name: "Toxin", positive: true, value: 42.7 },
+      { name: "Magazine Capacity", positive: false, value: 19.9 },
+    ];
+    const rolled: RivenStat[] = [
+      { name: "Damage to Infested", positive: true, value: 1.21, multiplier: true },
+      { name: "Cold", positive: true, value: 45.5 },
+      { name: "Toxin", positive: true, value: 42.7 },
+      { name: "Damage to Grineer", positive: false, value: 0.85, multiplier: true },
+    ];
+    expect(looksLikeStaleCardRead(rolled, [kept])).toBe(false);
+    expect(looksLikeStaleCardRead(kept, [kept])).toBe(true);
   });
 
   it("requires matching sign, so a flipped curse does not count", () => {

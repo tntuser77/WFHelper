@@ -1,11 +1,12 @@
 import { handleAdminRoutes } from './routes/admin';
 import { handleFeedbackRoute } from './routes/feedback';
 import { handlePublicRoutes } from './routes/public';
+import { clientPolicyRejection, parseClientHeader, type ClientIdentity } from './security/client';
 import { jsonResponse, originIsAllowed } from './security/cors';
 import { checkDailyBudget, isDailyBudgetExceeded } from './security/dailyBudget';
 import { getWorkerConfig } from './config';
 import { refreshAdversaryVendors } from './services/adversaryVendors';
-import { archiveBaroVisit, archiveDailyPrices, sweepRivenArchive } from './services/history';
+import { archiveBaroVisit, archiveDailyPrices, retryBaroVisit, sweepRivenArchive } from './services/history';
 import { logEvent, takeResponseLogFields } from './services/logging';
 import { refreshNightwaveOfferings } from './services/nightwaveOfferings';
 import { prewarmBatch, prewarmOrderSummaryCatalog } from './services/prewarm';
@@ -13,6 +14,7 @@ import { foldPriceHistory } from './services/priceHistory';
 import { seedPriceHistory } from './services/priceHistorySeed';
 import { syncSupporters } from './services/supporters';
 import { sweepTopTraded } from './services/topTraded';
+import { refreshWfcdRelics } from './services/wfcdRelics';
 import type { Env } from './types';
 
 // Must match the daily trigger in wrangler.jsonc; every other cron tick prewarms. The
@@ -59,6 +61,7 @@ function routeMetadata(req: Request): RouteMetadata {
 	if (pathname === '/v1/top-traded') return { type: 'request', route: '/v1/top-traded' };
 	if (pathname === '/v1/adversary-vendors') return { type: 'request', route: '/v1/adversary-vendors' };
 	if (pathname === '/v1/nightwave-offerings') return { type: 'request', route: '/v1/nightwave-offerings' };
+	if (pathname === '/v1/wfcd-relics') return { type: 'request', route: '/v1/wfcd-relics' };
 	if (pathname === '/v1/baro-history') return { type: 'request', route: '/v1/baro-history' };
 
 	const publicSlugRoutes = [
@@ -107,7 +110,7 @@ async function runCronStage(route: string, stage: () => Promise<unknown>): Promi
 	}
 }
 
-async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function handleFetch(req: Request, env: Env, ctx: ExecutionContext, client: ClientIdentity | null): Promise<Response> {
 	const url = new URL(req.url);
 
 	if (!originIsAllowed(req, env)) {
@@ -117,6 +120,9 @@ async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promi
 	if (req.method === 'OPTIONS') {
 		return jsonResponse({ ok: true }, req, env, 200);
 	}
+
+	const clientResponse = clientPolicyRejection(req, url, env, client);
+	if (clientResponse) return clientResponse;
 
 	const budgetResponse = await checkDailyBudget(req, env);
 	if (budgetResponse) return budgetResponse;
@@ -135,8 +141,10 @@ export default {
 	async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const start = performance.now();
 		const route = routeMetadata(req);
+		const client = parseClientHeader(req);
+		const clientFields = { client: client ? client.product : 'none', clientVersion: client?.version };
 		try {
-			const response = await handleFetch(req, env, ctx);
+			const response = await handleFetch(req, env, ctx, client);
 			logEvent({
 				...takeResponseLogFields(response),
 				type: route.type,
@@ -145,6 +153,7 @@ export default {
 				status: response.status,
 				latencyMs: Math.round(performance.now() - start),
 				slug: route.slug,
+				...clientFields,
 			});
 			return response;
 		} catch (err) {
@@ -155,6 +164,7 @@ export default {
 				status: 500,
 				latencyMs: Math.round(performance.now() - start),
 				slug: route.slug,
+				...clientFields,
 				error: err instanceof Error ? err.message : 'unknown_error',
 			});
 			return jsonResponse({ ok: false, error: 'internal_error' }, req, env, 500);
@@ -166,9 +176,9 @@ export default {
 		const route = controller.cron || 'scheduled';
 		const daily = controller.cron === DAILY_CRON;
 		// Cloudflare fires both triggers on the daily minute as two concurrent
-		// invocations, and both price stages read-modify-write the same archive index,
-		// so the quarter-hour tick that lands there defers them to its next tick.
-		const priceArchiveDeferred = !daily && sharesTheDailyCronMinute(controller.scheduledTime);
+		// invocations, and the price and Baro stages read-modify-write the same archive
+		// keys, so the quarter-hour tick that lands there defers them to its next tick.
+		const onDailyMinute = !daily && sharesTheDailyCronMinute(controller.scheduledTime);
 		try {
 			// Copies medians the worker already holds and makes no upstream request, so
 			// it runs ahead of the budget gate and of every stage that can throw.
@@ -196,6 +206,8 @@ export default {
 				return;
 			}
 
+			// Ahead of prewarm, which can spend the tick's subrequest cap on a heavy tick.
+			if (!onDailyMinute) await runCronStage('cron:baro-retry', () => retryBaroVisit(env));
 			const config = getWorkerConfig(env);
 			await runCronStage('cron:prewarm', () =>
 				prewarmBatch(env, {
@@ -213,7 +225,7 @@ export default {
 				}),
 			);
 			await runCronStage('cron:rivens', () => sweepRivenArchive(env));
-			if (priceArchiveDeferred) {
+			if (onDailyMinute) {
 				logEvent({ type: 'cron', route: 'cron:price-archive', status: 204, error: 'deferred_to_next_tick' });
 			} else {
 				await runCronStage('cron:price-seed', () => seedPriceHistory(env));
@@ -223,6 +235,7 @@ export default {
 			}
 			await runCronStage('cron:adversary-vendors', () => refreshAdversaryVendors(env));
 			await runCronStage('cron:nightwave-offerings', () => refreshNightwaveOfferings(env));
+			await runCronStage('cron:wfcd-relics', () => refreshWfcdRelics(env));
 			logEvent({
 				type: 'cron',
 				route,

@@ -1,16 +1,113 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
-import { __test__ } from "../../services/linuxStreamCapture";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { initialize as initializeDisplay } from "../../services/linuxDisplayBackend";
+import {
+  __test__,
+  captureLinuxStreamFrame,
+  getLinuxCaptureFailure,
+  setUpLinuxCapture,
+} from "../../services/linuxStreamCapture";
+
+const electronMocks = vi.hoisted(() => ({
+  BrowserWindow: vi.fn<() => unknown>(function () {
+    throw new Error("no display in tests");
+  }),
+  createFromBitmap: vi.fn((_bitmap: Buffer, _size: { width: number; height: number }) => ({
+    isEmpty: () => false,
+  })),
+}));
+
+vi.mock("electron", () => ({
+  app: { getAppPath: () => "/app" },
+  BrowserWindow: electronMocks.BrowserWindow,
+  desktopCapturer: { getSources: vi.fn() },
+  nativeImage: { createFromBitmap: electronMocks.createFromBitmap },
+}));
+
+// Off by default, so every portal case below runs as on a compositor without it.
+const screenCopy = vi.hoisted(() => ({
+  available: false,
+  failure: null as string | null,
+  gameOutput: null as string | null,
+  outputs: [] as string[],
+  copyOutput: vi.fn(),
+}));
+
+vi.mock("../../services/layerShell", () => ({
+  screenCopyAvailable: () => screenCopy.available,
+  screenCopyFailure: () => screenCopy.failure,
+  copyOutput: screenCopy.copyOutput,
+  layerOutputRects: () =>
+    screenCopy.outputs.map((name) => ({
+      name,
+      x: 0,
+      y: 0,
+      width: 1920,
+      height: 1080,
+      scale: 1,
+      placed: true,
+    })),
+}));
+
+vi.mock("../../services/gameOutput", () => ({
+  resolveOutputForGame: vi.fn(async () => screenCopy.gameOutput),
+}));
+
+type BusctlCallback = (error: unknown, stdout: string, stderr: string) => void;
+const busctl = vi.hoisted(() => ({ execFile: vi.fn() }));
+vi.mock("node:child_process", () => ({ execFile: busctl.execFile }));
+
+function portalAnswers(error: unknown, stdout: string, stderr = ""): void {
+  busctl.execFile.mockImplementation(
+    (_command: string, _args: string[], _options: unknown, callback: BusctlCallback) =>
+      setTimeout(() => callback(error, stdout, stderr), 0),
+  );
+}
 
 const {
   pickCaptureSource,
-  lookupCaptureSource,
+  createSourceRequester,
+  classifyPortalCheck,
+  describePortalCheck,
+  portalBackendFor,
+  portalPackageFor,
+  portalCheckAllowsRetry,
+  applyPortalCheckForTest: applyPortalCheck,
+  ensureStreamForTest: ensureStream,
+  startAfterLateAnswerForTest: startAfterLateAnswer,
   isUsableFrame,
   isBlankFrame,
   shouldDropBlankStream,
+  setStateForTest: setState,
+  cooldownUntilForTest: cooldownUntil,
 } = __test__;
+
+// Just enough window for a stream attempt; the page reports whatever state() says.
+function captureWindow(state: () => string) {
+  const executeJavaScript = vi.fn(async (script: string) => {
+    if (script.includes("__captureState")) return state();
+    if (script.includes("__captureError")) return "NotAllowedError: Permission denied";
+    return undefined;
+  });
+  return {
+    webContents: {
+      session: { setDisplayMediaRequestHandler: vi.fn() },
+      executeJavaScript,
+      setWindowOpenHandler: vi.fn(),
+      on: vi.fn(),
+    },
+    on: vi.fn(),
+    loadFile: vi.fn(async () => undefined),
+    isDestroyed: () => false,
+    destroy: vi.fn(),
+  };
+}
+
+function openRequester(pending: boolean) {
+  return { lookup: vi.fn(), pending: () => pending, abandon: vi.fn() };
+}
 
 function rawFrame(width: number, height: number, byteLength = width * height * 4) {
   return { width, height, pixels: new Uint8ClampedArray(byteLength) };
@@ -37,6 +134,12 @@ describe("display media request handler", () => {
 describe("linux capture source", () => {
   it("prefers the Warframe window over the screen", () => {
     expect(pickCaptureSource([SCREEN, OTHER, GAME])).toBe(GAME);
+  });
+
+  it("never takes a browser window that only mentions the game", () => {
+    const market = { id: "window:777:0", name: "Warframe Market - Mozilla Firefox" };
+    expect(pickCaptureSource([market, SCREEN, GAME])).toBe(GAME);
+    expect(pickCaptureSource([market, SCREEN])).toBe(SCREEN);
   });
 
   it("falls back to a screen when the game window is not listed", () => {
@@ -87,26 +190,374 @@ describe("raw stream frames", () => {
   });
 });
 
+type Source = { id: string; name: string };
+
+function deferred() {
+  let resolve!: (sources: Source[]) => void;
+  let reject!: (err: Error) => void;
+  const promise = new Promise<Source[]>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("capture source lookup", () => {
   it("gives up when the compositor never answers", async () => {
-    const pending = new Promise<never>(() => {});
-    await expect(lookupCaptureSource(() => pending, 20)).resolves.toMatchObject({
-      source: null,
-      timedOut: true,
-    });
+    const pending = new Promise<Source[]>(() => {});
+    const requester = createSourceRequester(() => pending, vi.fn());
+    await expect(requester.lookup(20)).resolves.toEqual({ source: null, timedOut: true });
+    expect(requester.pending()).toBe(true);
   });
 
-  it("picks a source when the lookup answers in time", async () => {
-    const answered = await lookupCaptureSource(async () => [SCREEN, GAME], 1_000);
-    expect(answered.source).toBe(GAME);
-    expect(answered.timedOut).toBe(false);
+  it("picks a source when the lookup answers in time, and asks again next time", async () => {
+    const getSources = vi.fn(async () => [SCREEN, GAME]);
+    const onLateAnswer = vi.fn();
+    const requester = createSourceRequester(getSources, onLateAnswer);
+    await expect(requester.lookup(1_000)).resolves.toEqual({ source: GAME, timedOut: false });
+    await requester.lookup(1_000);
+    expect(getSources).toHaveBeenCalledTimes(2);
+    expect(onLateAnswer).not.toHaveBeenCalled();
   });
 
   it("leaves a failed lookup to the caller", async () => {
-    await expect(
-      lookupCaptureSource(async () => {
-        throw new Error("dbus refused");
-      }, 1_000),
-    ).rejects.toThrow("dbus refused");
+    const requester = createSourceRequester<Source>(async () => {
+      throw new Error("dbus refused");
+    }, vi.fn());
+    await expect(requester.lookup(1_000)).rejects.toThrow("dbus refused");
+    expect(requester.pending()).toBe(false);
+  });
+
+  // Each getSources call can open another share dialog, and the player may answer
+  // the first one long after the scan that opened it gave up.
+  it("keeps one request open across timeouts and hands a late answer to the next stream", async () => {
+    const answer = deferred();
+    const getSources = vi.fn(() => answer.promise);
+    const onLateAnswer = vi.fn();
+    const requester = createSourceRequester(getSources, onLateAnswer);
+
+    await expect(requester.lookup(10)).resolves.toMatchObject({ timedOut: true });
+    await expect(requester.lookup(10)).resolves.toMatchObject({ timedOut: true });
+    expect(getSources).toHaveBeenCalledTimes(1);
+
+    answer.resolve([SCREEN, GAME]);
+    await vi.waitFor(() => expect(onLateAnswer).toHaveBeenCalledWith(GAME, expect.any(Number)));
+    expect(requester.pending()).toBe(false);
+
+    await expect(requester.lookup(10)).resolves.toEqual({ source: GAME, timedOut: false });
+    expect(getSources).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a late refusal and asks afresh next time", async () => {
+    const answer = deferred();
+    const getSources = vi.fn(() => answer.promise);
+    const onLateAnswer = vi.fn();
+    const requester = createSourceRequester(getSources, onLateAnswer);
+
+    await requester.lookup(10);
+    answer.reject(new Error("Failed to get sources."));
+    await vi.waitFor(() => expect(requester.pending()).toBe(false));
+    expect(onLateAnswer).not.toHaveBeenCalled();
+
+    getSources.mockImplementationOnce(async () => [SCREEN]);
+    await expect(requester.lookup(1_000)).resolves.toEqual({ source: SCREEN, timedOut: false });
+    expect(getSources).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks afresh after an abandoned request and ignores its late answer", async () => {
+    const first = deferred();
+    const getSources = vi.fn(() => first.promise);
+    const onLateAnswer = vi.fn();
+    const requester = createSourceRequester(getSources, onLateAnswer);
+
+    await requester.lookup(10);
+    requester.abandon();
+    expect(requester.pending()).toBe(false);
+
+    getSources.mockImplementationOnce(async () => [SCREEN]);
+    await expect(requester.lookup(1_000)).resolves.toEqual({ source: SCREEN, timedOut: false });
+    first.resolve([GAME]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onLateAnswer).not.toHaveBeenCalled();
+    expect(getSources).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("stream start", () => {
+  afterEach(() => {
+    setState({ requester: null, cooldownUntil: 0, disposed: false });
+    electronMocks.BrowserWindow.mockClear();
+  });
+
+  it("opens no second capture window while an earlier portal request is open", async () => {
+    setState({ requester: openRequester(true) });
+    await expect(ensureStream()).resolves.toBe(false);
+    expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();
+
+    setState({ requester: openRequester(false) });
+    await ensureStream();
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it("a late answer clears the cooldown and starts the stream", async () => {
+    setState({ cooldownUntil: Date.now() + 60_000 });
+    await startAfterLateAnswer();
+    expect(cooldownUntil()).toBe(0);
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it("a late answer after shutdown starts nothing", async () => {
+    const until = Date.now() + 60_000;
+    setState({ cooldownUntil: until, disposed: true });
+    await startAfterLateAnswer();
+    expect(cooldownUntil()).toBe(until);
+    expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();
+  });
+
+  it("drops the open request only when the check rules out a waiting dialog", () => {
+    const requester = openRequester(true);
+    setState({ requester });
+    applyPortalCheck({ kind: "screencast", version: 5 });
+    applyPortalCheck({ kind: "unresponsive" });
+    applyPortalCheck({ kind: "no-busctl" });
+    expect(requester.abandon).not.toHaveBeenCalled();
+
+    applyPortalCheck({ kind: "no-screencast" });
+    expect(requester.abandon).toHaveBeenCalledTimes(1);
+    expect(portalCheckAllowsRetry({ kind: "no-portal" })).toBe(true);
+    expect(portalCheckAllowsRetry({ kind: "no-bus" })).toBe(true);
+  });
+
+  it("tells the player whether a restart is needed", () => {
+    const backend = "xdg-desktop-portal-gnome";
+    expect(describePortalCheck({ kind: "no-screencast" }, backend)).toContain(
+      "logging out and back in",
+    );
+    expect(describePortalCheck({ kind: "unresponsive" }, backend)).toContain("restart WFHelper");
+    expect(describePortalCheck({ kind: "screencast", version: 5 }, backend)).toContain("answer it");
+  });
+});
+
+// The ozone flag settles the backend without reading any stored choice.
+function runAs(ozone: "wayland" | "x11"): void {
+  initializeDisplay(
+    "",
+    { XDG_SESSION_TYPE: "wayland", WAYLAND_DISPLAY: "wayland-1" },
+    "linux",
+    "",
+    [`--ozone-platform=${ozone}`],
+  );
+}
+
+describe("screen copy capture", () => {
+  beforeEach(() => runAs("wayland"));
+
+  afterEach(() => {
+    initializeDisplay("", {}, "linux");
+    screenCopy.available = false;
+    screenCopy.failure = null;
+    screenCopy.gameOutput = null;
+    screenCopy.outputs = [];
+    screenCopy.copyOutput.mockReset();
+    electronMocks.BrowserWindow.mockClear();
+    electronMocks.createFromBitmap.mockClear();
+    setState({ requester: null, cooldownUntil: 0, disposed: false });
+  });
+
+  const copied = { width: 2, height: 1, bitmap: Buffer.from([1, 2, 3, 255, 4, 5, 6, 255]) };
+
+  it("copies the game's monitor into the bitmap the scanners read, with no portal", async () => {
+    screenCopy.available = true;
+    screenCopy.gameOutput = "DP-2";
+    screenCopy.outputs = ["DP-1", "DP-2"];
+    screenCopy.copyOutput.mockResolvedValue(copied);
+
+    // The locator maps window rects through the logical rect of this output.
+    expect((await captureLinuxStreamFrame())?.origin).toEqual({
+      kind: "screen-copy",
+      output: "DP-2",
+    });
+
+    expect(screenCopy.copyOutput).toHaveBeenCalledWith("DP-2");
+    expect(electronMocks.createFromBitmap).toHaveBeenCalledWith(copied.bitmap, {
+      width: 2,
+      height: 1,
+    });
+    expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();
+  });
+
+  it("takes the first monitor when the game's cannot be told", async () => {
+    screenCopy.available = true;
+    screenCopy.outputs = ["HDMI-A-1", "DP-2"];
+    screenCopy.copyOutput.mockResolvedValue(copied);
+
+    await captureLinuxStreamFrame();
+
+    expect(screenCopy.copyOutput).toHaveBeenCalledWith("HDMI-A-1");
+  });
+
+  it("returns no frame and opens no portal when a copy fails", async () => {
+    screenCopy.available = true;
+    screenCopy.outputs = ["DP-1"];
+    screenCopy.copyOutput.mockResolvedValue(null);
+
+    expect(await captureLinuxStreamFrame()).toBeNull();
+    expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();
+    expect(electronMocks.createFromBitmap).not.toHaveBeenCalled();
+  });
+
+  // The reward overlay's "capture-unavailable" hint reads this after an empty scan.
+  it("reports a failed copy as the capture failure until a copy works", async () => {
+    screenCopy.available = true;
+    screenCopy.outputs = ["DP-1"];
+    screenCopy.failure = "compositor refused the copy";
+    screenCopy.copyOutput.mockResolvedValue(null);
+
+    await captureLinuxStreamFrame();
+    expect(getLinuxCaptureFailure()).toBe("screen copy failed: compositor refused the copy");
+
+    screenCopy.copyOutput.mockResolvedValue(copied);
+    await captureLinuxStreamFrame();
+    expect(getLinuxCaptureFailure()).toBeNull();
+  });
+
+  it("falls back to the portal stream where the compositor has no screen copy", async () => {
+    screenCopy.outputs = ["DP-1"];
+
+    expect(await captureLinuxStreamFrame()).toBeNull();
+    expect(screenCopy.copyOutput).not.toHaveBeenCalled();
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it("copies the screen on XWayland too, where the compositor offers it", async () => {
+    runAs("x11");
+    screenCopy.available = true;
+    screenCopy.outputs = ["DP-1"];
+    screenCopy.copyOutput.mockResolvedValue(copied);
+
+    expect(await captureLinuxStreamFrame()).not.toBeNull();
+    expect(screenCopy.copyOutput).toHaveBeenCalledWith("DP-1");
+    expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();
+  });
+});
+
+describe("capture setup from Settings", () => {
+  afterEach(() => {
+    setState({ requester: null, cooldownUntil: 0, disposed: false });
+    electronMocks.BrowserWindow.mockClear();
+    busctl.execFile.mockReset();
+    vi.unstubAllEnvs();
+  });
+
+  it("reports a dialog still waiting on the open request and never opens a second one", async () => {
+    setState({ requester: openRequester(true), cooldownUntil: Date.now() + 60_000 });
+    portalAnswers(null, "u 5\n");
+    await expect(setUpLinuxCapture()).resolves.toEqual({ state: "waiting" });
+    expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();
+    expect(busctl.execFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the portal package to install when the portal has no ScreenCast backend", async () => {
+    vi.stubEnv("NIRI_SOCKET", "");
+    vi.stubEnv("SWAYSOCK", "/run/user/1000/sway.sock");
+    const requester = openRequester(true);
+    setState({ requester });
+    portalAnswers({ code: 1 }, "", "No such interface 'org.freedesktop.portal.ScreenCast'");
+    await expect(setUpLinuxCapture()).resolves.toEqual({
+      state: "missing",
+      portalPackage: "xdg-desktop-portal-wlr",
+    });
+    expect(requester.abandon).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a portal that does not answer", async () => {
+    setState({ requester: openRequester(true) });
+    portalAnswers({ killed: true }, "");
+    await expect(setUpLinuxCapture()).resolves.toEqual({ state: "stuck" });
+  });
+
+  it("starts at once despite a scan cooldown", async () => {
+    setState({ cooldownUntil: Date.now() + 60_000 });
+    await expect(setUpLinuxCapture()).resolves.toEqual({ state: "failed" });
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(1);
+    expect(busctl.execFile).not.toHaveBeenCalled();
+  });
+
+  it("reports a refusal while a scan's capture window is still starting", async () => {
+    let state = "starting";
+    const win = captureWindow(() => state);
+    electronMocks.BrowserWindow.mockImplementationOnce(function () {
+      return win;
+    });
+    const scan = ensureStream();
+    await vi.waitFor(() =>
+      expect(win.webContents.executeJavaScript).toHaveBeenCalledWith(
+        expect.stringContaining("__captureState"),
+        true,
+      ),
+    );
+    const setup = setUpLinuxCapture();
+    state = "dead";
+    await expect(setup).resolves.toEqual({ state: "refused" });
+    await expect(scan).resolves.toBe(false);
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts nothing after shutdown", async () => {
+    setState({ disposed: true });
+    await expect(setUpLinuxCapture()).resolves.toEqual({ state: "failed" });
+    expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();
+  });
+});
+
+describe("desktop portal check", () => {
+  const exitError = (message: string) => ({ code: 1, killed: false, message });
+
+  it("reads the ScreenCast version from busctl", () => {
+    expect(classifyPortalCheck(null, "u 5\n", "")).toEqual({ kind: "screencast", version: 5 });
+  });
+
+  it("names a portal without a ScreenCast backend", () => {
+    const stderr =
+      "Failed to get property version on interface org.freedesktop.portal.ScreenCast:" +
+      " No such interface 'org.freedesktop.portal.ScreenCast'";
+    expect(classifyPortalCheck(exitError("exit 1"), "", stderr)).toEqual({
+      kind: "no-screencast",
+    });
+  });
+
+  it("separates a missing portal, a missing bus, a hang and a missing busctl", () => {
+    const notActivatable =
+      "Failed to get property version on interface org.freedesktop.portal.ScreenCast:" +
+      " The name org.freedesktop.portal.Desktop was not provided by any .service files";
+    expect(classifyPortalCheck(exitError("exit 1"), "", notActivatable).kind).toBe("no-portal");
+    expect(
+      classifyPortalCheck(exitError("exit 1"), "", "Failed to connect to bus: No medium found")
+        .kind,
+    ).toBe("no-bus");
+    expect(classifyPortalCheck({ killed: true, message: "killed" }, "", "").kind).toBe(
+      "unresponsive",
+    );
+    expect(
+      classifyPortalCheck({ code: "ENOENT", message: "spawn busctl ENOENT" }, "", "").kind,
+    ).toBe("no-busctl");
+  });
+
+  it("names the backend package for the running compositor", () => {
+    expect(portalBackendFor({ NIRI_SOCKET: "/run/user/1000/niri.sock" })).toContain(
+      "xdg-desktop-portal-gnome",
+    );
+    expect(portalBackendFor({ NIRI_SOCKET: "/run/user/1000/niri.sock" })).toContain("niri-session");
+    expect(portalPackageFor({ NIRI_SOCKET: "/run/user/1000/niri.sock" })).toBe(
+      "xdg-desktop-portal-gnome",
+    );
+    expect(portalPackageFor({ XDG_CURRENT_DESKTOP: "somewm" })).toBeNull();
+    expect(portalBackendFor({ SWAYSOCK: "/run/user/1000/sway.sock" })).toBe(
+      "xdg-desktop-portal-wlr",
+    );
+    expect(portalBackendFor({ XDG_CURRENT_DESKTOP: "KDE" })).toBe("xdg-desktop-portal-kde");
+    expect(describePortalCheck({ kind: "no-screencast" }, "xdg-desktop-portal-wlr")).toContain(
+      "install xdg-desktop-portal-wlr",
+    );
   });
 });

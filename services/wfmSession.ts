@@ -2,6 +2,7 @@ import fs from "fs";
 import { randomUUID } from "crypto";
 import { withScope } from "./logger";
 import { userDataPath } from "./userDataPath";
+import { writeFileAtomicSync } from "./atomicFile";
 import { normalizeErrorMessage } from "../config/shared/errors";
 import { normalizeWfmSlug, sanitizeWfmSlug, type WfmStatus } from "../config/shared/wfm";
 
@@ -24,6 +25,8 @@ interface SessionSummary {
   loggedIn: boolean;
   userName: string | null;
   platform: string;
+  /** False when a sign-in only lasts until restart: Linux without a keyring. */
+  persistable: boolean;
 }
 
 interface SignInResult extends SessionSummary {
@@ -55,6 +58,8 @@ let _userName: string | null = null;
 let _platform = "pc";
 let _profileSlug: string | null = null;
 let _profileSlugProbe: Promise<string | null> | null = null;
+// Settled by the save, so no read of it opens the keyring.
+let _persistable = true;
 
 // Register the token provider so wfmClient can inject the JWT into requests
 setTokenProvider(() => _token);
@@ -87,16 +92,27 @@ function _getDeviceId(): string {
   }
 }
 
+// Only Linux picks its secret store at runtime; basic_text there means no keyring
+// was chosen, which is what an unrecognised desktop such as niri or sway gets.
+function _storageBackend(): string {
+  return process.platform === "linux" ? safeStorage.getSelectedStorageBackend() : process.platform;
+}
+
 function _saveSession(token: string, userName: string): void {
   try {
     const payload = JSON.stringify({ token, userName, platform: _platform });
-    if (safeStorage.isEncryptionAvailable()) {
+    const encryption = safeStorage.isEncryptionAvailable();
+    // Only Linux can run without a secret store, so the flag stays true elsewhere.
+    _persistable = encryption || process.platform !== "linux";
+    if (encryption) {
       const encrypted = safeStorage.encryptString(payload);
-      fs.writeFileSync(SESSION_FILE(), encrypted);
+      writeFileAtomicSync(SESSION_FILE(), encrypted);
       return;
     }
 
-    log.warn("[WFMSession] safeStorage unavailable - session will not be persisted to disk");
+    log.warn(
+      `[WFMSession] safeStorage unavailable (backend ${_storageBackend()}) - session will not be persisted to disk`,
+    );
   } catch (err) {
     log.error("[WFMSession] Failed to persist session:", normalizeErrorMessage(err));
   }
@@ -109,6 +125,7 @@ function _resetProfileSlug(): void {
 
 function _clearSession(): void {
   _token = null;
+  _persistable = true;
   _userName = null;
   _resetProfileSlug();
   clearCsrfToken();
@@ -132,7 +149,9 @@ function _loadSession(): { token: string; userName: string; platform: string } |
     if (safeStorage.isEncryptionAvailable()) {
       payload = safeStorage.decryptString(raw);
     } else {
-      log.warn("[WFMSession] safeStorage unavailable - skipping persisted session restore");
+      log.warn(
+        `[WFMSession] safeStorage unavailable (backend ${_storageBackend()}) - skipping persisted session restore`,
+      );
       return null;
     }
 
@@ -211,7 +230,7 @@ export async function signIn(email: string, password: string): Promise<SignInRes
   _saveSession(token, userName);
 
   log.info(`[WFMSession] Signed in as: ${_userName}`);
-  return { loggedIn: true, userName: _userName, platform: _platform };
+  return { loggedIn: true, userName: _userName, platform: _platform, persistable: _persistable };
 }
 
 export function signOut(): SignOutResult {
@@ -223,6 +242,7 @@ export function signOut(): SignOutResult {
 export async function restoreSession(): Promise<void> {
   const saved = _loadSession();
   if (!saved || !saved.token) {
+    // Without a file, asking safeStorage would open the keyring for nothing.
     log.info("[WFMSession] No persisted session found.");
     return;
   }
@@ -230,6 +250,7 @@ export async function restoreSession(): Promise<void> {
   _token = saved.token;
   _userName = saved.userName || null;
   _platform = saved.platform || "pc";
+  _persistable = true;
   _resetProfileSlug();
   updateCsrfFromToken(saved.token);
   log.info(`[WFMSession] Restored session for: ${_userName}`);
@@ -240,6 +261,7 @@ export function getSession(): SessionSummary {
     loggedIn: !!_token,
     userName: _userName || null,
     platform: _platform,
+    persistable: _persistable,
   };
 }
 

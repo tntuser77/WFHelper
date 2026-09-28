@@ -3,15 +3,16 @@
   import { SvelteSet } from "svelte/reactivity";
 
   import { relicDb, relicOwnedCounts } from "../stores/relics.js";
-  import { activeItem, activeComponent, activeRelic } from "../stores/modals.js";
+  import { activeComponent, openRelicDetailed } from "../stores/modals.js";
   import { dropRarityColour } from "../lib/dropDisplay.js";
   import { fissureTierClass, RELIC_ICON_PATHS, RELIC_QUALITY_SHORT_KEY } from "../lib/relic.js";
   import { ownedRelicQualities, relicGroupForDisplayName } from "../lib/relic/relicInventory.js";
   import { sortRelicRewards } from "../../config/shared/relicRewardOrder.js";
+  import { ownedRelicDropsFirst } from "../lib/resolveDrops.js";
   import { buildWikiUrl } from "../lib/wikiUrl.js";
   import { tr } from "../lib/i18n.js";
   import type { DropInfo } from "../types/inventory.js";
-  import type { RelicGroup } from "../types/relics.js";
+  import type { RelicDatabase, RelicGroup } from "../types/relics.js";
 
   export let drops: DropInfo[];
   /** Empty means "use the default heading", which has to stay translatable. */
@@ -23,12 +24,12 @@
   let showAll = false;
   let openRelicKey: string | null = null;
 
-  function computeDedupedDrops(drops: DropInfo[]): DropInfo[] {
+  function computeDedupedDrops(drops: DropInfo[], db: RelicDatabase | null): DropInfo[] {
     const out: DropInfo[] = [];
     const seenRelicKeys = new SvelteSet<string>();
 
     for (const d of drops) {
-      const rg = relicGroupForDisplayName($relicDb, d.location);
+      const rg = relicGroupForDisplayName(db, d.location);
       if (!rg) {
         out.push(d);
         continue;
@@ -43,7 +44,7 @@
     }
 
     for (const d of drops) {
-      const rg = relicGroupForDisplayName($relicDb, d.location);
+      const rg = relicGroupForDisplayName(db, d.location);
       if (rg && !seenRelicKeys.has(rg.key)) {
         seenRelicKeys.add(rg.key);
         // Bare group name: the suffix is appended (translated) at render time,
@@ -55,7 +56,8 @@
     return out;
   }
 
-  $: dedupedDrops = computeDedupedDrops(drops || []);
+  $: dedupedDrops = computeDedupedDrops(drops || [], $relicDb);
+  $: listedDrops = ownedRelicDropsFirst(dedupedDrops, $relicDb, $relicOwnedCounts);
 
   let lastDropsKey = "";
   $: {
@@ -103,9 +105,8 @@
 
   function openDetailedRelic(rg: RelicGroup): void {
     openRelicKey = null;
-    activeItem.set(null);
     activeComponent.set(null);
-    activeRelic.set(rg);
+    openRelicDetailed(rg);
   }
 
   function openRelicWiki(rg: RelicGroup, ev: MouseEvent): void {
@@ -120,7 +121,7 @@
   <div class="detail-section">
     <h3>{headingText}</h3>
     <div class="detail-acquisition">
-      {#each showAll ? dedupedDrops : dedupedDrops.slice(0, initialLimit) as d}
+      {#each showAll ? listedDrops : listedDrops.slice(0, initialLimit) as d}
         {@const rg = relicGroupForDisplayName($relicDb, d.location)}
         {#if rg}
           {@const ownedHere = ownedRelicQualities($relicOwnedCounts, rg.key)}

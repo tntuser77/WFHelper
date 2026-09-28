@@ -226,8 +226,55 @@ describe("riven rule evaluation", () => {
     expect(hits[0].url).toBe("https://warframe.market/auction/abc123");
     expect(hits[0].platinum).toBe(100);
     // MR13 r0 0 rolls dissolves for 515 endo.
+    expect(hits[0].endo).toBe(515);
     expect(hits[0].endoPerPlat).toBeCloseTo(5.2, 1);
     expect(hits[0].sellerStatus).toBe("online");
+  });
+
+  it("keeps every seller when the riven rule names no status", async () => {
+    mocks.requestMock.mockResolvedValue(
+      auctionPayload([
+        { id: "a", seller: "InGameSeller", status: "ingame" },
+        { id: "b", seller: "OnlineSeller", status: "online" },
+        { id: "c", seller: "OfflineSeller", status: "offline" },
+      ]),
+    );
+    saveOk(rivenRuleRaw({ riven: { statuses: [] } }));
+    const stored = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, "market-alert-rules.json"), "utf8"),
+    ) as { rules: Array<{ riven: Record<string, unknown> }> };
+    expect(stored.rules[0].riven).not.toHaveProperty("statuses");
+    initEngine();
+    await runMarketAlertTickForTest();
+    expect(
+      getMarketAlertHits()
+        .map((hit) => hit.seller)
+        .sort(),
+    ).toEqual(["InGameSeller", "OfflineSeller", "OnlineSeller"]);
+  });
+
+  it("filters riven auctions by the rule's seller statuses", async () => {
+    mocks.requestMock.mockResolvedValue(
+      auctionPayload([
+        { id: "a", seller: "InGameSeller", status: "InGame" },
+        { id: "b", seller: "OnlineSeller", status: "online" },
+        { id: "c", seller: "OfflineSeller", status: "offline" },
+      ]),
+    );
+    saveOk(rivenRuleRaw({ riven: { statuses: ["ingame"] } }));
+    initEngine();
+    await runMarketAlertTickForTest();
+    expect(getMarketAlertHits().map((hit) => hit.seller)).toEqual(["InGameSeller"]);
+
+    resetMarketAlertsForTest();
+    saveOk(rivenRuleRaw({ riven: { statuses: ["ingame", "online"] } }));
+    initEngine();
+    await runMarketAlertTickForTest();
+    expect(
+      getMarketAlertHits()
+        .map((hit) => hit.seller)
+        .sort(),
+    ).toEqual(["InGameSeller", "OnlineSeller"]);
   });
 
   it("leads the hit with every stat on the roll, curses signed by the flag", async () => {
@@ -796,6 +843,20 @@ describe("item rule evaluation", () => {
     expect(mocks.requestMock).not.toHaveBeenCalled();
   });
 
+  it("matches an online-only item rule to online sellers only", async () => {
+    mocks.requestV2Mock.mockResolvedValue(
+      ordersPayload([
+        { id: "ingame", owner: "InGameSeller", platinum: 30, status: "ingame" },
+        { id: "online", owner: "OnlineSeller", platinum: 31, status: "online" },
+        { id: "offline", owner: "OfflineSeller", platinum: 32, status: "offline" },
+      ]),
+    );
+    saveOk(itemRuleRaw({ item: { statuses: ["online"] } }));
+    initEngine();
+    await runMarketAlertTickForTest();
+    expect(getMarketAlertHits().map((hit) => hit.seller)).toEqual(["OnlineSeller"]);
+  });
+
   it("names the item the way warframe.market does", async () => {
     mocks.catalogSlugMock.mockResolvedValue({ item_name: "Nekros Prime Set" });
     mocks.requestV2Mock.mockResolvedValue(ordersPayload([{ id: "cheap", platinum: 30 }]));
@@ -1005,6 +1066,38 @@ describe("engine plumbing", () => {
 
     saveOk(rivenRuleRaw());
     expect(listMarketAlertRules().rules).toHaveLength(1);
+  });
+
+  it("revives the numeric endo of a stored hit and drops a malformed one", () => {
+    const base = {
+      ruleId: "r",
+      ruleName: "Boar",
+      at: "2026-09-12T10:00:00.000Z",
+      kind: "riven",
+      title: "Riven: Boar",
+      detail: "stored before endo was recorded - 515 endo",
+      url: "https://warframe.market/auction/x",
+      platinum: 100,
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, "market-alert-hits.json"),
+      JSON.stringify({
+        schema: 1,
+        hits: [
+          { ...base, id: "with-endo", endo: 515, endoPerPlat: 5.2 },
+          { ...base, id: "text-endo", endo: "515" },
+          { ...base, id: "legacy" },
+        ],
+      }),
+      "utf8",
+    );
+
+    const revived = getMarketAlertHits();
+    expect(revived.map((hit) => hit.id)).toEqual(["with-endo", "text-endo", "legacy"]);
+    expect(revived[0].endo).toBe(515);
+    expect(revived[0].endoPerPlat).toBe(5.2);
+    expect(revived[1]).not.toHaveProperty("endo");
+    expect(revived[2]).not.toHaveProperty("endo");
   });
 
   it("keeps a rules file written before requireNegative was retired", () => {

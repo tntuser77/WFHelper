@@ -1,15 +1,20 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 let tmpDir = "";
+const realPlatform = process.platform;
 
 const encryption = vi.hoisted(() => ({
   available: false,
+  checks: vi.fn(),
   encrypt: vi.fn<(value: string) => Buffer>(),
   decrypt: vi.fn<(value: Buffer) => string>(),
+  backend: vi.fn<() => string>(),
 }));
+
+const logger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 
 vi.mock("electron", () => ({
   app: {
@@ -19,15 +24,23 @@ vi.mock("electron", () => ({
     },
   },
   safeStorage: {
-    isEncryptionAvailable: () => encryption.available,
+    isEncryptionAvailable: () => {
+      encryption.checks();
+      return encryption.available;
+    },
     encryptString: encryption.encrypt,
     decryptString: encryption.decrypt,
+    getSelectedStorageBackend: encryption.backend,
   },
 }));
 
 vi.mock("../../services/logger", () => ({
-  withScope: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+  withScope: () => logger,
 }));
+
+function setPlatform(platform: string): void {
+  Object.defineProperty(process, "platform", { value: platform, configurable: true });
+}
 
 vi.mock("../../services/wfmWebSocket", () => ({
   setStatusViaWebSocket: vi.fn(async () => ({ statusUntil: null })),
@@ -84,14 +97,24 @@ afterAll(() => {
 
 beforeEach(() => {
   encryption.available = false;
+  encryption.checks.mockReset();
   encryption.encrypt.mockReset();
   encryption.decrypt.mockReset();
+  encryption.backend.mockReset();
+  encryption.backend.mockReturnValue("basic_text");
+  logger.info.mockReset();
+  logger.warn.mockReset();
+  logger.error.mockReset();
   fs.rmSync(path.join(tmpDir, "wfm.session"), { force: true });
   client.request.mockReset();
   client.requestRaw.mockReset();
   client.requestV2.mockReset();
   client.requestRedirectTarget.mockReset();
   client.requestV2.mockResolvedValue({ data: {} });
+});
+
+afterEach(() => {
+  setPlatform(realPlatform);
 });
 
 describe("persisted session recovery", () => {
@@ -102,6 +125,7 @@ describe("persisted session recovery", () => {
     const original = await signedInAs("Trade Partner");
     expect(original.getSession().loggedIn).toBe(true);
     expect(fs.readFileSync(path.join(tmpDir, "wfm.session"))).toEqual(ciphertext);
+    expect(fs.readdirSync(tmpDir).filter((name) => name.endsWith(".tmp"))).toEqual([]);
     const payload = encryption.encrypt.mock.calls[0]![0];
     expect(JSON.parse(payload)).toEqual({
       token: "test-token",
@@ -137,17 +161,70 @@ describe("persisted session recovery", () => {
   });
 
   it("keeps login in memory without writing plaintext when encryption is unavailable", async () => {
+    setPlatform("linux");
     const session = await signedInAs("Trade Partner");
-    expect(session.getSession().loggedIn).toBe(true);
+    expect(session.getSession()).toMatchObject({ loggedIn: true, persistable: false });
     expect(fs.existsSync(path.join(tmpDir, "wfm.session"))).toBe(false);
     expect(encryption.encrypt).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[WFMSession] safeStorage unavailable (backend basic_text) - session will not be persisted to disk",
+    );
     vi.resetModules();
     const restarted = await import("../../services/wfmSession");
     await restarted.restoreSession();
     expect(restarted.getSession().loggedIn).toBe(false);
+    expect(logger.info).toHaveBeenCalledWith("[WFMSession] No persisted session found.");
+  });
+
+  it("leaves the keyring closed while nobody is signed in", async () => {
+    setPlatform("linux");
+    vi.resetModules();
+    const session = await import("../../services/wfmSession");
+    await session.restoreSession();
+    expect(session.getSession()).toMatchObject({ loggedIn: false, persistable: true });
+    expect(encryption.checks).not.toHaveBeenCalled();
+    expect(encryption.backend).not.toHaveBeenCalled();
+  });
+
+  it("tells the sign-in whether the login survives a restart", async () => {
+    setPlatform("linux");
+    scriptSignIn("Trade Partner");
+    vi.resetModules();
+    const withoutKeyring = await import("../../services/wfmSession");
+    await expect(withoutKeyring.signIn("tester@example.test", "pw")).resolves.toMatchObject({
+      loggedIn: true,
+      persistable: false,
+    });
+    const checks = encryption.checks.mock.calls.length;
+    expect(withoutKeyring.getSession().persistable).toBe(false);
+    expect(encryption.checks).toHaveBeenCalledTimes(checks);
+    withoutKeyring.signOut();
+    expect(withoutKeyring.getSession().persistable).toBe(true);
+  });
+
+  it("always reports a lasting login off Linux", async () => {
+    setPlatform("win32");
+    const session = await signedInAs("Trade Partner");
+    expect(session.getSession().persistable).toBe(true);
+    encryption.available = true;
+    encryption.encrypt.mockReturnValue(Buffer.from("sealed"));
+    await signedInAs("Trade Partner");
+    encryption.decrypt.mockReturnValue(
+      JSON.stringify({ token: "t", userName: "Trade Partner", platform: "pc" }),
+    );
+    vi.resetModules();
+    const restored = await import("../../services/wfmSession");
+    await restored.restoreSession();
+    expect(restored.getSession()).toEqual({
+      loggedIn: true,
+      userName: "Trade Partner",
+      platform: "pc",
+      persistable: true,
+    });
   });
 
   it("leaves an existing encrypted file intact when the keyring is unavailable", async () => {
+    setPlatform("linux");
     const ciphertext = Buffer.from("opaque-encrypted-session");
     const file = path.join(tmpDir, "wfm.session");
     fs.writeFileSync(file, ciphertext);
@@ -157,6 +234,19 @@ describe("persisted session recovery", () => {
     expect(session.getSession().loggedIn).toBe(false);
     expect(encryption.decrypt).not.toHaveBeenCalled();
     expect(fs.readFileSync(file)).toEqual(ciphertext);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[WFMSession] safeStorage unavailable (backend basic_text) - skipping persisted session restore",
+    );
+  });
+
+  // Electron defines getSelectedStorageBackend on Linux only.
+  it("names the platform instead of a Linux backend elsewhere", async () => {
+    setPlatform("win32");
+    await signedInAs("Trade Partner");
+    expect(encryption.backend).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[WFMSession] safeStorage unavailable (backend win32) - session will not be persisted to disk",
+    );
   });
 });
 

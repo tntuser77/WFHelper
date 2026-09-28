@@ -329,11 +329,15 @@ test.describe("Shared view layout", () => {
 
     await openView(page, "relics");
     await expect(await relicOwnershipSelect(page)).toBeVisible();
-    // The one toggle button among the relic filter selects.
-    await expect(page.locator("[data-relic-filter-controls] .filter-tab")).toBeVisible();
+    const neededReward = page.locator("[data-relic-filter-controls] [data-relic-needed-reward]");
+    await expect(neededReward).toBeVisible();
+    expect(await selectOptionValues(neededReward)).toEqual(["any", "needed"]);
   });
 
-  test("Relic filters and card headers stay compact at desktop width", async () => {
+  // The row wraps by design (a pinned single line overlapped the tabs at 125% text),
+  // and the web font decides whether both halves fit: offline, the wider fallback
+  // font drops the controls below the tabs at 1920px.
+  test("Relic filters stay compact at desktop width", async () => {
     await setLayoutViewport(page, 1920, 1080);
     await openView(page, "relics");
 
@@ -347,19 +351,46 @@ test.describe("Shared view layout", () => {
       if (!tabs || !controls) throw new Error("Relic filter sections are missing");
       // Math.max of an empty child list is -Infinity, which passes any ceiling.
       if (controls.children.length === 0) throw new Error("Relic filter controls are empty");
+      const rowRect = row.getBoundingClientRect();
       const tabsRect = tabs.getBoundingClientRect();
       const controlsRect = controls.getBoundingClientRect();
+      const children = Array.from(controls.children, (child) => child.getBoundingClientRect());
+      const gap = parseFloat(getComputedStyle(controls).columnGap) || 0;
+      const controlsWidth =
+        children.reduce((sum, rect) => sum + rect.width, 0) + gap * (children.length - 1);
       return {
         rowFits: row.scrollWidth <= row.clientWidth,
+        sharesLine: tabsRect.width + controlsWidth <= row.clientWidth,
+        controlsFitLine: controlsWidth <= row.clientWidth,
         bottomDelta: Math.abs(tabsRect.bottom - controlsRect.bottom),
-        maxControlHeight: Math.max(
-          ...Array.from(controls.children, (child) => child.getBoundingClientRect().height),
-        ),
+        controlsBelowTabs: controlsRect.top - tabsRect.bottom,
+        controlsLeft: controlsRect.left - rowRect.left,
+        controlsRight: rowRect.right - controlsRect.right,
+        controlLines:
+          Math.max(...children.map((rect) => rect.bottom)) -
+          Math.min(...children.map((rect) => rect.top)),
+        maxControlHeight: Math.max(...children.map((rect) => rect.height)),
       };
     });
     expect(layout.rowFits).toBe(true);
-    expect(layout.bottomDelta).toBeLessThanOrEqual(12);
+    expect(layout.controlsLeft, "the filter controls start left of the row").toBeGreaterThan(-1);
+    expect(layout.controlsRight, "the filter controls end right of the row").toBeGreaterThan(-1);
+    if (layout.sharesLine) {
+      expect(layout.bottomDelta, "the filter controls left the tab line").toBeLessThanOrEqual(12);
+    } else {
+      expect(layout.controlsBelowTabs, "the wrapped controls overlap the tabs").toBeGreaterThan(-1);
+    }
+    if (layout.controlsFitLine) {
+      expect(layout.controlLines, "the filter controls wrapped onto two lines").toBeLessThanOrEqual(
+        layout.maxControlHeight + 1,
+      );
+    }
     expect(layout.maxControlHeight).toBeLessThanOrEqual(36);
+  });
+
+  test("Relic card headers stay compact at desktop width", async () => {
+    await setLayoutViewport(page, 1920, 1080);
+    await openView(page, "relics");
 
     await (await relicOwnershipSelect(page)).selectOption("all");
     const firstCard = page.locator(".relic-compact-card").first();
@@ -422,6 +453,45 @@ test.describe("Shared view layout", () => {
       expectRelicHeadsIntact(pinned, `the ${Math.round(floor)}px card floor`);
     } finally {
       await unpinRelicGrid(page);
+    }
+  });
+
+  test("Relics edits its layout and keeps the filters pinned over the cards", async () => {
+    // 1600 lays the grid out wide (full rows), 1000 narrow (one column).
+    for (const width of [1600, 1000]) {
+      await openRelics(page, width);
+      const grid = page.locator('[data-layout-grid="relics"]');
+      await expect(grid).toHaveAttribute(
+        "data-layout-breakpoint",
+        width > 1100 ? "wide" : "narrow",
+      );
+      expect(
+        await grid
+          .locator("[data-layout-section]")
+          .evaluateAll((els) => els.map((el) => el.getAttribute("data-layout-section"))),
+      ).toEqual(["relics.filters", "relics.grid"]);
+
+      const toggle = page.locator('[data-layout-edit-toggle="relics"]');
+      await toggle.click();
+      await expect(page.locator('[data-layout-chrome="relics.grid"]')).toBeVisible();
+      await expect(page.locator('[data-layout-hide="relics.grid"]')).toHaveCount(0);
+      await expect(page.locator('[data-layout-hide="relics.filters"]')).toBeVisible();
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+      const pinned = await page.evaluate(() => {
+        const content = document.querySelector<HTMLElement>("#content");
+        const row = document.querySelector<HTMLElement>("[data-relic-filter-row]");
+        if (!content || !row) throw new Error("relic filter row is missing");
+        content.scrollTop = 800;
+        const scrolled = content.scrollTop;
+        const offset = row.getBoundingClientRect().top - content.getBoundingClientRect().top;
+        content.scrollTop = 0;
+        return { scrolled, offset };
+      });
+      expect(pinned.scrolled, `relic grid did not scroll at ${width}px`).toBeGreaterThan(200);
+      expect(pinned.offset, `relic filters scrolled away at ${width}px`).toBeGreaterThanOrEqual(-1);
+      expect(pinned.offset, `relic filters left the top at ${width}px`).toBeLessThan(40);
     }
   });
 

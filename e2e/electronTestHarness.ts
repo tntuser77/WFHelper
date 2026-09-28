@@ -76,6 +76,7 @@ async function startHarness(
   const env = { ...process.env } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
   env.WFHELPER_DISABLE_KEYBOARD_HOOK = "1";
+  env.WFHELPER_DISABLE_DBWIN = "1";
   env.LOCALAPPDATA = localAppData;
   env.WFHELPER_EE_LOG = path.join(localAppData, "Warframe", "EE.log");
   env.APPDATA = path.join(sandboxDir, "roaming");
@@ -290,6 +291,7 @@ export async function openView(page: Page, view: string): Promise<void> {
 
 export async function setDisplayLanguage(page: Page, code: string): Promise<void> {
   await page.locator('#sidebar [data-view="settings"]').click();
+  await page.locator('[data-tour-tab="general"]').click();
   await page.locator('[data-setting="language"] select').selectOption(code);
 }
 
@@ -361,6 +363,18 @@ export async function closeElectronTestHarness(
   }
 }
 
+/** Teardown for specs that launch Electron themselves instead of through the harness. */
+export async function closeElectronApp(
+  app: ElectronApplication | undefined,
+  sandboxDir: string,
+): Promise<void> {
+  try {
+    if (app) await stopElectron(app);
+  } finally {
+    removeSandbox(sandboxDir);
+  }
+}
+
 export async function stopElectron(app: ElectronApplication): Promise<void> {
   const child = harnessProcesses.get(app) ?? app.process();
   if (child.exitCode !== null || child.signalCode) {
@@ -368,10 +382,28 @@ export async function stopElectron(app: ElectronApplication): Promise<void> {
       throw new Error(`Electron process exited with ${child.exitCode}/${child.signalCode}`);
     return;
   }
-  const closed = app.close().then(
-    () => true,
-    () => false,
-  );
+  const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+  // app.close() drops Playwright's Node inspector socket while main is still logging,
+  // and the InspectorIo thread then faults (0xC0000005). Closing the inspector from
+  // main first lets the app quit with no debugger attached.
+  const closed = evaluateInMain(app, ({ app: electronApp }) => {
+    setImmediate(() => {
+      try {
+        process.getBuiltinModule("node:inspector").close();
+      } finally {
+        electronApp.quit();
+      }
+    });
+  })
+    .then(
+      () => exited,
+      () => undefined,
+    )
+    .then(() => app.close())
+    .then(
+      () => true,
+      () => false,
+    );
   if (!(await Promise.race([closed, delay(15_000)]))) {
     forceKillElectronTree(child.pid);
     await Promise.race([closed, delay(5_000)]);

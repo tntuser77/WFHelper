@@ -10,6 +10,7 @@ import {
   type Page,
 } from "@playwright/test";
 
+import { closeElectronApp } from "./electronTestHarness";
 import { mainWindow } from "./mainWindow";
 
 test.describe("WFM status pill (fixture mode)", () => {
@@ -32,6 +33,7 @@ test.describe("WFM status pill (fixture mode)", () => {
     const env = { ...process.env } as Record<string, string>;
     delete env.ELECTRON_RUN_AS_NODE;
     env.WFHELPER_DISABLE_KEYBOARD_HOOK = "1";
+    env.WFHELPER_DISABLE_DBWIN = "1";
     env.LOCALAPPDATA = localAppData;
     env.APPDATA = path.join(sandboxDir, "roaming");
     env.WFHELPER_USER_DATA = path.join(sandboxDir, "user-data");
@@ -51,8 +53,7 @@ test.describe("WFM status pill (fixture mode)", () => {
   });
 
   test.afterAll(async () => {
-    await app?.close();
-    fs.rmSync(sandboxDir, { recursive: true, force: true });
+    await closeElectronApp(app, sandboxDir);
   });
 
   test("the titlebar shows the market status without opening the Market tab", async () => {

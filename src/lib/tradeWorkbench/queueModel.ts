@@ -9,6 +9,7 @@ import {
   type SafetyVerdict,
 } from "../inventory/safetyRules.js";
 import { getLookupByGameRef, getLookupByName } from "../inventoryMarket.js";
+import { relicQualityForItem } from "../marketOrderInventory.js";
 import {
   NO_PLAT_RANGE,
   platRangeActive,
@@ -18,6 +19,7 @@ import {
 import {
   suggestPrice,
   type DampingRule,
+  type MedianReference,
   type PriceSuggestion,
   type PricingListing,
   type StrategyConfig,
@@ -158,8 +160,7 @@ function rowRank(item: ParsedItem): number | null {
   return Number.isFinite(item.rank) ? Math.max(0, Math.floor(item.rank)) : 0;
 }
 
-/** Refinement of a relic projection uniqueName; the relic database is the
- *  only source that decodes DE's colour suffixes (EBronze, EPlatinum). */
+/** Refinement of a relic projection uniqueName, from the relic database. */
 type RelicQualityResolver = (uniqueName: string) => string | null;
 
 export function relicSubtypeFor(item: ParsedItem, resolve?: RelicQualityResolver): string | null {
@@ -167,10 +168,10 @@ export function relicSubtypeFor(item: ParsedItem, resolve?: RelicQualityResolver
   const resolved = resolve?.(item.internalName);
   if (resolved) return resolved;
   // The item-DB name is refinement-free ("Axi A1 Relic"), so the uniqueName is
-  // the only refinement the row carries; DE colour suffixes still read Intact.
+  // the only refinement the row carries while the relic database still loads.
   const match =
     RELIC_SUBTYPE_RE.exec(item.name) ?? RELIC_SUBTYPE_SUFFIX_RE.exec(item.internalName ?? "");
-  return match ? match[1].toLowerCase() : "intact";
+  return match ? match[1].toLowerCase() : relicQualityForItem(item);
 }
 
 export function buildQueueRows(
@@ -422,6 +423,7 @@ export function applyStrategy(
   config: StrategyConfig,
   ownUserName: string | null,
   damping?: DampingRule,
+  median: MedianReference | null = null,
 ): WorkbenchQueueRow {
   if (!row.sellBook) return { ...row, suggestion: null };
   const suggestion = suggestPrice(
@@ -431,6 +433,7 @@ export function applyStrategy(
       currentPrice: row.existingOrder?.platinum ?? null,
       ownPerTrade: row.existingOrder?.perTrade ?? 1,
       ownUserName,
+      median,
     },
     damping,
   );

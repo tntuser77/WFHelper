@@ -3,6 +3,7 @@ import type { MarketStatPoint, MarketStatsMergeMode } from "../../config/shared/
 import type {
   WfmContractsQuery,
   WfmContractsResult,
+  WfmCloseResult,
   WfmCreateOrderInput,
   WfmDeleteResult,
   WfmLookupItem,
@@ -17,7 +18,8 @@ import type {
   WfmUpdateOrderInput,
   WfmUserProfile,
 } from "./market.js";
-import type { DropSearchMode, DropSearchResult } from "../../config/shared/dropTypes.js";
+import type { DropRow, DropSearchMode, DropSearchResult } from "../../config/shared/dropTypes.js";
+import type { SpawnNode } from "../../config/shared/spawnNodeTypes.js";
 import type {
   WorkbenchExecuteResult,
   WorkbenchOverrideAck,
@@ -44,15 +46,22 @@ import type {
   PopoutWindowInfo,
 } from "../../config/shared/popoutTypes.js";
 import type { RelicDatabase } from "./relics.js";
+import type { RelicDataInfo } from "../../config/shared/relicDataInfo.js";
+import type { RelicOverlayFilterPush } from "../../config/shared/relicPlannerView.js";
 import type { WorldState } from "./world.js";
 import type { HelperStatus } from "../../config/shared/apiHelperTypes.js";
 import type { CodexScansResult } from "../../config/shared/codexTypes.js";
-import type { InventorySource } from "../../config/shared/inventorySource.js";
-import type { DisplayPreference, LinuxDisplayInfo } from "../../config/shared/linuxDisplay.js";
+import type { InventoryExportError, InventorySource } from "../../config/shared/inventorySource.js";
+import type {
+  DisplayPreference,
+  LinuxCaptureSetupResult,
+  LinuxDisplayInfo,
+} from "../../config/shared/linuxDisplay.js";
 import type {
   NotificationChannelState,
   NotificationEntry,
   NotificationSource,
+  SetDiscordPingResult,
   SetWebhookResult,
   SourceChannelToggles,
   WebhookChannel,
@@ -156,6 +165,7 @@ export type ItemDbLookup = Record<string, ItemDbEntry>;
 
 type WfmOrderResult = WfmOrder | WfmMutationError;
 type WfmDeleteOrderResult = WfmDeleteResult | WfmMutationError;
+type WfmCloseOrderResult = WfmCloseResult | WfmMutationError;
 type WfmSetVisibleResult = Array<WfmOrder | WfmMutationError>;
 type WfmOrdersResponse = WfmOrdersResult | WfmMutationError;
 type WfmContractsResponse = WfmContractsResult | WfmMutationError;
@@ -265,6 +275,10 @@ export interface IpcInvokeMap {
     args: [];
     return: InventoryStatus;
   };
+  exportInventory: {
+    args: [];
+    return: { saved: boolean; path?: string; error?: InventoryExportError };
+  };
   getItemDatabase: {
     args: [];
     return: ItemDbLookup;
@@ -276,6 +290,10 @@ export interface IpcInvokeMap {
   getRelicDatabase: {
     args: [];
     return: RelicDatabase | null;
+  };
+  getRelicDataInfo: {
+    args: [];
+    return: RelicDataInfo;
   };
   getWfmItems: {
     args: [];
@@ -312,6 +330,10 @@ export interface IpcInvokeMap {
   wfmDeleteOrder: {
     args: [orderId: string];
     return: WfmDeleteOrderResult;
+  };
+  wfmCloseOrder: {
+    args: [orderId: string, quantity: number];
+    return: WfmCloseOrderResult;
   };
   wfmSetVisible: {
     args: [orderIds: string[], visible: boolean];
@@ -371,6 +393,14 @@ export interface IpcInvokeMap {
     args: [query: string, mode: DropSearchMode];
     return: DropSearchResult;
   };
+  dropSourcesForItem: {
+    args: [name: string];
+    return: DropRow[];
+  };
+  getSpawnNodes: {
+    args: [];
+    return: SpawnNode[];
+  };
   getLinuxDisplay: {
     args: [];
     return: LinuxDisplayInfo;
@@ -378,6 +408,10 @@ export interface IpcInvokeMap {
   setLinuxDisplay: {
     args: [preference: DisplayPreference];
     return: LinuxDisplayInfo;
+  };
+  setUpLinuxCapture: {
+    args: [];
+    return: LinuxCaptureSetupResult;
   };
   getOverlaySettings: {
     args: [];
@@ -454,6 +488,14 @@ export interface IpcInvokeMap {
   setNotificationSourceChannels: {
     args: [source: NotificationSource, toggles: SourceChannelToggles];
     return: NotificationChannelState;
+  };
+  setNotificationGameGate: {
+    args: [enabled: boolean];
+    return: NotificationChannelState;
+  };
+  setNotificationDiscordPing: {
+    args: [userId: string];
+    return: SetDiscordPingResult;
   };
   testNotificationWebhook: {
     args: [channel: WebhookChannel];
@@ -682,6 +724,14 @@ export interface IpcInvokeMap {
   getPtRuns: {
     args: [];
     return: PtRunsPayload;
+  };
+  getMissionRewards: {
+    args: [];
+    return: MissionRewardsPayload;
+  };
+  getMissionRewardsPage: {
+    args: [query: MissionRewardsQuery];
+    return: MissionRewardsPage | null;
   };
   refreshPtRuns: {
     args: [];
@@ -947,6 +997,19 @@ import type {
 export type { PtRunRecord };
 
 import type {
+  MissionRewardsPage,
+  MissionRewardsPayload,
+  MissionRewardsQuery,
+} from "../../config/shared/missionRewardsTypes.js";
+export type {
+  MissionRewardItem,
+  MissionRewardSummaryView,
+  MissionRewardsPage,
+  MissionRewardsPayload,
+  MissionRewardsQuery,
+} from "../../config/shared/missionRewardsTypes.js";
+
+import type {
   LevelCapBuildPatch,
   LevelCapBuildSource,
   LevelCapCatalog,
@@ -975,6 +1038,7 @@ export interface IpcEventMap {
   "profile-account-changed": void;
   "inventory-status-updated": InventoryStatus;
   "item-db-updated": undefined;
+  "relic-db-updated": undefined;
   "app-update-status": AppUpdateState;
   "wfm:notification": WfmNotification;
   "helper-download-progress": HelperDownloadProgress;
@@ -983,9 +1047,11 @@ export interface IpcEventMap {
   "arbi-run-saved": ArbiRunRecord;
   "arbi-open-run": string;
   "pt-run-saved": PtRunRecord;
+  "mission-rewards-updated": MissionRewardsPayload;
   "level-cap-updated": LevelCapPayload;
   "level-cap-hotkey": LevelCapHotkeyOutcome;
   "warframe-ui-scale-updated": number | null;
+  "riven-similar-auctions": boolean;
   "notification-history-added": NotificationEntry;
   "notification-sound-play": import("../../config/shared/notificationSound.js").NotificationSoundPlayback;
   "market-alerts:changed": undefined;
@@ -1002,6 +1068,6 @@ export interface IpcSendMap {
   "overlay-theme-updated": [themeVars: Record<string, string>];
   "overlay-locale-updated": [locale: string];
   "game-locale-updated": [locale: string];
-  "overlay:push-relic-filters": [filters: { squadSize: number; tierFilter: string | null }];
+  "overlay:push-relic-filters": [filters: RelicOverlayFilterPush];
   "open-external": [url: string];
 }

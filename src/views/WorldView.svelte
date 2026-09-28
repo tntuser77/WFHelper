@@ -124,10 +124,13 @@
     buildFeaturedPrimes,
     buildBaroOwnedSet,
     circuitRotationIndex,
+    circuitWeeksFrom,
+    circuitWeeksLabel,
     resolveCircuitChoices,
     resolveCircuitRotation,
     type CircuitChoice,
   } from "../lib/world.js";
+  import { buildIncarnonWeapons, incarnonByName, incarnonFor } from "../lib/incarnon.js";
   import type { ItemDbEntry, RawInventoryData } from "../types/inventory.js";
   import { overlaySettings } from "../stores/overlaySettings.js";
   import { isPopoutWindow } from "../stores/popout.js";
@@ -241,6 +244,7 @@
   $: duviriHard = (duviri.choices || []).find((c) => c.category === "hard")?.choices || [];
   $: circuitNormalItems = resolveCircuitChoices(duviriNormal, $itemDb, $inventoryData);
   $: circuitHardItems = resolveCircuitChoices(duviriHard, $itemDb, $inventoryData);
+  $: incarnonLookup = incarnonByName(buildIncarnonWeapons($itemDb, $inventoryData, duviriHard));
 
   let circuitFullView = false;
   $: circuitNormalIdx = circuitRotationIndex(CIRCUIT_NORMAL_ROTATION, duviriNormal);
@@ -255,14 +259,8 @@
     t: Translator,
   ): Array<{ label: string; current: boolean; items: CircuitChoice[] }> {
     if (idx < 0) return [];
-    const ordered = [...rotation.slice(idx), ...rotation.slice(0, idx)];
-    return resolveCircuitRotation(ordered, db, inv).map((items, i) => ({
-      label:
-        i === 0
-          ? t("world.thisWeek")
-          : i === 1
-            ? t("world.nextWeek")
-            : t("world.inWeeks", { n: i }),
+    return resolveCircuitRotation(circuitWeeksFrom(rotation, idx), db, inv).map((items, i) => ({
+      label: circuitWeeksLabel(i, t),
       current: i === 0,
       items,
     }));
@@ -376,6 +374,20 @@
     ...(bounties.length > 0 ? ["world.bounties"] : []),
   ];
 </script>
+
+{#snippet circuitCard(item: CircuitChoice, isSteelPath: boolean)}
+  <IconButtonCard
+    name={itemLabel(item)}
+    imageUrl={item.imageUrl}
+    owned={item.owned}
+    subsumed={item.subsumed}
+    incarnon={isSteelPath ? incarnonFor(incarnonLookup, item.name) : null}
+    onClick={() => openItemDetail(item.uniqueName)}
+    size={80}
+    hoverScale={108}
+    borderWidth="1.5"
+  />
+{/snippet}
 
 <section class="view active">
   <div class="mb-4">
@@ -623,16 +635,7 @@
                       >
                       <div class="flex gap-2">
                         {#each week.items as item}
-                          <IconButtonCard
-                            name={itemLabel(item)}
-                            imageUrl={item.imageUrl}
-                            owned={item.owned}
-                            subsumed={item.subsumed}
-                            onClick={() => openItemDetail(item.uniqueName)}
-                            size={80}
-                            hoverScale={108}
-                            borderWidth="1.5"
-                          />
+                          {@render circuitCard(item, rot.isSteelPath)}
                         {/each}
                       </div>
                     </div>
@@ -641,16 +644,7 @@
               {:else}
                 <div class="-mx-1.5 -mt-1 mb-1 flex gap-2 overflow-x-auto p-2">
                   {#each rot.items as item}
-                    <IconButtonCard
-                      name={itemLabel(item)}
-                      imageUrl={item.imageUrl}
-                      owned={item.owned}
-                      subsumed={item.subsumed}
-                      onClick={() => openItemDetail(item.uniqueName)}
-                      size={80}
-                      hoverScale={108}
-                      borderWidth="1.5"
-                    />
+                    {@render circuitCard(item, rot.isSteelPath)}
                   {:else}
                     <span class="text-sm text-text-secondary opacity-70">{$tr("world.noData")}</span
                     >

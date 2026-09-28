@@ -25,8 +25,14 @@ export const OVERLAY_WINDOW_KEYS = [
   "rivenLeft",
   "rivenRight",
   "arbiSummary",
+  "tradeNotification",
 ] as const;
 export type OverlayWindowKey = (typeof OVERLAY_WINDOW_KEYS)[number];
+
+/** The trade toast has a fixed size: it keeps a saved position but never a scale. */
+export function isScalableOverlayWindow(key: OverlayWindowKey): boolean {
+  return key !== "tradeNotification";
+}
 
 export interface OverlaySavedWindowBounds {
   x: number;
@@ -86,6 +92,8 @@ export interface OverlaySettings {
   rivenOverlayEnabled: boolean;
   arbiSummaryOverlayEnabled: boolean;
   arbiTrackingEnabled: boolean;
+  /** Read the game's resident inventory after each mission; a missing key is off. */
+  missionTrackingEnabled: boolean;
   /** Refresh inventory in the background; only applies to the helper source. */
   autoInventorySyncEnabled: boolean;
   /** Save failed-scan OCR images (riven crops, reward scan-debug bundles); on unless opted out. */
@@ -109,6 +117,11 @@ export interface OverlaySettings {
   overlayWindowBounds: Partial<Record<OverlayWindowKey, OverlaySavedWindowBounds>>;
   /** True once the user has dragged a live overlay; retires the move hint chip. */
   overlayDragHintDismissed: boolean;
+  /** Linux only: reward, planner and riven overlays open taking clicks, since native
+   *  Wayland never delivers the interaction hotkey. */
+  linuxOverlaysInteractive: boolean;
+  /** "Similar on WFM" in the riven overlay and riven modal lists bidding auctions too. */
+  rivenSimilarAuctionsShown: boolean;
 }
 
 // The injection guard reads this file straight off disk before the settings
@@ -165,6 +178,7 @@ export const OVERLAY_SETTINGS_DEFAULTS = Object.freeze({
   rivenOverlayEnabled: true,
   arbiSummaryOverlayEnabled: true,
   arbiTrackingEnabled: true,
+  missionTrackingEnabled: false,
   autoInventorySyncEnabled: true,
   ocrDebugImagesEnabled: true,
   blockThirdPartyInjection: true,
@@ -179,6 +193,8 @@ export const OVERLAY_SETTINGS_DEFAULTS = Object.freeze({
   overlayWindowScales: Object.freeze({}),
   overlayWindowBounds: Object.freeze({}),
   overlayDragHintDismissed: false,
+  linuxOverlaysInteractive: false,
+  rivenSimilarAuctionsShown: true,
 });
 
 // Migrate the old default because its global grab steals the standard tab shortcut.
@@ -208,3 +224,11 @@ export const isRivenOverlayEnabled = (s: OverlayToggleSettings) =>
   isOverlayToggleEnabled(s, "rivenOverlayEnabled");
 export const isArbiSummaryOverlayEnabled = (s: OverlayToggleSettings) =>
   isOverlayToggleEnabled(s, "arbiSummaryOverlayEnabled");
+
+/** The mode a reward, planner or riven overlay opens in, and returns to once closed. */
+export function overlaysStartInteractive(
+  settings: Partial<Pick<OverlaySettings, "linuxOverlaysInteractive">> | null | undefined,
+  platform: string,
+): boolean {
+  return platform === "linux" && settings?.linuxOverlaysInteractive === true;
+}

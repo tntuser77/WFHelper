@@ -8,19 +8,25 @@ const configFile = path.join(tempDir, "notification-channels.json");
 
 const DISCORD_URL = "https://discord.com/api/webhooks/1234/abcdefgh";
 const GENERIC_URL = "https://hooks.example.com/services/wxyz";
+const PING_ID = "123456789012345678";
 
 const h = vi.hoisted(() => ({
   lookup: vi.fn(),
   warns: [] as string[],
   infos: [] as string[],
   encryptionAvailable: true,
+  encryptionChecks: 0,
+  gameRunning: null as boolean | null,
 }));
 
 // Reversible stand-in for the OS keychain: the test only needs "not plaintext".
 vi.mock("electron", () => ({
   app: { getPath: () => tempDir },
   safeStorage: {
-    isEncryptionAvailable: () => h.encryptionAvailable,
+    isEncryptionAvailable: () => {
+      h.encryptionChecks += 1;
+      return h.encryptionAvailable;
+    },
     encryptString: (text: string) => Buffer.from(`sealed:${text}`, "utf8"),
     decryptString: (raw: Buffer) => {
       const text = Buffer.from(raw).toString("utf8");
@@ -33,6 +39,10 @@ vi.mock("electron", () => ({
 vi.mock("node:dns", () => ({
   default: { promises: { lookup: h.lookup } },
   promises: { lookup: h.lookup },
+}));
+
+vi.mock("../../services/warframeStatus", () => ({
+  isWarframeRunningCached: () => h.gameRunning,
 }));
 
 vi.mock("../../services/logger", () => ({
@@ -87,6 +97,7 @@ beforeEach(() => {
   h.warns.length = 0;
   h.infos.length = 0;
   h.encryptionAvailable = true;
+  h.gameRunning = null;
   h.lookup.mockReset();
   h.lookup.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
   fetchMock.mockReset();
@@ -393,6 +404,70 @@ describe("dispatch routing", () => {
     expect(sent.allowed_mentions).toEqual({ parse: [] });
   });
 
+  it("sends the unchanged Discord payload when no user is set to ping", async () => {
+    const channels = await importChannels();
+    enableWebhookForWorld();
+
+    channels.dispatch({ source: "worldState", title: "Baro", body: "arrived" });
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock.mock.calls[0][1].body).toBe(
+      '{"content":"**Baro**\\narrived","allowed_mentions":{"parse":[]}}',
+    );
+  });
+
+  it("pings only the configured Discord user", async () => {
+    const channels = await importChannels();
+    seedConfig({
+      webhooks: { discord: DISCORD_URL },
+      sources: { worldState: { native: true, webhook: true } },
+      discordPingUserId: PING_ID,
+    });
+
+    channels.dispatch({ source: "worldState", title: "@everyone", body: "<@&42> <@1234> ping" });
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const sent = JSON.parse(String(fetchMock.mock.calls[0][1].body)) as Record<string, unknown>;
+    expect(sent).toEqual({
+      content: `<@${PING_ID}> **@everyone**\n<@&42> <@1234> ping`,
+      allowed_mentions: { parse: [], users: [PING_ID] },
+    });
+  });
+
+  it("keeps the ping inside Discord's content limit", async () => {
+    const channels = await importChannels();
+    seedConfig({
+      webhooks: { discord: DISCORD_URL },
+      sources: { worldState: { native: true, webhook: true } },
+      discordPingUserId: PING_ID,
+    });
+
+    channels.dispatch({ source: "worldState", title: "Baro", body: "x".repeat(3000) });
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const sent = JSON.parse(String(fetchMock.mock.calls[0][1].body)) as { content: string };
+    expect(sent.content.startsWith(`<@${PING_ID}> **Baro**\n`)).toBe(true);
+    expect(sent.content).toHaveLength(2000);
+  });
+
+  it("leaves the generic payload and desktop delivery alone when a ping is set", async () => {
+    const channels = await importChannels();
+    seedConfig({
+      webhooks: { generic: GENERIC_URL },
+      sources: { worldState: { native: true, webhook: true } },
+      discordPingUserId: PING_ID,
+    });
+    const native = vi.fn();
+
+    channels.dispatch({ source: "worldState", title: "Baro", body: "arrived" }, native);
+
+    expect(native).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = String(fetchMock.mock.calls[0][1].body);
+    expect(body).not.toContain(PING_ID);
+    expect(JSON.parse(body)).toMatchObject({ title: "Baro", body: "arrived" });
+  });
+
   it("posts the documented generic payload", async () => {
     const channels = await importChannels();
     seedConfig({
@@ -456,6 +531,73 @@ describe("dispatch routing", () => {
   });
 });
 
+describe("desktop delivery while the game is closed", () => {
+  function gateWorldState(): void {
+    seedConfig({
+      webhooks: { discord: DISCORD_URL },
+      sources: { worldState: { native: true, webhook: true } },
+      nativeOnlyWhileGameRunning: true,
+    });
+  }
+
+  it("holds the desktop notification but still posts the webhook", async () => {
+    const channels = await importChannels();
+    gateWorldState();
+    h.gameRunning = false;
+    const native = vi.fn();
+
+    channels.dispatch({ source: "worldState", title: "Baro", body: "arrived" }, native);
+
+    expect(native).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("delivers while the game runs and whenever its state is unknown", async () => {
+    const channels = await importChannels();
+    gateWorldState();
+    const running = vi.fn();
+    const unknown = vi.fn();
+
+    h.gameRunning = true;
+    channels.dispatch({ source: "worldState", title: "Baro", body: "arrived" }, running);
+    h.gameRunning = null;
+    channels.dispatch({ source: "worldState", title: "Baro", body: "arrived" }, unknown);
+
+    expect(running).toHaveBeenCalledTimes(1);
+    expect(unknown).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores the game state while the option is off", async () => {
+    const channels = await importChannels();
+    h.gameRunning = false;
+    const native = vi.fn();
+
+    channels.dispatch({ source: "worldState", title: "Baro", body: "arrived" }, native);
+
+    expect(native).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs the hold once per state change, not once per notification", async () => {
+    const channels = await importChannels();
+    gateWorldState();
+    h.gameRunning = false;
+    const native = vi.fn();
+
+    for (let index = 0; index < 3; index += 1) {
+      channels.dispatch({ source: "worldState", title: `n${index}`, body: "" }, native);
+    }
+    const held = (): number => h.infos.filter((line) => line.includes("holding desktop")).length;
+    expect(held()).toBe(1);
+
+    h.gameRunning = true;
+    channels.dispatch({ source: "worldState", title: "back", body: "" }, native);
+    h.gameRunning = false;
+    channels.dispatch({ source: "worldState", title: "gone", body: "" }, native);
+
+    expect(held()).toBe(2);
+  });
+});
+
 describe("configuration storage", () => {
   it("gives every declared source a default route", async () => {
     const channels = await importChannels();
@@ -468,6 +610,83 @@ describe("configuration storage", () => {
     for (const source of NOTIFICATION_SOURCES) {
       expect(sources[source]).toEqual(DEFAULT_SOURCE_CHANNELS[source]);
     }
+  });
+
+  it("keeps the game gate off until it is saved, and across a reload", async () => {
+    const first = await importChannels();
+    expect(first.getChannelState().nativeOnlyWhileGameRunning).toBe(false);
+
+    seedConfig({ nativeOnlyWhileGameRunning: "yes" });
+    expect((await importChannels()).getChannelState().nativeOnlyWhileGameRunning).toBe(false);
+
+    fs.rmSync(configFile, { force: true });
+    const saved = (await importChannels()).setNativeOnlyWhileGameRunning(true);
+
+    expect(saved.nativeOnlyWhileGameRunning).toBe(true);
+    expect((await importChannels()).getChannelState().nativeOnlyWhileGameRunning).toBe(true);
+  });
+
+  // Asking safeStorage can open the Linux keyring and prompt for its password.
+  it("saves channel settings without asking the keyring when no webhook is set", async () => {
+    const channels = await importChannels();
+    h.encryptionChecks = 0;
+
+    channels.setSourceChannels("whisper", { native: false, webhook: true });
+    channels.setNativeOnlyWhileGameRunning(true);
+    channels.setDiscordPingUserId(PING_ID);
+
+    expect(h.encryptionChecks).toBe(0);
+  });
+
+  it("accepts only a Discord user ID as the ping target", async () => {
+    const channels = await importChannels();
+
+    for (const raw of [
+      "1234567890123456",
+      "12345678901234567a",
+      `<@${PING_ID}>`,
+      "123456789012345678901",
+      "@everyone",
+    ]) {
+      expect(channels.setDiscordPingUserId(raw)).toEqual({ ok: false, error: "invalid-user-id" });
+    }
+    expect(fs.existsSync(configFile)).toBe(false);
+    expect(channels.getChannelState().discordPingUserId).toBe("");
+
+    expect(channels.setDiscordPingUserId(" 12345678901234567 ")).toMatchObject({
+      ok: true,
+      state: { discordPingUserId: "12345678901234567" },
+    });
+    expect(channels.setDiscordPingUserId("12345678901234567890")).toMatchObject({
+      ok: true,
+      state: { discordPingUserId: "12345678901234567890" },
+    });
+  });
+
+  it("round-trips the ping target in the plain settings and clears it when emptied", async () => {
+    const first = await importChannels();
+    await first.setWebhookUrl("discord", DISCORD_URL);
+    first.setDiscordPingUserId(PING_ID);
+
+    const onDisk = JSON.parse(fs.readFileSync(configFile, "utf8")) as Record<string, unknown>;
+    expect(onDisk.discordPingUserId).toBe(PING_ID);
+    expect(JSON.stringify(onDisk.webhooks)).not.toContain(PING_ID);
+
+    const second = await importChannels();
+    expect(second.getChannelState().discordPingUserId).toBe(PING_ID);
+    expect(second.getChannelState().webhooks.discord.configured).toBe(true);
+
+    expect(second.setDiscordPingUserId("   ")).toMatchObject({
+      ok: true,
+      state: { discordPingUserId: "" },
+    });
+    expect((await importChannels()).getChannelState().discordPingUserId).toBe("");
+  });
+
+  it("drops a hand-edited ping target that is not a user ID", async () => {
+    seedConfig({ webhooks: { discord: DISCORD_URL }, discordPingUserId: "<@&42>" });
+
+    expect((await importChannels()).getChannelState().discordPingUserId).toBe("");
   });
 
   it("masks the saved URL and never returns the secret", async () => {

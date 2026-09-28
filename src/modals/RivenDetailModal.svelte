@@ -10,10 +10,17 @@
   import {
     canonicalRivenStatName,
     computeRivenStatSimilarity,
+    formatRivenListingStatValue,
   } from "../../renderer/riven-similarity.js";
   import { tr, type MessageKey } from "../lib/i18n.js";
   import { RIVEN_ATTR_GRADE_KEYS, RIVEN_TYPE_KEYS } from "../lib/rivenLabels.js";
   import { rivenDissolveHint } from "../lib/rivens/dissolve.js";
+  import { log } from "../lib/log.js";
+  import {
+    applyOverlaySettingsResponse,
+    ensureOverlaySettingsLoaded,
+    overlaySettings,
+  } from "../stores/overlaySettings.js";
 
   interface Props {
     riven: DecodedRiven;
@@ -48,9 +55,26 @@
   let dictionaryChecked = $state(false);
   let refreshingDictionary = $state(false);
   let showAllListings = $state(false);
+  const showSimilarAuctions = $derived($overlaySettings.rivenSimilarAuctionsShown !== false);
+  const shownListings = $derived(
+    showSimilarAuctions
+      ? similarListings
+      : similarListings.filter((entry) => entry.listing.isDirectSell !== false),
+  );
   let disposed = false;
   const DEFAULT_LISTING_COUNT = 20;
   const isContractListing = $derived(contract != null);
+
+  async function toggleSimilarAuctions(): Promise<void> {
+    try {
+      const saved = await invoke("setOverlaySettings", {
+        rivenSimilarAuctionsShown: !showSimilarAuctions,
+      });
+      if (saved) applyOverlaySettingsResponse(saved);
+    } catch (error) {
+      log.error("[RivenDetail] saving the auctions filter failed:", error);
+    }
+  }
 
   function plainNote(note: string | null | undefined): string {
     return String(note ?? "")
@@ -75,6 +99,7 @@
   const canListAtMaxRank = $derived(!isContractListing && riven.currentRank < riven.maxRank);
 
   onMount(() => {
+    void ensureOverlaySettingsLoaded();
     invoke("searchRivenAuctions", riven.weaponName, [], [])
       .then((listings) => {
         if (disposed) return;
@@ -486,25 +511,38 @@
       </div>
 
       <div class="mt-6">
-        <h3 class="font-display text-xs uppercase tracking-[0.08em] text-text-muted m-0 mb-2.5">
-          {$tr("rivens.detail.similarOnWfm")}
-        </h3>
+        <div class="flex items-center justify-between gap-2 mb-2.5">
+          <h3 class="font-display text-xs uppercase tracking-[0.08em] text-text-muted m-0">
+            {$tr("rivens.detail.similarOnWfm")}
+          </h3>
+          <button
+            type="button"
+            class="filter-tab min-h-7 py-0 text-xs"
+            class:active={showSimilarAuctions}
+            aria-pressed={showSimilarAuctions}
+            data-similar-auctions-toggle
+            title={$tr("rivens.detail.auctionsChipTitle")}
+            onclick={() => void toggleSimilarAuctions()}
+          >
+            {$tr("rivens.detail.auctionsChip")}
+          </button>
+        </div>
         {#if loadingListings}
           <div class="text-sm text-text-muted text-center py-4">
             {$tr("rivens.detail.searchingAuctions")}
           </div>
-        {:else if similarListings.length === 0}
-          <div class="text-sm text-text-muted text-center py-4">
+        {:else if shownListings.length === 0}
+          <div class="text-sm text-text-muted text-center py-4" data-similar-empty>
             {$tr("rivens.detail.noSimilarFound")}
           </div>
         {:else}
           {@const visibleListings = showAllListings
-            ? similarListings
-            : similarListings.slice(0, DEFAULT_LISTING_COUNT)}
-          {@const hiddenCount = similarListings.length - visibleListings.length}
+            ? shownListings
+            : shownListings.slice(0, DEFAULT_LISTING_COUNT)}
+          {@const hiddenCount = shownListings.length - visibleListings.length}
           <div class="grid grid-cols-2 gap-2.5">
             {#each visibleListings as { listing, pct, matchedNames }}
-              <div class="similar-card">
+              <div class="similar-card" data-similar-listing={listing.id}>
                 <div class="flex items-center gap-2 font-display text-xs">
                   <span
                     class="py-0.5 px-1.5 rounded font-bold text-xs {pct >= 75
@@ -528,7 +566,8 @@
                         ? 'text-success'
                         : 'text-danger'} {!isMatch ? 'opacity-40 line-through' : ''}"
                     >
-                      {s.positive ? "+" : "−"}{Math.round(s.value)}% {s.name}
+                      {formatRivenListingStatValue(s)}
+                      {s.name}
                     </div>
                   {/each}
                 </div>
@@ -545,7 +584,7 @@
               </div>
             {/each}
           </div>
-          {#if similarListings.length > DEFAULT_LISTING_COUNT}
+          {#if shownListings.length > DEFAULT_LISTING_COUNT}
             <div class="flex justify-center mt-3">
               <button
                 type="button"
@@ -554,7 +593,7 @@
               >
                 {showAllListings
                   ? $tr("common.showFewer")
-                  : $tr("rivens.detail.showAll", { count: similarListings.length })}
+                  : $tr("rivens.detail.showAll", { count: shownListings.length })}
                 {#if !showAllListings && hiddenCount > 0}
                   <span class="text-text-muted ml-1"
                     >· {$tr("rivens.detail.moreCount", { count: hiddenCount })}</span

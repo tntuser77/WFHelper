@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { DB_GET_RELIC_DATABASE } from "../config/shared/ipcChannels";
+import type { DropRow } from "../config/shared/dropTypes";
+import { DB_GET_RELIC_DATABASE, DROP_ITEM_SOURCES } from "../config/shared/ipcChannels";
 import type { RelicDatabase } from "../src/types/relics";
 import {
   closeElectronTestHarness,
@@ -15,36 +16,81 @@ import {
 interface SeededReward {
   uniqueName: string;
   name: string;
-  relicLocation: string;
+  /** One drop-table location per relic, in drop-table order. */
+  relicLocations: string[];
+  /** Set when the reward is a component of this item rather than an item itself. */
+  parentUniqueName?: string;
 }
 
-/** The reward and the relic it drops from both come from the shipped database,
+/** The reward and the relics it drops from all come from the shipped database,
  *  so the fixture cannot drift from whatever the drop tables say today. */
-async function readRewardWithRelicDrop(page: Page): Promise<SeededReward> {
-  const reward = await page.evaluate(async () => {
-    const db = (await window.api.getItemDatabase()) as unknown as Record<
-      string,
-      { name?: string; drops?: Array<{ location?: string }> }
-    >;
-    for (const [uniqueName, entry] of Object.entries(db)) {
-      if (!entry?.name) continue;
-      const relic = entry.drops?.find((drop) =>
-        /^(Lith|Meso|Neo|Axi) [A-Z]+\d+ Relic/.test(String(drop.location ?? "")),
-      );
-      if (relic?.location) return { uniqueName, name: entry.name, relicLocation: relic.location };
-    }
-    return null;
-  });
+async function readRewardWithRelicDrops(
+  page: Page,
+  minRelics = 1,
+  parentPrefix: string | null = null,
+): Promise<SeededReward> {
+  const reward = await page.evaluate(
+    async ({ minRelics, parentPrefix }) => {
+      interface Entry {
+        name?: string;
+        uniqueName?: string;
+        drops?: Array<{ location?: string }>;
+        components?: Entry[];
+      }
+      const db = (await window.api.getItemDatabase()) as unknown as Record<string, Entry>;
+      const relicLocations = (entry: Entry): string[] => {
+        const byRelic = new Map<string, string>();
+        for (const drop of entry.drops ?? []) {
+          const location = String(drop.location ?? "");
+          const relic = /^(Lith|Meso|Neo|Axi) [A-Z]+\d+(?= Relic)/.exec(location)?.[0];
+          if (relic && !byRelic.has(relic)) byRelic.set(relic, location);
+        }
+        return [...byRelic.values()];
+      };
+      for (const [uniqueName, entry] of Object.entries(db)) {
+        if (!entry?.name) continue;
+        if (parentPrefix === null) {
+          const locations = relicLocations(entry);
+          if (locations.length >= minRelics) {
+            return { uniqueName, name: entry.name, relicLocations: locations };
+          }
+          continue;
+        }
+        if (!uniqueName.startsWith(parentPrefix)) continue;
+        for (const component of entry.components ?? []) {
+          const locations = relicLocations(component);
+          if (component.name && component.uniqueName && locations.length >= minRelics) {
+            return {
+              uniqueName: component.uniqueName,
+              name: component.name,
+              relicLocations: locations,
+              parentUniqueName: uniqueName,
+            };
+          }
+        }
+      }
+      return null;
+    },
+    { minRelics, parentPrefix },
+  );
 
-  expect(reward, "nothing in the item database drops from a relic").not.toBeNull();
+  expect(reward, `nothing in the item database drops from ${minRelics} relics`).not.toBeNull();
   return reward as SeededReward;
 }
 
-function relicFixture(reward: SeededReward) {
-  const [tier, code] = reward.relicLocation.replace(/\s*Relic.*$/i, "").split(/\s+/);
-  const key = `${tier} ${code}`;
-  const intact = `/Lotus/Types/Game/Projections/${code}_intact`;
-  const radiant = `/Lotus/Types/Game/Projections/${code}_radiant`;
+function relicIdentity(location: string) {
+  const [tier, code] = location.replace(/\s*Relic.*$/i, "").split(/\s+/);
+  const projection = `/Lotus/Types/Game/Projections/${tier}${code}`;
+  return {
+    tier,
+    code,
+    key: `${tier} ${code}`,
+    intact: `${projection}_intact`,
+    radiant: `${projection}_radiant`,
+  };
+}
+
+function relicFixture(reward: SeededReward, locations: readonly string[]): RelicDatabase {
   const rewards = [
     {
       name: reward.name,
@@ -55,28 +101,26 @@ function relicFixture(reward: SeededReward) {
       ducats: 15,
     },
   ];
-  const db: RelicDatabase = {
-    groups: {
-      [key]: {
-        key,
-        name: key,
-        tier,
-        code,
-        imageUrl: null,
-        // Unvaulted on purpose: the badge has to say so rather than stay blank.
-        vaulted: false,
-        qualities: {
-          intact: { uniqueName: intact, rewards },
-          radiant: { uniqueName: radiant, rewards },
-        },
+  const db: RelicDatabase = { groups: {}, byUniqueName: {} };
+  for (const location of locations) {
+    const { tier, code, key, intact, radiant } = relicIdentity(location);
+    db.groups[key] = {
+      key,
+      name: key,
+      tier,
+      code,
+      imageUrl: null,
+      // Unvaulted on purpose: the badge has to say so rather than stay blank.
+      vaulted: false,
+      qualities: {
+        intact: { uniqueName: intact, rewards },
+        radiant: { uniqueName: radiant, rewards },
       },
-    },
-    byUniqueName: {
-      [intact]: { groupKey: key, quality: "intact" },
-      [radiant]: { groupKey: key, quality: "radiant" },
-    },
-  };
-  return { db, key, intact, radiant };
+    };
+    db.byUniqueName[intact] = { groupKey: key, quality: "intact" };
+    db.byUniqueName[radiant] = { groupKey: key, quality: "radiant" };
+  }
+  return db;
 }
 
 test("a drop source names the relic's vault state and how many are held", async () => {
@@ -85,8 +129,8 @@ test("a drop source names the relic's vault state and how many are held", async 
   try {
     harness = await launchElectronTestHarness("wfh-drop-relics-", { inventory: { Suits: [] } });
     const page = harness.page;
-    const reward = await readRewardWithRelicDrop(page);
-    const relic = relicFixture(reward);
+    const reward = await readRewardWithRelicDrops(page);
+    const relic = relicIdentity(reward.relicLocations[0]);
 
     writeHarnessInventory(harness, {
       Suits: [],
@@ -101,7 +145,7 @@ test("a drop source names the relic's vault state and how many are held", async 
         ipcMain.removeHandler(payload.channel);
         ipcMain.handle(payload.channel, () => payload.data);
       },
-      { channel: DB_GET_RELIC_DATABASE, data: relic.db },
+      { channel: DB_GET_RELIC_DATABASE, data: relicFixture(reward, [reward.relicLocations[0]]) },
     );
     await page.reload();
     await setLayoutViewport(page, 1440, 900);
@@ -149,6 +193,148 @@ test("a drop source names the relic's vault state and how many are held", async 
     await panel.screenshot({
       animations: "disabled",
       path: test.info().outputPath("drop-source-relics-popover.png"),
+    });
+  } finally {
+    await closeElectronTestHarness(harness);
+  }
+});
+
+test("item details list a held relic first before Relics has ever opened", async () => {
+  test.setTimeout(240_000);
+  let harness: ElectronTestHarness | undefined;
+  try {
+    harness = await launchElectronTestHarness("wfh-drop-relics-first-", {
+      inventory: { Suits: [] },
+    });
+    const page = harness.page;
+    const part = await readRewardWithRelicDrops(page, 2, "/Lotus/Powersuits/");
+    const listedFirst = relicIdentity(part.relicLocations[0]);
+    const heldLocation = part.relicLocations[part.relicLocations.length - 1];
+    const held = relicIdentity(heldLocation);
+
+    writeHarnessInventory(harness, {
+      Suits: [{ ItemType: part.parentUniqueName, XP: 0 }],
+      LevelKeys: [{ ItemType: held.intact, ItemCount: 3 }],
+    });
+    // Startup reads the inventory well before the relic database; holding the
+    // database back until the drop list is open pins that order.
+    const releaseEvent = "e2e-release-relic-db";
+    await evaluateInMain(
+      harness.app,
+      ({ ipcMain }, payload) => {
+        const released = new Promise<void>((resolve) => {
+          ipcMain.once(payload.releaseEvent, () => resolve());
+        });
+        ipcMain.removeHandler(payload.channel);
+        ipcMain.handle(payload.channel, async () => {
+          await released;
+          return payload.data;
+        });
+      },
+      {
+        channel: DB_GET_RELIC_DATABASE,
+        releaseEvent,
+        data: relicFixture(part, [part.relicLocations[0], heldLocation]),
+      },
+    );
+    await page.reload();
+    await setLayoutViewport(page, 1440, 900);
+    await openView(page, "inventory");
+    await page.locator('[data-tour-tab="equipment"]').click();
+    const card = page.locator(`[data-inventory-card="${part.parentUniqueName}"]`);
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await card.locator(".expand-link").click();
+    await page
+      .locator(".detail-components button", { has: page.getByText(part.name, { exact: true }) })
+      .click();
+
+    const panel = page.locator(".comp-inline-panel");
+    const drops = panel.locator(".detail-acquisition");
+    await expect(drops).toBeVisible({ timeout: 30_000 });
+    const showAll = panel.locator("[data-drops-show-all]");
+    if (await showAll.count()) await showAll.click();
+    await evaluateInMain(harness.app, ({ ipcMain }, event) => ipcMain.emit(event), releaseEvent);
+
+    const rows = drops.locator("button");
+    const heldName = `${held.key} Relic`;
+    await expect(rows.first().getByText(heldName, { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(rows.first().locator('[data-relic-owned="intact"]')).toHaveText(/3/);
+    await expect(rows.filter({ has: page.getByText(heldName, { exact: true }) })).toHaveCount(1);
+    await expect(
+      rows.filter({ has: page.getByText(`${listedFirst.key} Relic`, { exact: true }) }),
+    ).toHaveCount(1);
+
+    await panel.screenshot({
+      animations: "disabled",
+      path: test.info().outputPath("drop-source-relics-held-first.png"),
+    });
+  } finally {
+    await closeElectronTestHarness(harness);
+  }
+});
+
+test("an ingredient lists sources the item data no longer carries", async () => {
+  test.setTimeout(240_000);
+  const AKBRONCO_PRIME = "/Lotus/Weapons/Tenno/Akimbo/PrimeAkimboShotGun";
+  const BRONCO_PRIME = "/Lotus/Weapons/Tenno/Pistol/BroncoPrime";
+  const tableRow: DropRow = {
+    item: "Orokin Cell",
+    place: "E2E Drop Table Node (Earth)",
+    rarity: "Rare",
+    chance: 2.5,
+    kind: "mission",
+  };
+  let harness: ElectronTestHarness | undefined;
+  try {
+    harness = await launchElectronTestHarness("wfh-drop-ingredients-", {
+      inventory: {
+        Suits: [],
+        Pistols: [
+          { ItemType: AKBRONCO_PRIME, XP: 0 },
+          { ItemType: BRONCO_PRIME, XP: 0 },
+        ],
+      },
+    });
+    const page = harness.page;
+    // Only Orokin Cell gets a drop table row, so the relics below come from the item data.
+    await evaluateInMain(
+      harness.app,
+      ({ ipcMain }, payload) => {
+        ipcMain.removeHandler(payload.channel);
+        ipcMain.handle(payload.channel, (_event, name: unknown) =>
+          name === payload.row.item ? [payload.row] : [],
+        );
+      },
+      { channel: DROP_ITEM_SOURCES, row: tableRow },
+    );
+    await setLayoutViewport(page, 1440, 900);
+
+    const openIngredient = async (parent: string, name: string) => {
+      await openView(page, "inventory");
+      await page.locator('[data-tour-tab="equipment"]').click();
+      const card = page.locator(`[data-inventory-card="${parent}"]`);
+      await expect(card).toBeVisible({ timeout: 30_000 });
+      await card.locator(".expand-link").click();
+      await page
+        .locator(".detail-components button", { has: page.getByText(name, { exact: true }) })
+        .first()
+        .click();
+      const drops = page.locator(".comp-inline-panel .detail-acquisition");
+      await expect(drops).toBeVisible({ timeout: 30_000 });
+      return drops;
+    };
+
+    const partRelics = await openIngredient(AKBRONCO_PRIME, "Bronco Prime");
+    await expect(partRelics).toContainText(/(Lith|Meso|Neo|Axi) [A-Z]+\d+ Relic/);
+
+    await page.reload();
+    const tableSources = await openIngredient(BRONCO_PRIME, "Orokin Cell");
+    await expect(tableSources).toContainText(tableRow.place);
+    await page.locator(".comp-inline-panel").screenshot({
+      animations: "disabled",
+      path: test.info().outputPath("drop-source-ingredient-table.png"),
     });
   } finally {
     await closeElectronTestHarness(harness);

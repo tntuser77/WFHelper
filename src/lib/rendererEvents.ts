@@ -4,6 +4,7 @@ import { playNotificationSound, updateNotificationSoundSettings } from "./notifi
 import { getPlatform, invoke, on } from "./ipc.js";
 import { onInventoryLoaded } from "./actions.js";
 import { tr } from "./i18n.js";
+import { refreshItemDatabase, refreshRelicDatabase } from "./startupLoader.js";
 import { handleWfmNotification } from "./wfmNotifications.js";
 import { statusText } from "../stores/app.js";
 import { pendingArbiRunId, subscribeArbiRunSaved } from "../stores/arbiRuns.js";
@@ -11,9 +12,8 @@ import { subscribePtRunSaved } from "../stores/ptRuns.js";
 import { subscribeLevelCap } from "../stores/levelCap.js";
 import { LEVEL_CAP_EXOLIZER_TARGET } from "../../config/shared/levelCapTypes.js";
 import { currentView } from "../stores/app.js";
-import { inventoryData, inventoryModifiedAt, itemDb, parsedItems } from "../stores/data.js";
+import { inventoryData, inventoryModifiedAt, parsedItems } from "../stores/data.js";
 import { masteryData } from "../stores/mastery.js";
-import { relicOwnedCounts } from "../stores/relics.js";
 import { applyClosedWfmListing } from "../stores/market.js";
 import { addNotificationEntry, loadNotificationHistory } from "../stores/notifications.js";
 import { detectedWarframeUiScale, overlaySettings } from "../stores/overlaySettings.js";
@@ -78,7 +78,6 @@ export function initRendererEvents(): () => void {
       if (data === null) {
         inventoryData.set(null);
         masteryData.set(null);
-        relicOwnedCounts.set({});
         inventoryModifiedAt.set(null);
         statusText.set(null);
         return;
@@ -118,6 +117,9 @@ export function initRendererEvents(): () => void {
     // Fires when the game saves EE.cfg, so the Settings row tracks in-game
     // interface scale changes live.
     on("warframe-ui-scale-updated", (scale) => detectedWarframeUiScale.set(scale)),
+    on("riven-similar-auctions", (shown) =>
+      overlaySettings.update((settings) => ({ ...settings, rivenSimilarAuctionsShown: shown })),
+    ),
 
     on("wfm:notification", (notification) => handleWfmNotification(notification, get(tr))),
 
@@ -141,17 +143,22 @@ export function initRendererEvents(): () => void {
       currentView.set("arbi");
     }),
 
-    // DE overlay refresh can add items/icons after startup; re-pull the affected stores.
+    // DE overlay refresh and game language changes rebuild what main serves.
     on("item-db-updated", async () => {
-      const db = await invoke("getItemDatabase");
-      itemDb.set(db || {});
+      // An inventory loaded after this event pulled its mastery after the change too.
+      const inventoryAtUpdate = get(inventoryData);
+      await refreshItemDatabase();
       const inventory = get(inventoryData);
-      if (!inventory) return;
+      if (!inventory || inventory !== inventoryAtUpdate) return;
       invoke("getMasteryProgress")
         .then((md) => {
           if (get(inventoryData) === inventory) masteryData.set(md);
         })
         .catch((err) => console.warn("[Mastery] getMasteryProgress failed:", err));
+    }),
+
+    on("relic-db-updated", () => {
+      refreshRelicDatabase().catch((err) => console.warn("[Relics] refresh failed:", err));
     }),
   ];
 
