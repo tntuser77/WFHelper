@@ -1,0 +1,147 @@
+name: Upstream sync
+
+# Weekly check of WFHelper/WFHelper main. New upstream commits go to the
+# sync/upstream branch with one open PR into main; merging it stays manual.
+# Setup and conflict steps: docs/upstream-sync.md.
+on:
+  schedule:
+    - cron: "0 14 * * 1" # Mondays 14:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # Upstream would receive this file if the fork is ever merged back.
+    if: github.repository == 'tntuser77/WFHelper'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      UPSTREAM_REPO: WFHelper/WFHelper
+      UPSTREAM_BRANCH: main
+      BASE_BRANCH: main
+      SYNC_BRANCH: sync/upstream
+      # A personal token, not GITHUB_TOKEN: pushes that touch .github/workflows
+      # need the workflow scope, and PRs opened by GITHUB_TOKEN never start CI.
+      GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Require the sync token
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::UPSTREAM_SYNC_TOKEN secret is not set - see docs/upstream-sync.md"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE_BRANCH }}
+          fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          # Tags stay behind: pushing an upstream v* tag would fire release.yml here.
+          git fetch --no-tags upstream "$UPSTREAM_BRANCH"
+
+      - name: Sync branch and PR
+        run: |
+          base="origin/$BASE_BRANCH"
+          up="upstream/$UPSTREAM_BRANCH"
+          sync="origin/$SYNC_BRANCH"
+          open_pr=$(gh pr list --head "$SYNC_BRANCH" --base "$BASE_BRANCH" --state open \
+            --json number --jq '.[0].number // empty')
+
+          behind=$(git rev-list --count "$base..$up")
+          if [ "$behind" -eq 0 ]; then
+            echo "$BASE_BRANCH already has everything from $UPSTREAM_REPO."
+            if [ -n "$open_pr" ]; then
+              gh pr close "$open_pr" --comment "Nothing left to sync - $BASE_BRANCH already contains $UPSTREAM_REPO/$UPSTREAM_BRANCH."
+            fi
+            exit 0
+          fi
+
+          # Commits on the sync branch that are in neither upstream nor main are
+          # a hand-made conflict fix; force-pushing would throw them away.
+          if git rev-parse -q --verify "$sync" >/dev/null; then
+            manual=$(git rev-list --count "$sync" "^$up" "^$base")
+            if [ "$manual" -gt 0 ]; then
+              echo "::warning::$SYNC_BRANCH has $manual commit(s) of manual work - left untouched. Merge or close PR #${open_pr:-?} and the next run picks up."
+              exit 0
+            fi
+          fi
+
+          git push --force origin "refs/remotes/$up:refs/heads/$SYNC_BRANCH"
+
+          # Trial merge in memory only, to report conflicts in the PR body.
+          if out=$(git merge-tree --write-tree --name-only --no-messages "$base" "$up"); then
+            conflicts=""
+          else
+            conflicts=$(printf '%s\n' "$out" | tail -n +2 | sed '/^$/d' | sort -u)
+          fi
+
+          body="$RUNNER_TEMP/pr-body.md"
+          {
+            echo "**$behind** new commit(s) on [\`$UPSTREAM_REPO\`](https://github.com/$UPSTREAM_REPO) \`$UPSTREAM_BRANCH\` that \`$BASE_BRANCH\` does not have yet."
+            echo
+            echo "Opened and refreshed weekly by \`.github/workflows/upstream-sync.yml\`. Full steps: \`docs/upstream-sync.md\`."
+            echo
+            if [ -n "$conflicts" ]; then
+              echo "## :warning: Merge conflicts"
+              echo
+              echo "These files changed on both sides and need a hand merge before this PR can go in:"
+              echo
+              printf '%s\n' "$conflicts" | sed 's/^/- `/; s/$/`/'
+              echo
+              echo "Resolve locally (see \"Fixing conflicts\" in \`docs/upstream-sync.md\`):"
+              echo
+              echo '```sh'
+              echo "git fetch origin"
+              echo "git switch -C $SYNC_BRANCH origin/$SYNC_BRANCH"
+              echo "git merge origin/$BASE_BRANCH"
+              echo "# fix the files above, then: git add <files> && git commit --no-edit"
+              echo "git push origin $SYNC_BRANCH"
+              echo '```'
+            else
+              echo "## :white_check_mark: Merges cleanly"
+              echo
+              echo "Wait for CI to go green, then merge with **Create a merge commit** (not squash or rebase)."
+            fi
+            echo
+            echo "## Upstream commits"
+            echo
+            git log --no-merges --format='- %s (`%h`)' "$base..$up" | head -n 40
+            if [ "$(git rev-list --no-merges --count "$base..$up")" -gt 40 ]; then
+              echo "- ...and more: https://github.com/$GH_REPO/compare/$BASE_BRANCH...${UPSTREAM_REPO%%/*}:${UPSTREAM_REPO#*/}:$UPSTREAM_BRANCH"
+            fi
+          } > "$body"
+
+          gh label create upstream-sync --color 0e8a16 --description "Automated sync from upstream" --force
+          gh label create sync-conflicts --color d93f0b --description "Upstream sync needs a hand merge" --force
+
+          title="Upstream sync: $behind new commit(s) from $UPSTREAM_REPO"
+          if [ -n "$conflicts" ]; then label_flag="--add-label"; else label_flag="--remove-label"; fi
+
+          if [ -n "$open_pr" ]; then
+            gh pr edit "$open_pr" --title "$title" --body-file "$body" \
+              --add-label upstream-sync "$label_flag" sync-conflicts
+            echo "Updated PR #$open_pr"
+          else
+            url=$(gh pr create --head "$SYNC_BRANCH" --base "$BASE_BRANCH" \
+              --title "$title" --body-file "$body" --label upstream-sync)
+            if [ -n "$conflicts" ]; then gh pr edit "$url" --add-label sync-conflicts; fi
+            echo "Opened $url"
+          fi
+
+          {
+            echo "### Upstream sync"
+            echo "$behind new commit(s); conflicts: ${conflicts:+yes}${conflicts:-none}"
+          } >> "$GITHUB_STEP_SUMMARY"
