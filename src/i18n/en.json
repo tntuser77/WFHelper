@@ -2872,6 +2872,7 @@
   "analytics.noRuns": "No runs match this chart yet.",
   "analytics.newChart": "New chart",
   "analytics.editChart": "Edit chart",
+  "analytics.rename": "Rename chart",
   "analytics.removeChart": "Remove chart",
   "analytics.dragToMove": "Drag to move, or use the arrow keys",
   "analytics.preview": "Preview",

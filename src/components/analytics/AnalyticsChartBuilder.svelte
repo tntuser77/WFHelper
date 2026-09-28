@@ -111,6 +111,25 @@
   const result = $derived(analyticsResult(runs, spec, ctx));
   const autoTitle = $derived(analyticsAutoTitle(spec, $tr));
 
+  // Renamed in the header; Escape puts back what it said before.
+  let renaming = $state(false);
+  let titleBefore = "";
+  function startRename(): void {
+    titleBefore = draft.title;
+    renaming = true;
+  }
+  function onTitleKey(e: KeyboardEvent): void {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      renaming = false;
+    } else if (e.key === "Escape") {
+      // Keeps the editor open; only the rename is dropped.
+      e.stopPropagation();
+      draft.title = titleBefore;
+      renaming = false;
+    }
+  }
+
   const timeSplit = $derived(isAnalyticsTimeSplit(draft.splitBy));
   const takesSeries = $derived(
     draft.chart === "columns" || draft.chart === "line" || draft.chart === "table",
@@ -213,9 +232,48 @@
         >&times;</button
       >
     </div>
-    <h2 class="m-0 border-b border-border/60 px-5 py-4 pr-14 text-lg text-text-heading">
-      {draft.id ? $tr("analytics.editChart") : $tr("analytics.newChart")}
-    </h2>
+    <div class="flex items-center gap-2 border-b border-border/60 px-5 py-4 pr-14">
+      {#if renaming}
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          class="h-8 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[color:var(--ui-control-border)] bg-bg-surface px-2 text-lg text-text-heading"
+          maxlength="80"
+          placeholder={autoTitle}
+          aria-label={$tr("analytics.field.title")}
+          bind:value={draft.title}
+          onkeydown={onTitleKey}
+          onblur={() => (renaming = false)}
+          autofocus
+          data-analytics-title
+        />
+      {:else}
+        <h2 class="m-0 min-w-0 truncate text-lg text-text-heading" data-analytics-heading>
+          {draft.title || autoTitle}
+        </h2>
+        <button
+          type="button"
+          class="shrink-0 rounded p-1 text-text-muted hover:text-accent"
+          aria-label={$tr("analytics.rename")}
+          title={$tr("analytics.rename")}
+          onclick={startRename}
+          data-analytics-rename
+        >
+          <svg
+            viewBox="0 0 16 16"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M11 2.5l2.5 2.5L5.5 13H3v-2.5z" />
+            <path d="M9.5 4l2.5 2.5" />
+          </svg>
+        </button>
+      {/if}
+    </div>
 
     <div class="grid gap-5 p-5 md:grid-cols-[minmax(0,23rem)_minmax(0,1fr)]">
       <form
@@ -412,16 +470,6 @@
         {/if}
 
         <AnalyticsSection title={$tr("analytics.section.layout")} summary={layoutSummary}>
-          <label class="flex flex-col gap-1">
-            <span class="text-text-secondary">{$tr("analytics.field.title")}</span>
-            <input
-              class="h-7 rounded-[var(--radius-md)] border border-[color:var(--ui-control-border)] bg-bg-surface px-2 text-xs text-text-primary"
-              maxlength="80"
-              placeholder={autoTitle}
-              bind:value={draft.title}
-              data-analytics-title
-            />
-          </label>
           <div class="flex flex-col gap-1">
             <span class="text-text-secondary">{$tr("analytics.field.height")}</span>
             <SegmentedControl

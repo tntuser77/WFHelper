@@ -2852,6 +2852,7 @@
   "analytics.noRuns": "Noch keine Durchläufe für dieses Diagramm.",
   "analytics.newChart": "Neues Diagramm",
   "analytics.editChart": "Diagramm bearbeiten",
+  "analytics.rename": "Diagramm umbenennen",
   "analytics.removeChart": "Diagramm entfernen",
   "analytics.dragToMove": "Ziehen zum Verschieben oder Pfeiltasten nutzen",
   "analytics.preview": "Vorschau",

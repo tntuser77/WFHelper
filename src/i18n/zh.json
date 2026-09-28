@@ -2852,6 +2852,7 @@
   "analytics.noRuns": "暂无符合此图表的记录。",
   "analytics.newChart": "新图表",
   "analytics.editChart": "编辑图表",
+  "analytics.rename": "重命名图表",
   "analytics.removeChart": "移除图表",
   "analytics.dragToMove": "拖动或使用方向键移动",
   "analytics.preview": "预览",
