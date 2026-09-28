@@ -1,4 +1,4 @@
-#TODO
+# TODO
 
 - [x] Make the note section apply to the frame, rather then the indivdual run. 
 - [x] Record which other players where in the run.
@@ -20,6 +20,18 @@
 - [x] Even on my Caliban builds, where I kept the archgun, its not showing up in a box that makes it obvious that I was using the archgun heavily
 - [ ] Right click on the search box to clear it
 - [ ] Show the amount of exolizers reached when opening the frames, not just the amount of runs
+
+
+## Analytics work
+- [ ] Do some more work on the Analytics UI. No way to see a graph of the amount of exolizers done by each squadmate. The Run Count by month table only having 6 catagories has being everything from september. I want to be able to scale the size of each card. 
+- [ ] Not sure exactly about this feature, but I feel like I want to be able to double click on somethings name in the analytics tab, and have it do something. Maybe show me the list of runs that have that? Double click on gauss, and it shows me all the runs that I did that had a guass in the squad? IDK, but right now it feels off
+- [ ] When editing a chart, there is a weird gray bar that shows up at the bottem of the screen when hovering over the bar chart. 
+- [ ] When editing a chart, there is information overload. There are seemingly way to many options. I'm not entirely sure what to do about this. Maybe a querry style prompt would fix? 
+- [ ] Show as table looking very odd, with only 2 coloums for most things. I wouldn't want a show as table, I would want that to be inside the edit chart side. 
+- [ ] The ability to exlude things from my charts. Ie, run count by squadmate's frame, without operator. Or, Run counts by squadmates without wealthypoet
+- [ ] The ability in ana
+
+
 
 ## Disclaimer
 
