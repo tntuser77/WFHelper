@@ -56,6 +56,13 @@ export const HEIGHT_LABEL: Record<AnalyticsHeight, MessageKey> = {
   tall: "analytics.height.tall",
 };
 
+/** Plot height per card height, for columns and lines. */
+export const ANALYTICS_PLOT_PX: Record<AnalyticsHeight, number> = {
+  short: 150,
+  normal: 220,
+  tall: 340,
+};
+
 export const WIDTH_LABEL: Record<AnalyticsCols, MessageKey> = {
   1: "analytics.width.quarter",
   2: "analytics.halfWidth",

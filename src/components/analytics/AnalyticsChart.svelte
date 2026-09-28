@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    ANALYTICS_PLOT_PX,
     analyticsKeyLabel,
     formatAnalyticsValue,
     MEASURE_LABEL,
@@ -58,7 +59,6 @@
   const multi = $derived(result.series.length > 1);
   const kind = $derived(asTable ? "table" : spec.chart);
   // Room per card height: the plot for columns and lines, the scroll box for lists.
-  const PLOT = { short: 150, normal: 220, tall: 340 } as const;
   const LIST = { short: "max-h-[11rem]", normal: "max-h-[19rem]", tall: "max-h-[34rem]" } as const;
   const listClass = $derived(`${LIST[spec.height]} overflow-y-auto pr-1`);
 
@@ -188,7 +188,7 @@
     kind={kind === "line" ? "line" : "columns"}
     stacked={analyticsMeasureAddsUp(spec.measure)}
     whole={spec.measure !== "exolizersAvg" && spec.measure !== "durationAvg"}
-    height={PLOT[spec.height]}
+    height={ANALYTICS_PLOT_PX[spec.height]}
     {title}
     {categoryLabels}
     {shortLabels}
