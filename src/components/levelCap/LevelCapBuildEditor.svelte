@@ -27,12 +27,15 @@
     runCount,
     tagSuggestions,
     abilityNames = {},
+    focusSlot = null,
     onDone,
   }: {
     record: LevelCapNamedBuild;
     runCount: number;
     tagSuggestions: string[];
     abilityNames?: Record<string, string>;
+    /** Slot to open and scroll to once the catalogue loads. */
+    focusSlot?: string | null;
     onDone: () => void;
   } = $props();
 
@@ -52,6 +55,15 @@
   let tagDraft = $state("");
   let busy = $state(false);
   let catalog = $state<LevelCapCatalog | null>(null);
+
+  let root = $state<HTMLElement | null>(null);
+  let focused = false;
+  $effect(() => {
+    if (!catalog || !root || !focusSlot || focused) return;
+    focused = true;
+    const slot = root.querySelector(`[data-level-cap-slot="${focusSlot}"]`);
+    requestAnimationFrame(() => slot?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  });
 
   $effect(() => {
     loadLevelCapCatalog()
@@ -188,7 +200,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-3" data-level-cap-build-editor={record.id}>
+<div class="flex flex-col gap-3" data-level-cap-build-editor={record.id} bind:this={root}>
   <div class="flex flex-wrap items-end gap-3">
     <label class="flex flex-col gap-1">
       <span class="text-[10px] uppercase tracking-wide text-text-muted"
@@ -315,6 +327,7 @@
           item={draft[slot.kind]}
           {catalog}
           itemOptions={catalog[slot.kind]}
+          open={slot.kind === focusSlot}
           onChange={(item) => setSlot(slot.kind, item)}
         />
       {/each}

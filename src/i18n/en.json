@@ -2820,6 +2820,7 @@
   "levelCap.builds.moveTo": "Move to",
   "levelCap.builds.move": "Move",
   "levelCap.builds.pick": "Pick a build",
+  "levelCap.builds.noBuild": "No build",
   "levelCap.builds.runBuild": "Build used this run",
   "levelCap.builds.details": "Show run details",
   "levelCap.editor.backToRuns": "Back to runs",

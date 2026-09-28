@@ -99,7 +99,23 @@ describe("levelCap helpers", () => {
       run("1", "Caliban", 1, { build: build(SUIT) }),
       run("2", "Caliban", 2, { build: carried }),
     ]);
-    expect(gear.find((g) => g.slot === "archgun")?.items).toEqual([{ item: archgun, count: 1 }]);
+    expect(gear.find((g) => g.slot === "archgun")?.items).toEqual([
+      { item: archgun, count: 1, builds: [{ id: null, count: 1 }] },
+    ]);
+  });
+
+  it("counts each slot item per build, most-used first", () => {
+    const melee: LevelCapItem = { kind: "melee", type: "/Melee/Magistar", config: 0, upgrades: [] };
+    const withMelee = { ...build(SUIT), melee };
+    const gear = levelCapGearUse([
+      run("1", "Caliban", 1, { build: withMelee, buildId: "a" }),
+      run("2", "Caliban", 2, { build: withMelee, buildId: "b" }),
+      run("3", "Caliban", 3, { build: withMelee, buildId: "b" }),
+    ]);
+    expect(gear.find((g) => g.slot === "melee")?.items[0].builds).toEqual([
+      { id: "b", count: 2 },
+      { id: "a", count: 1 },
+    ]);
   });
 
   it("treats builds that differ only in mod ranks as the same build", () => {

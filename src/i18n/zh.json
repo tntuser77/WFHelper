@@ -2800,6 +2800,7 @@
   "levelCap.builds.moveTo": "移到",
   "levelCap.builds.move": "移动",
   "levelCap.builds.pick": "选择构建",
+  "levelCap.builds.noBuild": "无配置",
   "levelCap.builds.runBuild": "此运行使用的构建",
   "levelCap.builds.details": "显示运行详情",
   "levelCap.editor.backToRuns": "返回运行列表",
