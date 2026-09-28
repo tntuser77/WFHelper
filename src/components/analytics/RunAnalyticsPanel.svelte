@@ -104,6 +104,7 @@
     const start = cards.map((c) => c.spec.id);
     order = start;
     let settledAt = 0;
+    let swappedWith: string | null = null;
 
     const move = (e: PointerEvent) => {
       if (!moving || !order) return;
@@ -115,17 +116,26 @@
       const cy = e.clientY - moving.offY + moving.height / 2;
       const over = document.elementFromPoint(cx, cy)?.closest<HTMLElement>("[data-analytics-slot]");
       const target = over?.dataset.analyticsSlot;
-      if (!over || !target || target === moving.id) return;
-      // Past the middle of the card underneath, the moved one goes after it; a
-      // card spanning most of a row splits top and bottom instead.
+      if (!over || !target || target === moving.id) {
+        swappedWith = null;
+        return;
+      }
+      // A card that just traded places may still sit under the centre; it waits
+      // until the centre has left it, or the two would swap back and forth.
+      if (target === swappedWith) return;
+      // A card spanning most of a row splits top and bottom at its middle. A card
+      // beside it trades places as soon as the centre reaches it.
       const box = over.getBoundingClientRect();
       const rowWide = box.width > (grid?.clientWidth ?? 0) * 0.6;
-      const after = rowWide ? cy > box.top + box.height / 2 : cx > box.left + box.width / 2;
+      const after = rowWide
+        ? cy > box.top + box.height / 2
+        : order.indexOf(target) > order.indexOf(moving.id);
       const rest = order.filter((cardId) => cardId !== moving!.id);
       const at = rest.indexOf(target) + (after ? 1 : 0);
       const next = [...rest.slice(0, at), moving.id, ...rest.slice(at)];
       if (next.join() === order.join()) return;
       order = next;
+      swappedWith = rowWide ? null : target;
       settledAt = performance.now() + REFLOW_MS;
     };
     const end = () => {
