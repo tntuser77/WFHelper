@@ -6,6 +6,7 @@ import type {
   LevelCapBuildSource,
   LevelCapItem,
   LevelCapSlotKind,
+  LevelCapSquadFixPatch,
 } from "../../config/shared/levelCapTypes.js";
 import type { LevelCapCatalog, LevelCapPayload, LevelCapSettings } from "../types/ipc.js";
 
@@ -62,6 +63,15 @@ export function loadLevelCapCatalog(): Promise<LevelCapCatalog> {
     throw err;
   });
   return _catalog;
+}
+
+/** Corrects one squad row of a run; null hands the row back to the screenshot read. */
+export async function fixLevelCapSquadmate(
+  id: string,
+  slot: number,
+  fix: LevelCapSquadFixPatch | null,
+): Promise<void> {
+  levelCap.set(await invoke("fixLevelCapSquadmate", id, slot, fix));
 }
 
 export async function deleteLevelCapRun(id: string): Promise<void> {

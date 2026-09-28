@@ -29,9 +29,8 @@ const ALLOWLIST = new Set([
   // Production implementations exported for the RivenParser.js parity cases.
   "unparseBuff",
   "unparseCurse",
-  // Portrait labeling and squad fixes wait on their IPC wiring; regression-covered meanwhile.
+  // Portrait labeling waits on its IPC wiring; regression-covered meanwhile.
   "labelPortrait",
-  "fixSquadmate",
 ]);
 
 // Where exports are *defined* (main production tree).

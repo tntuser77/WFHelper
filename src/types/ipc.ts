@@ -771,6 +771,15 @@ export interface IpcInvokeMap {
     args: [id: string];
     return: string | null;
   };
+  /** Full-size PNG data URL of the squad list's corner of a run's screenshot. */
+  getLevelCapSquadCrop: {
+    args: [id: string];
+    return: string | null;
+  };
+  fixLevelCapSquadmate: {
+    args: [id: string, slot: number, fix: LevelCapSquadFixPatch | null];
+    return: LevelCapPayload;
+  };
   openLevelCapScreenshot: {
     args: [id: string];
     return: { ok: boolean };
@@ -939,6 +948,7 @@ import type {
   LevelCapRun,
   LevelCapSettings,
   LevelCapSlotKind,
+  LevelCapSquadFixPatch,
 } from "../../config/shared/levelCapTypes.js";
 export type { LevelCapCatalog, LevelCapNamedBuild, LevelCapPayload, LevelCapRun, LevelCapSettings };
 

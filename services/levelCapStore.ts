@@ -157,7 +157,13 @@ function normalizeSquadmates(raw: unknown[]): LevelCapSquadmate[] {
   const text = (value: unknown) => (typeof value === "string" && value ? value.slice(0, 64) : null);
   return raw.slice(0, 4).map((entry) => {
     const value = (entry ?? {}) as Record<string, unknown>;
-    return { name: text(value.name), portrait: text(value.portrait), frame: text(value.frame) };
+    const mate: LevelCapSquadmate = {
+      name: text(value.name),
+      portrait: text(value.portrait),
+      frame: text(value.frame),
+    };
+    if (Number.isInteger(value.slot)) mate.slot = value.slot as number;
+    return mate;
   });
 }
 
@@ -368,6 +374,7 @@ function resolveScreenshotSquads(): void {
           name: fix?.name ?? name,
           portrait: group?.group ?? null,
           frame: fix?.frame ?? group?.frame ?? null,
+          slot,
         },
       ];
     });
@@ -375,7 +382,12 @@ function resolveScreenshotSquads(): void {
     const readRows = resolved[i].slots.length;
     for (const fix of run.squadFixes ?? []) {
       if (fix.slot < readRows || fix.notSquadmate) continue;
-      run.squadmates.push({ name: fix.name ?? null, portrait: null, frame: fix.frame ?? null });
+      run.squadmates.push({
+        name: fix.name ?? null,
+        portrait: null,
+        frame: fix.frame ?? null,
+        slot: fix.slot,
+      });
     }
     if (run.players?.length && !run.playersFromScreenshot) return;
     const players = [...new Set(run.squadmates.flatMap((mate) => (mate.name ? [mate.name] : [])))];

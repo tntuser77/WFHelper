@@ -150,6 +150,8 @@ import {
   LEVEL_CAP_PICK_FOLDER,
   LEVEL_CAP_THUMBNAIL,
   LEVEL_CAP_OPEN_SCREENSHOT,
+  LEVEL_CAP_SQUAD_CROP,
+  LEVEL_CAP_FIX_SQUADMATE,
   LEVEL_CAP_UPDATED,
   LEVEL_CAP_HOTKEY,
   ARBI_SCHED_GET,
@@ -410,6 +412,8 @@ try {
     updateLevelCapSettings: inv<"updateLevelCapSettings">(LEVEL_CAP_UPDATE_SETTINGS),
     pickLevelCapFolder: inv<"pickLevelCapFolder">(LEVEL_CAP_PICK_FOLDER),
     getLevelCapThumbnail: inv<"getLevelCapThumbnail">(LEVEL_CAP_THUMBNAIL),
+    getLevelCapSquadCrop: inv<"getLevelCapSquadCrop">(LEVEL_CAP_SQUAD_CROP),
+    fixLevelCapSquadmate: inv<"fixLevelCapSquadmate">(LEVEL_CAP_FIX_SQUADMATE),
     openLevelCapScreenshot: inv<"openLevelCapScreenshot">(LEVEL_CAP_OPEN_SCREENSHOT),
     onLevelCapUpdated: ipcDataBridge<IpcEventMap["level-cap-updated"]>(
       ipcRenderer,

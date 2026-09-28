@@ -33,6 +33,7 @@ import {
   LEVEL_CAP_CREATE_BUILD,
   LEVEL_CAP_DELETE_BUILD,
   LEVEL_CAP_DELETE_RUN,
+  LEVEL_CAP_FIX_SQUADMATE,
   LEVEL_CAP_GET,
   LEVEL_CAP_HOTKEY,
   LEVEL_CAP_ITEM_CONFIGS,
@@ -41,6 +42,7 @@ import {
   LEVEL_CAP_OPEN_SCREENSHOT,
   LEVEL_CAP_PICK_FOLDER,
   LEVEL_CAP_SET_NOTES,
+  LEVEL_CAP_SQUAD_CROP,
   LEVEL_CAP_THUMBNAIL,
   LEVEL_CAP_UPDATE_BUILD,
   LEVEL_CAP_UPDATED,
@@ -54,11 +56,15 @@ import type {
   LevelCapPayload,
   LevelCapRiven,
   LevelCapSettings,
+  LevelCapSquadFixPatch,
   LevelCapSlotKind,
 } from "../config/shared/levelCapTypes";
 
 const log = withScope("levelCapIpc");
 const THUMBNAIL_WIDTH = 960;
+// The squad list's corner of a screenshot: 1080p pixels in from the right, and
+// fractions of the height, a little looser than the reader's band.
+const SQUAD_CROP = { width: 460, top: 0.05, bottom: 0.45 };
 
 let _boundHotkey = "";
 let _readingScreenshots = false;
@@ -285,6 +291,16 @@ function isSettingsPatch(raw: unknown): raw is Partial<LevelCapSettings> {
   );
 }
 
+function isSquadFixPatch(raw: unknown): raw is LevelCapSquadFixPatch {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const value = raw as Record<string, unknown>;
+  return (
+    (value.name === undefined || typeof value.name === "string") &&
+    (value.frame === undefined || typeof value.frame === "string") &&
+    (value.notSquadmate === undefined || value.notSquadmate === true)
+  );
+}
+
 function register(): void {
   tracker.initLevelCapTracker({
     getInventory: () => ctx.currentInventoryData,
@@ -447,6 +463,34 @@ function register(): void {
     const { width } = image.getSize();
     return (width > THUMBNAIL_WIDTH ? image.resize({ width: THUMBNAIL_WIDTH }) : image).toDataURL();
   });
+
+  // The squad list's corner, at full size, so a person can read the names off it.
+  handleAuthorized(LEVEL_CAP_SQUAD_CROP, assertMainRendererSender, (_e, id: unknown) => {
+    const runId = asRunId(id);
+    const file = store.getRuns().find((run) => run.id === runId)?.screenshot;
+    if (!file) return null;
+    const image = nativeImage.createFromPath(file);
+    if (image.isEmpty()) return null;
+    const { width, height } = image.getSize();
+    const scale = height / 1080;
+    const x = Math.max(0, Math.round(width - SQUAD_CROP.width * scale));
+    const y = Math.round(height * SQUAD_CROP.top);
+    return image
+      .crop({ x, y, width: width - x, height: Math.round(height * SQUAD_CROP.bottom) - y })
+      .toDataURL();
+  });
+
+  handleAuthorized(
+    LEVEL_CAP_FIX_SQUADMATE,
+    assertMainRendererSender,
+    (_e, id: unknown, slot: unknown, fix: unknown) => {
+      const runId = asRunId(id);
+      if (runId && Number.isInteger(slot) && (fix === null || isSquadFixPatch(fix))) {
+        store.fixSquadmate(runId, slot as number, fix);
+      }
+      return payload();
+    },
+  );
 
   handleAuthorized(LEVEL_CAP_OPEN_SCREENSHOT, assertMainRendererSender, (_e, id: unknown) => {
     const runId = asRunId(id);

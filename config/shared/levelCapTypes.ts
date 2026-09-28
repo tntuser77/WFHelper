@@ -181,6 +181,8 @@ export interface LevelCapSquadmate {
   portrait: string | null;
   /** Frame the portrait group was labelled with, once someone labels it. */
   frame: string | null;
+  /** The row in `squadReads` (or past them, for one the read missed) it came from. */
+  slot?: number;
 }
 
 /** A correction to one squad row, by its place in `squadReads`; a slot past the
@@ -192,6 +194,9 @@ export interface LevelCapSquadFix {
   /** The row was HUD text or a nametag, not a player. */
   notSquadmate?: true;
 }
+
+/** What a squad row's correction says, without which row it is. */
+export type LevelCapSquadFixPatch = Omit<LevelCapSquadFix, "slot">;
 
 /** A portrait someone named; every portrait like it gets the same frame. */
 export interface LevelCapPortraitLabel {

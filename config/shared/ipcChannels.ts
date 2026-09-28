@@ -222,6 +222,8 @@ export const LEVEL_CAP_UPDATE_SETTINGS = "level-cap:update-settings";
 export const LEVEL_CAP_PICK_FOLDER = "level-cap:pick-folder";
 export const LEVEL_CAP_THUMBNAIL = "level-cap:thumbnail";
 export const LEVEL_CAP_OPEN_SCREENSHOT = "level-cap:open-screenshot";
+export const LEVEL_CAP_SQUAD_CROP = "level-cap:squad-crop";
+export const LEVEL_CAP_FIX_SQUADMATE = "level-cap:fix-squadmate";
 export const LEVEL_CAP_UPDATED = "level-cap-updated";
 export const LEVEL_CAP_HOTKEY = "level-cap-hotkey";
 
