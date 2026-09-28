@@ -16,6 +16,7 @@ interface PepEntry {
   parentName?: string;
   baseDrain?: number;
   holsterCategory?: string;
+  isFrivolous?: boolean;
   abilities?: Array<{ uniqueName?: string; name?: string }>;
 }
 
@@ -69,6 +70,8 @@ const CLASS_TARGETS = {
   tome: "/Lotus/Weapons/Tenno/Pistol/LotusGrimoire",
 } as const;
 const CLASS_TARGET_SET = new Set<string>(Object.values(CLASS_TARGETS));
+// Beast claw mods are typed MELEE too; only their compat says they are a pet's.
+const PET_WEAPON_RE = /^\/Lotus\/Types\/Friendly\/Pets\//;
 
 // Augment cards open with the ability they change: "Tempest Barrage Augment: ...".
 const AUGMENT_TEXT_RE = /^(.+?) Augment:/;
@@ -211,11 +214,19 @@ function build(): LevelCapCatalog {
     }
   }
   const statText = loadStatText();
-  const modEntries = Object.entries(pep.ExportUpgrades ?? {}).flatMap(([type, entry]) => {
+  const allMods = Object.entries(pep.ExportUpgrades ?? {}).flatMap(([type, entry]) => {
     const name = nameOf(entry);
     if (!name || !entry.type || RIVEN_RE.test(type) || FLAWED_RE.test(type)) return [];
     return [{ type, name, compat: entry.type, entry }];
   });
+  // Unobtainable dev copies share the real mod's name (a rank-10 Molten Impact);
+  // one without a real twin stays, since some real mods carry the flag too.
+  const realMods = new Set(
+    allMods.filter((mod) => !mod.entry.isFrivolous).map((mod) => `${mod.compat}|${mod.name}`),
+  );
+  const modEntries = allMods.filter(
+    (mod) => !mod.entry.isFrivolous || !realMods.has(`${mod.compat}|${mod.name}`),
+  );
   const knownMods = new Set(modEntries.map((mod) => `${mod.compat}|${mod.name}`));
 
   // Augments target a frame's base suit, which every variant (Prime too) shares.
@@ -253,7 +264,9 @@ function build(): LevelCapCatalog {
   }
   const targetOf = (entry: PepEntry) => {
     const compat = entry.compat ?? "";
-    if (pep.ExportWeapons?.[compat]) return { target: { type: compat, weapon: true } };
+    if (pep.ExportWeapons?.[compat] || PET_WEAPON_RE.test(compat)) {
+      return { target: { type: compat, weapon: true } };
+    }
     if (CLASS_TARGET_SET.has(compat)) return { target: { type: compat, weapon: false } };
     return {};
   };

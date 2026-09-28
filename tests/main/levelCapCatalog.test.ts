@@ -84,6 +84,21 @@ describe("levelCapCatalog", () => {
     expect(takes("Lex Prime", "Hornet Strike")).toBe(true);
   });
 
+  it("keeps beast claw mods off player melee", () => {
+    const melee = catalog.melee.find((w) => w.name === "Nikana Prime")?.type ?? "";
+    const claw = catalog.mods.find((m) => m.name === "Maul");
+    expect(claw?.target?.weapon).toBe(true);
+    expect(catalog.weaponTargets[melee]).not.toContain(claw?.target?.type);
+  });
+
+  it("drops the export's dev copies of real mods", () => {
+    const molten = catalog.mods.filter((m) => m.name === "Molten Impact");
+    expect(molten).toHaveLength(1);
+    expect(molten[0]).toMatchObject({ maxRank: 5, drain: 11 });
+    expect(molten[0].stats).toContain("90%");
+    expect(catalog.mods.filter((m) => m.name === "Rush")).toHaveLength(1);
+  });
+
   it("carries each mod's max-rank drain, negative for auras", () => {
     const mod = (name: string) => catalog.mods.find((m) => m.name === name);
     expect(mod("Serration")?.drain).toBe(14);

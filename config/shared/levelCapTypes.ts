@@ -174,8 +174,9 @@ export interface LevelCapCatalog {
       drain: number;
       /** Set on augments: the base suit they fit and the ability they change. */
       augment?: { suit: string; ability: string | null };
-      /** Set on weapon mods only some weapons take: a single weapon's (Thundermiter)
-       *  or a class's (shotgun, sniper, bow). Weapons list theirs in `weaponTargets`. */
+      /** Set on weapon mods only some weapons take: a single weapon's (Thundermiter,
+       *  `weapon`), a pet's claws (also `weapon`), or a class's (shotgun, sniper, bow).
+       *  Weapons list theirs in `weaponTargets`. */
       target?: { type: string; weapon: boolean };
     }
   >;
