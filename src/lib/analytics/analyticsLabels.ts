@@ -51,7 +51,7 @@ export const CHART_LABEL: Record<AnalyticsChartKind, MessageKey> = {
 
 export const HEIGHT_LABEL: Record<AnalyticsHeight, MessageKey> = {
   short: "analytics.height.short",
-  normal: "analytics.height.normal",
+  normal: "common.normal",
   tall: "analytics.height.tall",
 };
 
