@@ -361,7 +361,7 @@ describe("levelCapStore", () => {
     expect(byId.get("a")?.tags).toBeUndefined();
     expect(byId.get("c")).toMatchObject({ buildId: builds[1].id, buildUnverified: true });
     expect(byId.get("c")?.tags).toEqual(["?"]);
-    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(4);
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(5);
     const legacy = JSON.parse(fs.readFileSync(file.replace(".json", ".v1.json"), "utf8"));
     expect(legacy.schemaVersion).toBe(1);
   });
@@ -381,7 +381,7 @@ describe("levelCapStore", () => {
     );
     const store = await freshStore();
     expect(store.getBuilds().map((b) => b.tags)).toEqual([["vaz dash", "Slam"], ["Vaz Dash"]]);
-    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(4);
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(5);
     expect(fs.existsSync(file.replace(".json", ".v2.json"))).toBe(true);
   });
 

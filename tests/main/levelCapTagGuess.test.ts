@@ -84,6 +84,28 @@ describe("guessLevelCapTags", () => {
     ).toEqual(["Influence"]);
   });
 
+  it("reads the Melee Afflictions and Melee Influence arcanes", () => {
+    const arcane = (type: string): LevelCapItem => ({
+      kind: "melee",
+      type: "/Lotus/Weapons/Tenno/Melee/Swords/Xoris",
+      config: 0,
+      upgrades: [{ slot: 8, type, rank: 5 }],
+    });
+    expect(
+      guessLevelCapTags(
+        build({
+          melee: arcane("/Lotus/Upgrades/CosmeticEnhancers/Offensive/DuplicateStatusOnKnock"),
+        }),
+      ),
+    ).toEqual(["Afflictions"]);
+    // Falcor with Melee Influence still reads as one tag.
+    const falcor = {
+      ...arcane("/Lotus/Upgrades/CosmeticEnhancers/Offensive/MeleeProcsSpread"),
+      type: "/Lotus/Weapons/Corpus/Melee/Glaive/CrpGlaive/CrpGlaive",
+    };
+    expect(guessLevelCapTags(build({ melee: falcor }))).toEqual(["Influence"]);
+  });
+
   it("skips rules an index version already had", () => {
     expect(guessLevelCapTags(build({ focus: "vazarin" }), 3)).toEqual([]);
   });

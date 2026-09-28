@@ -36,7 +36,7 @@ const log = withScope("levelCapStore");
 
 const INDEX_FILE = "level-cap-runs.json";
 // 2: builds are named records runs point at; 1 kept a loose copy per run.
-const INDEX_SCHEMA_VERSION = 4;
+const INDEX_SCHEMA_VERSION = 5;
 const MAX_BUILD_NAME = 48;
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp"]);
 /** Folders the old sorter script left beside the frame folders. */

@@ -16,6 +16,11 @@ const SLAM_MELEES = new Set([
   "/Lotus/Weapons/Infested/InfestedLich/Melee/CodaMire",
 ]);
 const FALCOR = "/Lotus/Weapons/Corpus/Melee/Glaive/CrpGlaive/CrpGlaive";
+const MELEE_AFFLICTIONS = "/Lotus/Upgrades/CosmeticEnhancers/Offensive/DuplicateStatusOnKnock";
+const MELEE_INFLUENCE = "/Lotus/Upgrades/CosmeticEnhancers/Offensive/MeleeProcsSpread";
+
+const meleeHas = (build: LevelCapBuild, type: string) =>
+  (build.melee?.upgrades ?? []).some((upgrade) => upgrade.type === type);
 
 interface TagRule {
   tag: string;
@@ -36,18 +41,20 @@ const RULES: TagRule[] = [
   { tag: "Invisible", since: 3, test: (build) => build.companion?.type === HURAS_KUBROW },
   { tag: "Slam", since: 4, test: (build) => SLAM_MELEES.has(build.melee?.type ?? "") },
   { tag: "Influence", since: 4, test: (build) => build.melee?.type === FALCOR },
+  { tag: "Afflictions", since: 5, test: (build) => meleeHas(build, MELEE_AFFLICTIONS) },
+  { tag: "Influence", since: 5, test: (build) => meleeHas(build, MELEE_INFLUENCE) },
 ];
 
 /** Tags a loadout implies on its own: Vazarin for dashing, Arcane Persistence, both
  *  shield recharge delay mods for passive shield gating, Huras for invisibility, a
- *  slam melee, and Falcor for Melee Influence. Only rules newer than `afterVersion`
- *  count, so an index upgrade adds just the tags its new rules bring. */
+ *  slam melee, Falcor or the Melee Influence arcane, and Melee Afflictions. Only
+ *  rules newer than `afterVersion` count, so an index upgrade adds just the tags its
+ *  new rules bring. */
 export function guessLevelCapTags(build: LevelCapBuild | null, afterVersion = 0): string[] {
   if (!build) return [];
   const suitMods = new Set((build.suit?.upgrades ?? []).map((upgrade) => upgrade.type));
-  return RULES.filter((rule) => rule.since > afterVersion && rule.test(build, suitMods)).map(
-    (rule) => rule.tag,
-  );
+  const tags = RULES.filter((rule) => rule.since > afterVersion && rule.test(build, suitMods));
+  return [...new Set(tags.map((rule) => rule.tag))];
 }
 
 /** Guessed tags the new loadout implies that the old one did not, so a tag the
