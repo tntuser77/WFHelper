@@ -18,7 +18,12 @@
 
   import ModalHost from "./components/ModalHost.svelte";
 
-  import { currentView, SETUP_COMPLETED_KEY, statusText } from "./stores/app.js";
+  import {
+    currentView,
+    rememberLastViewInDev,
+    SETUP_COMPLETED_KEY,
+    statusText,
+  } from "./stores/app.js";
   import { parsedItems } from "./stores/data.js";
   import {
     isPopoutWindow,
@@ -88,6 +93,8 @@
   $: shellAccentStyle = viewAccentVars(effectiveViewAccent($themeSettings, $currentView));
 
   onMount(() => {
+    let disposed = false;
+    let stopRememberingView = (): void => {};
     const unsubscribeViewChange = currentView.subscribe((view) => {
       handleViewChange(view);
     });
@@ -107,7 +114,12 @@
       // non-"1" leftover value is treated consistently.
       currentView.set("setup");
     } else {
-      void reopenSetupWhenInventoryIsUnavailable();
+      // The inventory redirect only corrects the view while the launch default is
+      // still showing, so it has to settle before the dev restore can take that
+      // view away from it.
+      void reopenSetupWhenInventoryIsUnavailable().then(() => {
+        if (!disposed) stopRememberingView = rememberLastViewInDev();
+      });
       void restoreWorkspaceOnLaunch();
     }
 
@@ -124,9 +136,11 @@
       prefetchStopped = true;
       if (prefetchTimer) clearTimeout(prefetchTimer);
       unsubscribeBulkSell();
+      disposed = true;
       startup.dispose();
       disposeEvents();
       unsubscribeViewChange();
+      stopRememberingView();
       window.removeEventListener("keydown", onKeyDown);
     };
   });

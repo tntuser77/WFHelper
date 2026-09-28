@@ -16,6 +16,8 @@ const OPEN_EXTERNAL_ALLOWED_HOSTS: readonly string[] = Object.freeze([
   "www.patreon.com",
   "browse.wf",
   "arbi.guide",
+  // Level Cap build links; the build rides in the URL fragment.
+  "www.underframe.site",
 ]);
 
 const BASE_CONNECT_SRC_ALLOWLIST: readonly string[] = Object.freeze([

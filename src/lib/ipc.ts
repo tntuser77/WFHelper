@@ -109,6 +109,10 @@ const eventApiMap: Record<
     window.api.onMissionRewardsUpdated(
       cb as (payload: IpcEventMap["mission-rewards-updated"]) => void,
     ),
+  "level-cap-updated": (cb) =>
+    window.api.onLevelCapUpdated(cb as (p: IpcEventMap["level-cap-updated"]) => void),
+  "level-cap-hotkey": (cb) =>
+    window.api.onLevelCapHotkey(cb as (p: IpcEventMap["level-cap-hotkey"]) => void),
   "warframe-ui-scale-updated": (cb) =>
     window.api.onWarframeUiScaleUpdated(
       cb as (scale: IpcEventMap["warframe-ui-scale-updated"]) => void,

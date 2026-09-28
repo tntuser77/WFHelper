@@ -518,6 +518,7 @@
     });
   }
 
+  // Daily rows are UTC-midnight buckets; read them in UTC or west-of-UTC clocks show the day before.
   function formatStamp(time: number, span: Period, months: string[]): string {
     const date = new Date(time);
     if (span === "48hours") return `${String(date.getHours()).padStart(2, "0")}:00`;

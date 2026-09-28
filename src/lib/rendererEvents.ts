@@ -9,6 +9,8 @@ import { handleWfmNotification } from "./wfmNotifications.js";
 import { statusText } from "../stores/app.js";
 import { pendingArbiRunId, subscribeArbiRunSaved } from "../stores/arbiRuns.js";
 import { subscribePtRunSaved } from "../stores/ptRuns.js";
+import { subscribeLevelCap } from "../stores/levelCap.js";
+import { LEVEL_CAP_EXOLIZER_TARGET } from "../../config/shared/levelCapTypes.js";
 import { currentView } from "../stores/app.js";
 import { inventoryData, inventoryModifiedAt, parsedItems } from "../stores/data.js";
 import { masteryData } from "../stores/mastery.js";
@@ -41,6 +43,36 @@ export function initRendererEvents(): () => void {
     }),
     subscribeArbiRunSaved(),
     subscribePtRunSaved(),
+    subscribeLevelCap(),
+
+    // The finish-run key is pressed in game, so this is the only feedback it gets.
+    on("level-cap-hotkey", (outcome) => {
+      const t = get(tr);
+      if (outcome.type === "logged") {
+        addToast({
+          level: "success",
+          message: t("levelCap.toast.logged", {
+            frame: outcome.run.frame,
+            count: String(outcome.frameRuns),
+          }),
+        });
+      } else if (outcome.type === "screenshot-replaced") {
+        addToast({
+          level: "info",
+          message: t("levelCap.toast.replaced", { frame: outcome.run.frame }),
+        });
+      } else if (outcome.type === "below-target") {
+        addToast({
+          level: "warning",
+          message: t("levelCap.toast.below", {
+            count: String(outcome.exolizers),
+            target: String(LEVEL_CAP_EXOLIZER_TARGET),
+          }),
+        });
+      } else {
+        addToast({ level: "error", message: t("levelCap.toast.captureFailed") });
+      }
+    }),
 
     on("inventory-updated", async (data) => {
       if (data === null) {

@@ -260,6 +260,8 @@ test.describe("Panels hold their layout on a small window at a raised text scale
       for (const size of LAYOUT_SIZES) {
         await setWindowSize(harness, size.width, size.height);
         await openView(page, "arbi");
+        // Level Cap is the default Run Analysis tab.
+        await page.locator('#content [data-tour-tab="arbitrations"]').click();
         const list = page.locator("[data-arbi-run-table]");
         await expect(list).toBeVisible({ timeout: 30_000 });
         await expect(list.locator("tbody tr")).toHaveCount(2);

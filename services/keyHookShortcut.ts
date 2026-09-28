@@ -9,6 +9,12 @@ interface Logger {
 interface Binding {
   handler: () => void;
   parsed: ParsedAccelerator;
+  passthrough: boolean;
+}
+
+interface RegisterOptions {
+  /** Let the key reach the game (and overlays like Steam's) instead of swallowing it. */
+  passthrough?: boolean;
 }
 
 interface FallbackShortcut {
@@ -18,7 +24,7 @@ interface FallbackShortcut {
 }
 
 interface KeyHookShortcut {
-  register: (accelerator: string, callback: () => void) => boolean;
+  register: (accelerator: string, callback: () => void, options?: RegisterOptions) => boolean;
   unregister: (accelerator: string) => void;
   dispose: () => void;
 }
@@ -78,8 +84,12 @@ export function createKeyHookShortcut(options: {
     return fallback;
   }
 
-  function watchPayload(): Array<ParsedAccelerator & { id: string }> {
-    return [...bindings.entries()].map(([id, b]) => ({ id, ...b.parsed }));
+  function watchPayload(): Array<ParsedAccelerator & { id: string; passthrough: boolean }> {
+    return [...bindings.entries()].map(([id, b]) => ({
+      id,
+      ...b.parsed,
+      passthrough: b.passthrough,
+    }));
   }
 
   function pushWatch(): void {
@@ -173,7 +183,11 @@ export function createKeyHookShortcut(options: {
     return ok;
   }
 
-  function register(accelerator: string, callback: () => void): boolean {
+  function register(
+    accelerator: string,
+    callback: () => void,
+    options: RegisterOptions = {},
+  ): boolean {
     if (fellBack) return getFallback().register(accelerator, callback);
 
     const parsed = parseAccelerator(accelerator, layoutVk);
@@ -185,7 +199,7 @@ export function createKeyHookShortcut(options: {
       return false;
     }
     if (!ensureHookProcess()) return getFallback().register(accelerator, callback);
-    bindings.set(accelerator, { handler: callback, parsed });
+    bindings.set(accelerator, { handler: callback, parsed, passthrough: !!options.passthrough });
     pushWatch();
     return true;
   }

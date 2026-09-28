@@ -42,7 +42,7 @@
     "dev:preloads": "node scripts/bundle-preloads.js --watch",
     "dev:renderer": "vite build --watch",
     "typecheck:renderer": "tsc --noEmit",
-    "dev:electron": "wait-on .electron-build/main.js renderer/dist/index.html && nodemon --watch .electron-build --watch renderer --ext js,json,html,css --exec electron .",
+    "dev:electron": "wait-on .electron-build/main.js renderer/dist/index.html && nodemon --watch .electron-build --watch renderer --ignore renderer/dist/ --ignore \"*.input.js\" --ignore \"*.bundled.js\" --ext js,json,html,css --exec electron .",
     "typecheck:main": "tsc -p tsconfig.main.json --noEmit",
     "typecheck:tests": "tsc -p tsconfig.tests.json",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",
@@ -88,13 +88,19 @@
     "inventory"
   ],
   "author": "WFHelper",
+  "contributors": [
+    {
+      "name": "Elijah Shope",
+      "url": "https://github.com/tntuser77"
+    }
+  ],
   "license": "MIT",
   "devDependencies": {
     "@electron/asar": "^3.4.1",
     "@electron/rebuild": "^4.2.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.58.2",
-    "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.2.2",
     "@tsconfig/svelte": "^5.0.8",
     "@types/ws": "^8.18.1",
@@ -103,6 +109,7 @@
     "concurrently": "^9.2.4",
     "electron": "^41.10.4",
     "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1",
     "eslint": "^10.0.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-svelte": "^3.22.0",
@@ -118,7 +125,7 @@
     "svelte-eslint-parser": "^1.8.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
-    "vite": "^7.3.6",
+    "vite": "^8.3.1",
     "vitest": "^4.1.10",
     "wait-on": "^9.1.0"
   },
@@ -142,8 +149,8 @@
     "@img/sharp-libvips-linux-x64": "1.3.3"
   },
   "build": {
-    "appId": "com.wfhelper.app",
-    "productName": "WFHelper",
+    "appId": "com.tntuser77.wfhelper-custom",
+    "productName": "WFHelper-Custom",
     "directories": {
       "output": "release"
     },
@@ -244,7 +251,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "WFHelper",
+        "owner": "tntuser77",
         "repo": "WFHelper",
         "releaseType": "release"
       }
@@ -252,10 +259,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/WFHelper/WFHelper.git"
+    "url": "https://github.com/tntuser77/WFHelper.git"
   },
   "bugs": {
-    "url": "https://github.com/WFHelper/WFHelper/issues"
+    "url": "https://github.com/tntuser77/WFHelper/issues"
   },
-  "homepage": "https://github.com/WFHelper/WFHelper#readme"
+  "homepage": "https://github.com/tntuser77/WFHelper#readme"
 }

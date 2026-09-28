@@ -59,6 +59,7 @@ import { MAIN_WINDOW_CSP, PERMISSIONS_POLICY } from "./config/runtime/security";
 import { OVERLAY_LAYOUT_KINDS } from "./config/shared/overlayLayout";
 import { overlayPreviewFilePaths, overlayPreviewUrl } from "./services/overlayPreview";
 import * as windowSecurity from "./services/windowSecurity";
+import { watchRendererBuild } from "./services/devRendererReload";
 
 const log = withScope("Main");
 
@@ -142,6 +143,7 @@ import * as ptRunTracker from "./services/profitTakerTracker";
 import { setOcrDebugDumpsEnabled } from "./services/rewardScanDebug";
 import * as arbiIpc from "./ipc/arbiIpc";
 import * as profitTakerIpc from "./ipc/profitTakerIpc";
+import * as levelCapIpc from "./ipc/levelCapIpc";
 import * as arbiScheduleIpc from "./ipc/arbiScheduleIpc";
 import * as tradeTracker from "./services/tradeTracker";
 import * as apiHelperRunner from "./services/apiHelperRunner";
@@ -536,6 +538,7 @@ function registerIpcHandlers(profileStage: ProfileStage): void {
   tradeNotificationIpc.register();
   arbiIpc.register();
   profitTakerIpc.register();
+  levelCapIpc.register();
   arbiScheduleIpc.register();
   notificationLogIpc.register();
   notificationChannelsIpc.register();
@@ -741,6 +744,7 @@ void app.whenReady().then(async () => {
   const windowStart = Date.now();
   createWindow();
   profileStage("window:create", windowStart);
+  watchRendererBuild(MAIN_WINDOW_ENTRY_FILE);
 
   initDataSources(profileStage);
 

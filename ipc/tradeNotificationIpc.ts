@@ -90,10 +90,22 @@ function _applyPosition(win: InstanceType<typeof BrowserWindow>): void {
   if (currentX !== x || currentY !== y) win.setPosition(x, y);
 }
 
+/** A finished level cap run, shown in the trade toast's window. */
+export interface LevelCapToastCard {
+  status: "logged" | "replaced" | "below" | "failed";
+  frame: string;
+  thumb: string | null;
+  runNumber: number | null;
+  exolizers: number | null;
+  target: number;
+  durationSec: number | null;
+}
+
 export interface TradeNotificationShowPayload {
-  match: TradeMatchPayload;
+  match: TradeMatchPayload | null;
   status: TradeNotificationStatus;
   rep: TradeRepOffer | null;
+  levelCap?: LevelCapToastCard;
   timing: {
     visibleMs: number;
     fadeMs: number;
@@ -192,11 +204,9 @@ registerZOrderSubscriber({
   },
 });
 
-interface PendingTradeNotification {
-  match: TradeMatchPayload;
-  status: TradeNotificationStatus;
-  revision: number;
-}
+type PendingTradeNotification =
+  | { kind: "trade"; match: TradeMatchPayload; status: TradeNotificationStatus; revision: number }
+  | { kind: "levelCap"; card: LevelCapToastCard; revision: number };
 
 let _pendingNotification: PendingTradeNotification | null = null;
 
@@ -283,7 +293,7 @@ function _scheduleHide(win: InstanceType<typeof BrowserWindow>, delayMs: number)
 // notification path logs for itself, hence the either/or. Muting the native
 // channel hides the OS toast only: the trade window showed either way, so the
 // history entry is not the channel layer's to withhold.
-function _recordTradeHistory(pending: PendingTradeNotification): void {
+function _recordTradeHistory(pending: Extract<PendingTradeNotification, { kind: "trade" }>): void {
   const title = tradeNotificationTitle(pending.status);
   const body = tradeNotificationBody(pending.match);
   let recorded = false;
@@ -300,6 +310,10 @@ function _displayNotification(
   pending: PendingTradeNotification,
 ): void {
   if (pending.revision !== _notificationRevision) return;
+  if (pending.kind === "levelCap") {
+    _displayLevelCap(win, pending.card);
+    return;
+  }
   const offer = resolveRepOffer(pending.match, pending.status, {
     enabled: !!ctx.overlaySettings.tradeRepHotkeyEnabled,
     hotkey: String(ctx.overlaySettings.tradeRepHotkey || ""),
@@ -331,6 +345,22 @@ function _displayNotification(
       `${pending.match.itemName} ${pending.match.platinum}p with ${pending.match.partner}` +
       `${rep ? ` (+rep armed on ${rep.hotkey})` : ""}`,
   );
+}
+
+// The finish-run key is pressed in game with WFHelper on another monitor, so the
+// in-app toast goes unseen; this is the feedback the player actually gets.
+function _displayLevelCap(win: InstanceType<typeof BrowserWindow>, card: LevelCapToastCard): void {
+  const payload: TradeNotificationShowPayload = {
+    match: null,
+    status: "detected",
+    rep: null,
+    levelCap: card,
+    timing: { visibleMs: DEFAULT_VISIBLE_MS, fadeMs: RENDERER_FADE_MS },
+  };
+  win.webContents.send(TRADE_NOTIFICATION_SHOW, payload);
+  _presentWindow(win);
+  _scheduleHide(win, payload.timing.visibleMs + payload.timing.fadeMs + MAIN_HIDE_BUFFER_MS);
+  log.info(`[TradeNotification] Showing level cap (${card.status}): ${card.frame}`);
 }
 
 function _getOrCreateWindow(): InstanceType<typeof BrowserWindow> {
@@ -430,7 +460,7 @@ function _getOrCreateWindow(): InstanceType<typeof BrowserWindow> {
 }
 
 export function showTradeNotification(
-  match: TradeNotificationShowPayload["match"],
+  match: TradeMatchPayload,
   status: TradeNotificationStatus,
 ): void {
   _notificationRevision += 1;
@@ -439,8 +469,21 @@ export function showTradeNotification(
   _clearHideTimer();
 
   const pending: PendingTradeNotification = {
+    kind: "trade",
     match,
     status,
+    revision: _notificationRevision,
+  };
+  const win = _getOrCreateWindow();
+  if (_rendererReady) _displayNotification(win, pending);
+  else _pendingNotification = pending;
+}
+
+export function showLevelCapNotification(card: LevelCapToastCard): void {
+  _invalidateNotification();
+  const pending: PendingTradeNotification = {
+    kind: "levelCap",
+    card,
     revision: _notificationRevision,
   };
   const win = _getOrCreateWindow();

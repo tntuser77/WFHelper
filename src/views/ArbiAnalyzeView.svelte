@@ -50,6 +50,8 @@
   import ArbiRunDetail from "../components/arbi/ArbiRunDetail.svelte";
   import ArbiCompare from "../components/arbi/ArbiCompare.svelte";
   import HeaderTabs from "../components/HeaderTabs.svelte";
+  import LevelCapPanel from "../components/levelCap/LevelCapPanel.svelte";
+  import RunAnalyticsPanel from "../components/analytics/RunAnalyticsPanel.svelte";
   import PtRunList from "../components/profitTaker/PtRunList.svelte";
   import PtRunDetail from "../components/profitTaker/PtRunDetail.svelte";
   import { ptBestRunIds, ptFilterRuns, type PtFilters } from "../lib/profitTakerStats.js";
@@ -85,10 +87,10 @@
   const ARBI_SECTIONS = ["arbi.filters", "arbi.runs"];
   const PT_SECTIONS = ["arbi.ptFilters", "arbi.ptRuns"];
 
-  const ANALYZE_TABS = ["arbitrations", "profitTaker"] as const;
+  const ANALYZE_TABS = ["levelCap", "arbitrations", "profitTaker", "analytics"] as const;
   type AnalyzeTab = (typeof ANALYZE_TABS)[number];
   const asAnalyzeTab = (key: string | null): AnalyzeTab =>
-    ANALYZE_TABS.includes(key as AnalyzeTab) ? (key as AnalyzeTab) : "arbitrations";
+    ANALYZE_TABS.includes(key as AnalyzeTab) ? (key as AnalyzeTab) : "levelCap";
 
   let analyzeTab: AnalyzeTab = asAnalyzeTab(localStorage.getItem("arbi-tab"));
   function setAnalyzeTab(key: string): void {
@@ -100,8 +102,10 @@
     }
   }
   $: tabOptions = [
+    { key: "levelCap", label: $tr("nav.levelCap") },
     { key: "arbitrations", label: $tr("common.arbitrations") },
     { key: "profitTaker", label: $tr("pt.tab") },
+    { key: "analytics", label: $tr("common.analytics") },
   ];
 
   let selectedRunId: string | null = null;
@@ -348,7 +352,11 @@
     <div class="flex items-end border-b border-border-subtle">
       <HeaderTabs options={tabOptions} activeKey={analyzeTab} onSelect={setAnalyzeTab} />
     </div>
-    {#if analyzeTab === "arbitrations"}
+    {#if analyzeTab === "levelCap"}
+      <LevelCapPanel />
+    {:else if analyzeTab === "analytics"}
+      <RunAnalyticsPanel />
+    {:else if analyzeTab === "arbitrations"}
       {#if selectedRun}
         <ArbiRunDetail
           run={selectedRun}

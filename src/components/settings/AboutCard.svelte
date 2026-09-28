@@ -89,6 +89,11 @@
       url: "https://github.com/WFHelper/WFHelper",
       text: "GitHub",
     },
+    {
+      label: $tr("settings.creditCustomBuild"),
+      url: "https://github.com/tntuser77/WFHelper",
+      text: "Elijah Shope",
+    },
     { label: $tr("settings.creditWebsite"), url: "https://wfhelper.com", text: "wfhelper.com" },
     {
       label: $tr("settings.creditCommunity"),
