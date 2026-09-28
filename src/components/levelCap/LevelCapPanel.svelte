@@ -121,6 +121,13 @@
     return searchTerms.includes(tag.toLowerCase());
   }
 
+  /** Right-clicking the search box empties it. */
+  function clearSearch(event: MouseEvent): void {
+    if (!frameSearch) return;
+    event.preventDefault();
+    frameSearch = "";
+  }
+
   /** Clicking a tag adds it to the search; clicking it again takes it out. */
   function searchTag(tag: string): void {
     frameSearch = toggleLevelCapSearchTag(frameSearch, tag);
@@ -180,6 +187,7 @@
         type="search"
         placeholder={$t("levelCap.searchFrames")}
         bind:value={frameSearch}
+        oncontextmenu={clearSearch}
       />
       {#if quickTags.length}
         <div class="flex flex-wrap gap-1.5" data-level-cap-quick-tags>
