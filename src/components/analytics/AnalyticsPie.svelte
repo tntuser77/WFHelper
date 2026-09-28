@@ -9,7 +9,7 @@
     donut,
     title,
     format,
-    legendClass = "",
+    height,
   }: {
     values: Array<number | null>;
     labels: string[];
@@ -17,11 +17,20 @@
     donut: boolean;
     title: string;
     format: (value: number | null) => string;
-    /** Caps the legend's height; a long legend scrolls. */
-    legendClass?: string;
+    /** The box it has; a long legend scrolls inside it. */
+    height: number;
   } = $props();
 
   const SIZE = 180;
+  const GAP = 20;
+  const LEGEND_MIN_W = 192;
+  const LEGEND_MIN_H = 68;
+  let width = $state(0);
+  // Legend beside the pie when there is room, else under a pie shrunk to leave it some.
+  const beside = $derived(width >= SIZE + GAP + LEGEND_MIN_W);
+  const shown = $derived(
+    Math.max(80, Math.min(SIZE, beside ? height : height - GAP - LEGEND_MIN_H)),
+  );
   const R = SIZE / 2 - 2;
   const INNER = $derived(donut ? R * 0.6 : 0);
   const C = SIZE / 2;
@@ -64,11 +73,14 @@
   }
 </script>
 
-<div class="flex flex-wrap items-center gap-5">
+<div
+  class="flex h-full min-h-0 gap-5 {beside ? 'flex-row items-center' : 'flex-col items-center'}"
+  bind:clientWidth={width}
+>
   <svg
     viewBox="0 0 {SIZE} {SIZE}"
-    width={SIZE}
-    height={SIZE}
+    width={shown}
+    height={shown}
     class="shrink-0"
     role="img"
     aria-label={title}
@@ -106,7 +118,12 @@
     {/if}
   </svg>
 
-  <ul class="m-0 flex min-w-[12rem] flex-1 list-none flex-col gap-1 p-0 text-xs {legendClass}">
+  <!-- Beside, the legend centres on the pie; under it, it takes what is left. -->
+  <ul
+    class="m-0 flex max-h-full min-h-0 w-full min-w-0 list-none flex-col gap-1 overflow-y-auto p-0 pr-1 text-xs {beside
+      ? 'flex-1 self-center'
+      : 'flex-1 self-stretch'}"
+  >
     {#each labels as label, i (i)}
       <li
         class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-[var(--radius-sm)] px-1 py-0.5 {hover?.index ===

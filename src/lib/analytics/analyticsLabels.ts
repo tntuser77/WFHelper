@@ -56,11 +56,12 @@ export const HEIGHT_LABEL: Record<AnalyticsHeight, MessageKey> = {
   tall: "analytics.height.tall",
 };
 
-/** Plot height per card height, for columns and lines. */
+/** Chart area per card height, the same for every chart kind so cards in a
+ *  row line up. Each fits whole ranked rows (28px apart): 6, 9 and 14. */
 export const ANALYTICS_PLOT_PX: Record<AnalyticsHeight, number> = {
-  short: 150,
-  normal: 220,
-  tall: 340,
+  short: 164,
+  normal: 248,
+  tall: 388,
 };
 
 export const WIDTH_LABEL: Record<AnalyticsCols, MessageKey> = {
