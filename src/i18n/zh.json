@@ -2759,5 +2759,6 @@
   "analytics.names.done": "所有队友都有完整名字了。",
   "analytics.names.missing": "待补全的队友",
   "analytics.names.frameHint": "为所有局中带有此头像的队友命名。",
-  "analytics.data": "数据"
+  "analytics.data": "数据",
+  "analytics.measure.exolizersTotal": "无垢装置总数"
 }

@@ -7,6 +7,7 @@ import type {
 export const ANALYTICS_MEASURES = [
   "runs",
   "squadmates",
+  "exolizersTotal",
   "exolizersAvg",
   "exolizersBest",
   "durationAvg",
@@ -74,7 +75,10 @@ export interface AnalyticsChartSpec {
   /** Every one has to hold. The first `has` condition also picks which
    *  squadmates the "squadmates" measure counts. */
   squadConditions: AnalyticsSquadCondition[];
-  /** Categories shown before the rest fold into "Other"; time splits never fold. */
+  /** Split values left out, e.g. "Operator" or a player's name. */
+  exclude: string[];
+  /** Categories shown before the rest fold into "Other"; 0 shows them all, and
+   *  time splits never fold. */
   limit: number;
   wide: boolean;
 }
@@ -136,9 +140,9 @@ const newAcc = (): Acc => ({ runs: 0, sum: 0, n: 0, max: null });
 
 const counts = (measure: AnalyticsMeasure) => measure === "runs" || measure === "squadmates";
 
-/** Slices of a whole only add up when the measure counts something. */
-export function analyticsMeasureCounts(measure: AnalyticsMeasure): boolean {
-  return counts(measure);
+/** Slices and stacks only make a whole when the measure counts or totals something. */
+export function analyticsMeasureAddsUp(measure: AnalyticsMeasure): boolean {
+  return counts(measure) || measure === "exolizersTotal";
 }
 
 export function isAnalyticsPie(chart: AnalyticsChartKind): boolean {
@@ -161,9 +165,10 @@ function add(acc: Acc, { run }: Unit, measure: AnalyticsMeasure): void {
 }
 
 function read(acc: Acc | undefined, measure: AnalyticsMeasure): number | null {
-  if (!acc) return counts(measure) ? 0 : null;
+  if (!acc) return analyticsMeasureAddsUp(measure) ? 0 : null;
   if (counts(measure)) return acc.runs;
   if (measure === "exolizersBest") return acc.max;
+  if (measure === "exolizersTotal") return acc.sum;
   return acc.n ? acc.sum / acc.n : null;
 }
 
@@ -331,7 +336,7 @@ function topKeys(
         b.runs - a.runs ||
         ak.localeCompare(bk),
     )
-    .slice(0, Math.max(1, limit))
+    .slice(0, limit > 0 ? limit : undefined)
     .map(([key]) => key);
 }
 
@@ -391,9 +396,13 @@ export function analyticsResult(
   // A single number counts everything that passed, split or not.
   const stat = spec.chart === "stat";
   const time = !stat && isAnalyticsTimeSplit(spec.splitBy);
-  const catValues = stat ? () => [""] : valuesFor(spec.splitBy, ctx, mates);
+  // Left-out values go before anything is ranked, so they never reach "Other".
+  const drop = new Set(spec.exclude);
+  const without = (of: ValuesOf): ValuesOf =>
+    drop.size ? (unit) => of(unit).filter((value) => !drop.has(value)) : of;
+  const catValues = stat ? () => [""] : without(valuesFor(spec.splitBy, ctx, mates));
   const seriesBy = spec.seriesBy && !isAnalyticsTimeSplit(spec.seriesBy) ? spec.seriesBy : null;
-  const seriesValues = seriesBy ? valuesFor(seriesBy, ctx, mates) : () => [""];
+  const seriesValues = seriesBy ? without(valuesFor(seriesBy, ctx, mates)) : () => [""];
 
   let categories: string[];
   let catKept: Set<string> | null = null;
@@ -405,7 +414,7 @@ export function analyticsResult(
   } else {
     // A pie gets a colour per slice, so it stops where the palette does.
     const limit = isAnalyticsPie(spec.chart)
-      ? Math.min(spec.limit, ANALYTICS_MAX_SERIES)
+      ? Math.min(spec.limit || ANALYTICS_MAX_SERIES, ANALYTICS_MAX_SERIES)
       : spec.limit;
     categories = topKeys(units, catValues, spec.measure, limit);
     catKept = new Set(categories);

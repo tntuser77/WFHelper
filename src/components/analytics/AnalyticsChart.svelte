@@ -7,6 +7,7 @@
   } from "../../lib/analytics/analyticsLabels.js";
   import {
     ANALYTICS_OTHER,
+    analyticsMeasureAddsUp,
     type AnalyticsChartSpec,
     type AnalyticsResult,
   } from "../../lib/analytics/runAnalytics.js";
@@ -180,8 +181,8 @@
   <AnalyticsColumns
     {result}
     kind={kind === "line" ? "line" : "columns"}
-    stacked={spec.measure === "runs"}
-    whole={spec.measure === "runs" || spec.measure === "exolizersBest"}
+    stacked={analyticsMeasureAddsUp(spec.measure)}
+    whole={spec.measure !== "exolizersAvg" && spec.measure !== "durationAvg"}
     {title}
     {categoryLabels}
     {shortLabels}

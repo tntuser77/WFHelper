@@ -16,7 +16,7 @@
     ANALYTICS_SPLITS,
     ANALYTICS_SQUAD_FILTERS,
     analyticsResult,
-    analyticsMeasureCounts,
+    analyticsMeasureAddsUp,
     isAnalyticsPie,
     isAnalyticsTimeSplit,
     type AnalyticsChartSpec,
@@ -112,13 +112,13 @@
 
   function setChart(chart: AnalyticsChartSpec["chart"]): void {
     // A pie shares out a count; averages do not add up to a whole.
-    if (isAnalyticsPie(chart) && !analyticsMeasureCounts(draft.measure)) draft.measure = "runs";
+    if (isAnalyticsPie(chart) && !analyticsMeasureAddsUp(draft.measure)) draft.measure = "runs";
     draft.chart = chart;
   }
 
   // Picking an average while a pie is showing turns it into ranked bars.
   $effect(() => {
-    if (isAnalyticsPie(draft.chart) && !analyticsMeasureCounts(draft.measure)) {
+    if (isAnalyticsPie(draft.chart) && !analyticsMeasureAddsUp(draft.measure)) {
       draft.chart = "ranked";
     }
   });

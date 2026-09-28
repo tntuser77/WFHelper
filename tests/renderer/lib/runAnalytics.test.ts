@@ -47,6 +47,7 @@ function spec(overrides: Partial<AnalyticsChartSpec> = {}): AnalyticsChartSpec {
     squad: "all",
     frames: [],
     squadConditions: [],
+    exclude: [],
     limit: 10,
     wide: false,
     ...overrides,
@@ -68,6 +69,29 @@ describe("analyticsResult", () => {
     expect(result.categories).toEqual(["Titania", "Dante", ANALYTICS_OTHER]);
     expect(result.values).toEqual([[2, 1, 2]]);
     expect(result.total).toBe(5);
+  });
+
+  it("leaves excluded values out before ranking, so they never reach Other", () => {
+    const runs = [
+      run({ frame: "Titania" }),
+      run({ frame: "Titania" }),
+      run({ frame: "Mesa" }),
+      run({ frame: "Saryn" }),
+    ];
+    const result = analyticsResult(runs, spec({ exclude: ["Titania"], limit: 1 }), ctx);
+    expect(result.categories).toEqual(["Mesa", ANALYTICS_OTHER]);
+    expect(result.values).toEqual([[1, 1]]);
+  });
+
+  it("shows every category when the limit is All", () => {
+    const runs = ["A", "B", "C", "D", "E", "F", "G"].map((frame) => run({ frame }));
+    expect(analyticsResult(runs, spec({ limit: 0 }), ctx).categories).toHaveLength(7);
+  });
+
+  it("totals Exolizers, skipping runs without a count", () => {
+    const runs = [run({ exolizers: 110 }), run({ exolizers: 108 }), run({ exolizers: null })];
+    const result = analyticsResult(runs, spec({ measure: "exolizersTotal", chart: "stat" }), ctx);
+    expect(result.total).toBe(218);
   });
 
   it("stops a pie at five slices plus Other", () => {

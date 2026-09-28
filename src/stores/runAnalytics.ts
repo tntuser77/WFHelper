@@ -6,7 +6,7 @@ import {
   ANALYTICS_RANGES,
   ANALYTICS_SPLITS,
   ANALYTICS_SQUAD_FILTERS,
-  analyticsMeasureCounts,
+  analyticsMeasureAddsUp,
   isAnalyticsPie,
   isAnalyticsTimeSplit,
   type AnalyticsChartSpec,
@@ -19,7 +19,8 @@ const RUN_ANALYTICS_STORAGE_KEY = "wf_run_analytics_v1";
 const MAX_CHARTS = 40;
 const MAX_TITLE = 80;
 const MAX_CONDITIONS = 4;
-export const ANALYTICS_LIMITS = [5, 10, 15, 25] as const;
+/** 0 is "All": every category shown, the card scrolling instead of folding. */
+export const ANALYTICS_LIMITS = [5, 10, 15, 25, 0] as const;
 
 type ChartDraft = Omit<AnalyticsChartSpec, "id">;
 
@@ -34,6 +35,7 @@ const BLANK: ChartDraft = {
   squad: "all",
   frames: [],
   squadConditions: [],
+  exclude: [],
   limit: 10,
   wide: false,
 };
@@ -96,7 +98,7 @@ export function normalizeChartSpec(raw: unknown): AnalyticsChartSpec | null {
   const measure = pick(ANALYTICS_MEASURES, value.measure, BLANK.measure);
   // A line needs time along the bottom; a pie needs a count to share out.
   if (chart === "line" && !isAnalyticsTimeSplit(splitBy)) chart = "columns";
-  if (isAnalyticsPie(chart) && !analyticsMeasureCounts(measure)) chart = "ranked";
+  if (isAnalyticsPie(chart) && !analyticsMeasureAddsUp(measure)) chart = "ranked";
   // Ranked bars and a single number have nowhere to draw a second split.
   const stacks = chart === "columns" || chart === "line" || chart === "table";
   return {
@@ -117,6 +119,11 @@ export function normalizeChartSpec(raw: unknown): AnalyticsChartSpec | null {
       : [],
     squadConditions: Array.isArray(value.squadConditions)
       ? value.squadConditions.flatMap((c) => normalizeCondition(c) ?? []).slice(0, MAX_CONDITIONS)
+      : [],
+    exclude: Array.isArray(value.exclude)
+      ? [...new Set(value.exclude.filter((v): v is string => typeof v === "string" && !!v))]
+          .map((v) => v.slice(0, 64))
+          .slice(0, 50)
       : [],
     limit: pick<number>(ANALYTICS_LIMITS, value.limit, BLANK.limit),
     wide: value.wide === true,

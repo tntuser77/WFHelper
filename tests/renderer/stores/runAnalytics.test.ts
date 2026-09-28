@@ -53,6 +53,13 @@ describe("run analytics dashboard store", () => {
         { id: "d", splitBy: "month", seriesBy: "frame", chart: "line" },
         { id: "e", measure: "exolizersAvg", chart: "pie" },
         { id: "f", measure: "squadmates", chart: "donut" },
+        {
+          id: "g",
+          measure: "exolizersTotal",
+          chart: "pie",
+          limit: 0,
+          exclude: ["Operator", 3, "Operator"],
+        },
       ],
     });
     expect(get(store.analyticsCharts)).toMatchObject([
@@ -64,6 +71,8 @@ describe("run analytics dashboard store", () => {
       // An average does not share out into slices; a count does.
       { id: "e", chart: "ranked" },
       { id: "f", chart: "donut" },
+      // A total shares out too; "All" is a limit, and junk leaves the exclude list.
+      { id: "g", chart: "pie", limit: 0, exclude: ["Operator"] },
     ]);
   });
 

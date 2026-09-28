@@ -2759,5 +2759,6 @@
   "analytics.names.done": "Alle Truppmitglieder haben einen vollständigen Namen.",
   "analytics.names.missing": "Truppmitglieder zum Ergänzen",
   "analytics.names.frameHint": "Benennt alle Truppmitglieder mit diesem Porträt, in allen Durchläufen.",
-  "analytics.data": "Daten"
+  "analytics.data": "Daten",
+  "analytics.measure.exolizersTotal": "Exolizer gesamt"
 }

@@ -17,6 +17,7 @@ import {
 export const MEASURE_LABEL: Record<AnalyticsMeasure, MessageKey> = {
   runs: "analytics.measure.runs",
   squadmates: "analytics.measure.squadmates",
+  exolizersTotal: "analytics.measure.exolizersTotal",
   exolizersAvg: "analytics.measure.exolizersAvg",
   exolizersBest: "analytics.measure.exolizersBest",
   durationAvg: "analytics.measure.durationAvg",
