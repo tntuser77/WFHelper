@@ -67,6 +67,10 @@
   } as const;
   // Cards slide into place for this long; no reorder is tried until they settle.
   const REFLOW_MS = 200;
+  // How far ahead of the held card's centre a sideways swap is checked: a share
+  // of its width, capped so a wide card does not swap from far off.
+  const SWAP_LEAD = 0.2;
+  const SWAP_LEAD_MAX_PX = 96;
 
   let grid = $state<HTMLDivElement | null>(null);
   // A card being moved: where the pointer is, where it grabbed the card, and the
@@ -105,14 +109,23 @@
     order = start;
     let settledAt = 0;
     let swappedWith: string | null = null;
+    // Which way the card is heading sideways, from the last few pixels of movement.
+    let lastX = event.clientX;
+    let headingX = 0;
 
     const move = (e: PointerEvent) => {
       if (!moving || !order) return;
       moving = { ...moving, x: e.clientX, y: e.clientY };
+      if (Math.abs(e.clientX - lastX) >= 3) {
+        headingX = Math.sign(e.clientX - lastX);
+        lastX = e.clientX;
+      }
       if (performance.now() < settledAt) return;
       // The held card's centre decides, not the pointer, so where it was grabbed
-      // does not change how far it has to travel.
-      const cx = e.clientX - moving.offX + moving.width / 2;
+      // does not change how far it has to travel. It looks a little ahead of the
+      // centre the way the card is going, so a swap comes when the hand expects it.
+      const lead = headingX * Math.min(moving.width * SWAP_LEAD, SWAP_LEAD_MAX_PX);
+      const cx = e.clientX - moving.offX + moving.width / 2 + lead;
       const cy = e.clientY - moving.offY + moving.height / 2;
       const over = document.elementFromPoint(cx, cy)?.closest<HTMLElement>("[data-analytics-slot]");
       const target = over?.dataset.analyticsSlot;
