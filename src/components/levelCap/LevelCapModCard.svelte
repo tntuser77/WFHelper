@@ -13,6 +13,7 @@
     rarity = null,
     selected = false,
     onSelect,
+    onClear,
   }: {
     upgrade: LevelCapUpgrade | null;
     role: LevelCapUpgradeRole;
@@ -23,6 +24,8 @@
     selected?: boolean;
     /** Absent in read-only views. */
     onSelect?: (() => void) | undefined;
+    /** Right-click empties the slot; absent in read-only views. */
+    onClear?: (() => void) | undefined;
   } = $props();
 
   const ROLE_KEYS: Partial<Record<LevelCapUpgradeRole, MessageKey>> = {
@@ -123,6 +126,11 @@
     class="{shell} cursor-pointer transition-transform hover:-translate-y-0.5"
     style:border-color={type ? frame : "var(--border)"}
     onclick={onSelect}
+    oncontextmenu={(event) => {
+      if (!onClear) return;
+      event.preventDefault();
+      onClear();
+    }}
     data-level-cap-mod={role}
   >
     {@render body()}

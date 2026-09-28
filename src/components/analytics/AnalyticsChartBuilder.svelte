@@ -352,13 +352,16 @@
               <ThemedButton
                 size="compact"
                 active={draft.frames.length === 0}
-                onClick={() => (draft.frames = [])}>{$tr("analytics.allFrames")}</ThemedButton
+                onClick={() => (draft.frames = [])}
+                onContextMenu={() => (draft.frames = [])}>{$tr("analytics.allFrames")}</ThemedButton
               >
               {#each frames as frame (frame)}
                 <ThemedButton
                   size="compact"
                   active={draft.frames.includes(frame)}
-                  onClick={() => toggleFrame(frame)}>{frame}</ThemedButton
+                  onClick={() => toggleFrame(frame)}
+                  onContextMenu={() => (draft.frames = draft.frames.filter((f) => f !== frame))}
+                  >{frame}</ThemedButton
                 >
               {/each}
             </div>
@@ -370,13 +373,16 @@
                 <ThemedButton
                   size="compact"
                   active={draft.tags.length === 0}
-                  onClick={() => (draft.tags = [])}>{$tr("analytics.anyTags")}</ThemedButton
+                  onClick={() => (draft.tags = [])}
+                  onContextMenu={() => (draft.tags = [])}>{$tr("analytics.anyTags")}</ThemedButton
                 >
                 {#each tags as tag (tag)}
                   <ThemedButton
                     size="compact"
                     active={draft.tags.includes(tag)}
-                    onClick={() => toggleTag(tag)}>{tag}</ThemedButton
+                    onClick={() => toggleTag(tag)}
+                    onContextMenu={() => (draft.tags = draft.tags.filter((t) => t !== tag))}
+                    >{tag}</ThemedButton
                   >
                 {/each}
               </div>
@@ -390,8 +396,14 @@
         >
           <div class="flex flex-col gap-1" data-analytics-condition-editor>
             {#each conditions as row, i (i)}
+              <!-- Right-click anywhere on the row drops the condition, like its ×. -->
               <div
+                role="presentation"
                 class="flex flex-wrap items-center gap-1 rounded-[var(--radius-md)] border border-border-subtle p-1.5"
+                oncontextmenu={(event) => {
+                  event.preventDefault();
+                  conditions.splice(i, 1);
+                }}
                 data-analytics-condition={i}
               >
                 <select class={SELECT} bind:value={row.has} data-condition-has>
@@ -456,6 +468,7 @@
                   size="compact"
                   active={draft.exclude.includes(key)}
                   onClick={() => toggleExclude(key)}
+                  onContextMenu={() => (draft.exclude = draft.exclude.filter((k) => k !== key))}
                   >{analyticsKeyLabel(key, excludeSplit(key), $tr, $locale)}</ThemedButton
                 >
               {/each}

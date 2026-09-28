@@ -350,6 +350,10 @@
         {catalog}
         selected={pickedSlot}
         onSelect={(slot) => toggle(slot)}
+        onClear={(slot) => {
+          setUpgrade(slot, null);
+          if (pickedSlot === slot) picking = null;
+        }}
       />
 
       {#if pickedSpec}
@@ -412,6 +416,12 @@
               ? 'border-accent/50 text-text-primary'
               : 'border-dashed border-border text-text-muted'} hover:border-info"
             onclick={() => toggle("helminth")}
+            oncontextmenu={(event) => {
+              if (!item?.helminth) return;
+              event.preventDefault();
+              setHelminth(null, 0);
+              picking = null;
+            }}
             data-level-cap-helminth
             >{item.helminth
               ? abilityName(item.helminth.ability)
@@ -475,6 +485,11 @@
                     : 'border-dashed border-border text-text-muted'} hover:border-info"
                 title={shard ? shardEffect(shard.type) : undefined}
                 onclick={() => toggle(`shard:${socket}`)}
+                oncontextmenu={(event) => {
+                  if (!shard) return;
+                  event.preventDefault();
+                  setShard(socket, null);
+                }}
                 data-level-cap-shard={socket}
               >
                 {#if icon}<img src={icon} alt="" class="h-5 w-5 shrink-0 object-contain" />{/if}

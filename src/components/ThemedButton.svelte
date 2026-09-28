@@ -7,6 +7,8 @@
   export let type: "button" | "submit" | "reset" = "button";
   export let className = "";
   export let onClick: (() => void) | null = null;
+  /** Right-click action; the browser menu only gives way when one is set. */
+  export let onContextMenu: (() => void) | null = null;
 
   $: stateClass = active
     ? "border-accent bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] font-semibold text-accent"
@@ -32,6 +34,11 @@
            disabled:cursor-not-allowed disabled:opacity-50 {sizeClass} {stateClass} {className}"
     title={title || undefined}
     on:click={() => onClick?.()}
+    on:contextmenu={(event) => {
+      if (!onContextMenu) return;
+      event.preventDefault();
+      onContextMenu();
+    }}
   >
     <slot />
   </button>
