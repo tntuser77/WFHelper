@@ -35,12 +35,14 @@ import {
   LEVEL_CAP_DELETE_RUN,
   LEVEL_CAP_FIX_SQUADMATE,
   LEVEL_CAP_GET,
+  LEVEL_CAP_LABEL_PORTRAIT,
   LEVEL_CAP_HOTKEY,
   LEVEL_CAP_ITEM_CONFIGS,
   LEVEL_CAP_MODULAR_ITEMS,
   LEVEL_CAP_IMPORT_FOLDERS,
   LEVEL_CAP_OPEN_SCREENSHOT,
   LEVEL_CAP_PICK_FOLDER,
+  LEVEL_CAP_PORTRAIT_THUMB,
   LEVEL_CAP_SET_NOTES,
   LEVEL_CAP_SQUAD_CROP,
   LEVEL_CAP_THUMBNAIL,
@@ -48,7 +50,10 @@ import {
   LEVEL_CAP_UPDATED,
   LEVEL_CAP_UPDATE_SETTINGS,
 } from "../config/shared/ipcChannels";
-import { LEVEL_CAP_EXOLIZER_TARGET } from "../config/shared/levelCapTypes";
+import {
+  LEVEL_CAP_EXOLIZER_TARGET,
+  LEVEL_CAP_SQUAD_CROP as SQUAD_CROP,
+} from "../config/shared/levelCapTypes";
 import type {
   LevelCapBuild,
   LevelCapBuildPatch,
@@ -62,9 +67,6 @@ import type {
 
 const log = withScope("levelCapIpc");
 const THUMBNAIL_WIDTH = 960;
-// The squad list's corner of a screenshot: 1080p pixels in from the right, and
-// fractions of the height, a little looser than the reader's band.
-const SQUAD_CROP = { width: 460, top: 0.05, bottom: 0.45 };
 
 let _boundHotkey = "";
 let _readingScreenshots = false;
@@ -215,6 +217,15 @@ async function readScreenshots(): Promise<void> {
       pushUpdate();
     }
     if (squads) log.info(`[LevelCap] read ${squads} squad list(s) off screenshots`);
+    // Row positions for runs read before they were kept, for the name review.
+    const placing = store.runsAwaitingSquadRows();
+    for (const { id, screenshot } of placing) {
+      store.recordSquadRows(id, await readSquadFromScreenshot(screenshot));
+    }
+    if (placing.length) {
+      pushUpdate();
+      log.info(`[LevelCap] placed squad rows on ${placing.length} screenshot(s)`);
+    }
   } finally {
     _readingScreenshots = false;
   }
@@ -487,6 +498,28 @@ function register(): void {
       const runId = asRunId(id);
       if (runId && Number.isInteger(slot) && (fix === null || isSquadFixPatch(fix))) {
         store.fixSquadmate(runId, slot as number, fix);
+      }
+      return payload();
+    },
+  );
+
+  handleAuthorized(
+    LEVEL_CAP_PORTRAIT_THUMB,
+    assertMainRendererSender,
+    (_e, id: unknown, slot: unknown) => {
+      const runId = asRunId(id);
+      const png =
+        runId && Number.isInteger(slot) ? store.portraitThumb(runId, slot as number) : null;
+      return png ? `data:image/png;base64,${png.toString("base64")}` : null;
+    },
+  );
+
+  handleAuthorized(
+    LEVEL_CAP_LABEL_PORTRAIT,
+    assertMainRendererSender,
+    (_e, portrait: unknown, frame: unknown) => {
+      if (typeof portrait === "string" && typeof frame === "string") {
+        store.labelPortrait(portrait, frame);
       }
       return payload();
     },

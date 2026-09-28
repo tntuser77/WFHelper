@@ -29,7 +29,7 @@
 - [ ] When editing a chart, there is information overload. There are seemingly way to many options. I'm not entirely sure what to do about this. Maybe a querry style prompt would fix? 
 - [ ] Show as table looking very odd, with only 2 coloums for most things. I wouldn't want a show as table, I would want that to be inside the edit chart side. 
 - [ ] The ability to exlude things from my charts. Ie, run count by squadmate's frame, without operator. Or, Run counts by squadmates without wealthypoet
-- [ ] The ability in ana
+- [ ] The ability in to scroll down inside my cards. Shoving everything that doesn't fit inside "Other" doesn't work for everything
 
 
 

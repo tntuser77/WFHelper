@@ -152,6 +152,8 @@ import {
   LEVEL_CAP_OPEN_SCREENSHOT,
   LEVEL_CAP_SQUAD_CROP,
   LEVEL_CAP_FIX_SQUADMATE,
+  LEVEL_CAP_PORTRAIT_THUMB,
+  LEVEL_CAP_LABEL_PORTRAIT,
   LEVEL_CAP_UPDATED,
   LEVEL_CAP_HOTKEY,
   ARBI_SCHED_GET,
@@ -414,6 +416,8 @@ try {
     getLevelCapThumbnail: inv<"getLevelCapThumbnail">(LEVEL_CAP_THUMBNAIL),
     getLevelCapSquadCrop: inv<"getLevelCapSquadCrop">(LEVEL_CAP_SQUAD_CROP),
     fixLevelCapSquadmate: inv<"fixLevelCapSquadmate">(LEVEL_CAP_FIX_SQUADMATE),
+    getLevelCapPortraitThumb: inv<"getLevelCapPortraitThumb">(LEVEL_CAP_PORTRAIT_THUMB),
+    labelLevelCapPortrait: inv<"labelLevelCapPortrait">(LEVEL_CAP_LABEL_PORTRAIT),
     openLevelCapScreenshot: inv<"openLevelCapScreenshot">(LEVEL_CAP_OPEN_SCREENSHOT),
     onLevelCapUpdated: ipcDataBridge<IpcEventMap["level-cap-updated"]>(
       ipcRenderer,

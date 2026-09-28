@@ -122,6 +122,8 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
   if (Array.isArray(run.squadmates)) out.squadmates = normalizeSquadmates(run.squadmates);
   delete out.squadReader;
   if (typeof run.squadReader === "number") out.squadReader = run.squadReader;
+  delete out.squadRows;
+  if (Array.isArray(run.squadRows)) out.squadRows = normalizeSquadRows(run.squadRows);
   delete out.squadFixes;
   const fixes = Array.isArray(run.squadFixes) ? normalizeSquadFixes(run.squadFixes) : [];
   if (fixes.length) out.squadFixes = fixes;
@@ -164,6 +166,18 @@ function normalizeSquadmates(raw: unknown[]): LevelCapSquadmate[] {
     };
     if (Number.isInteger(value.slot)) mate.slot = value.slot as number;
     return mate;
+  });
+}
+
+function normalizeSquadRows(raw: unknown[]): Array<{ top: number; bottom: number }> {
+  const fraction = (v: unknown) => typeof v === "number" && v >= 0 && v <= 1;
+  return raw.slice(0, 4).flatMap((entry) => {
+    const value = (entry ?? {}) as Record<string, unknown>;
+    return fraction(value.top) &&
+      fraction(value.bottom) &&
+      (value.bottom as number) > (value.top as number)
+      ? [{ top: value.top as number, bottom: value.bottom as number }]
+      : [];
   });
 }
 
@@ -580,12 +594,35 @@ export function runsAwaitingSquadRead(): Array<{ id: string; screenshot: string 
   );
 }
 
+/** Screenshot runs read before row positions were kept. */
+export function runsAwaitingSquadRows(): Array<{ id: string; screenshot: string }> {
+  ensureLoaded();
+  return _runs.flatMap((run) =>
+    run.screenshot && run.squadOcr === "read" && run.squadReads && !run.squadRows
+      ? [{ id: run.id, screenshot: run.screenshot }]
+      : [],
+  );
+}
+
+/** Takes only the row positions from a fresh read, and only when it found the
+ *  same rows as the saved read: fixes are pinned to rows by their order. */
+export function recordSquadRows(id: string, read: SquadScreenshotRead | null): void {
+  updateRun(id, (run) => {
+    const same =
+      !!read &&
+      !!read.rows &&
+      JSON.stringify(normalizeSquadReads(read.names)) === JSON.stringify(run.squadReads);
+    run.squadRows = same ? normalizeSquadRows(read.rows ?? []) : [];
+  });
+}
+
 /** Keeps the raw reads and portraits; who and what they are is worked out on
  *  every save. A failed read is remembered so it is not retried. */
 export function recordSquadRead(id: string, read: SquadScreenshotRead | null): LevelCapRun | null {
   return updateRun(id, (run) => {
     run.squadOcr = read ? "read" : "unreadable";
     run.squadReader = SQUAD_READER;
+    if (read?.rows) run.squadRows = normalizeSquadRows(read.rows);
     if (!read) return;
     run.squadReads = normalizeSquadReads(read.names);
     run.squadPortraits = read.portraits.slice(0, 4);
@@ -601,6 +638,16 @@ function writePortraitThumb(name: string, png: Buffer): void {
     fs.writeFileSync(userDataPath(PORTRAIT_DIR, name), png);
   } catch (err) {
     log.warn("[LevelCap] portrait not saved:", normalizeErrorMessage(err));
+  }
+}
+
+/** The thumbnail saved beside a squad row when it was read, if there is one. */
+export function portraitThumb(id: string, slot: number): Buffer | null {
+  if (!/^[\w-]+$/.test(id) || !Number.isInteger(slot) || slot < 0 || slot > 3) return null;
+  try {
+    return fs.readFileSync(userDataPath(PORTRAIT_DIR, `${id}-${slot}.png`));
+  } catch {
+    return null;
   }
 }
 

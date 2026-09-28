@@ -242,6 +242,36 @@ describe("levelCapStore", () => {
     expect(fixed.players).toBeUndefined();
   });
 
+  it("learns where squad rows sit, but only off a read that matches the saved one", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const shot = (id: string) => ({
+      ...run({ source: "import", squadSize: null, screenshot: `${id}.png` }),
+      id,
+      squadOcr: "read",
+      squadReads: [["Kemani"], ["Alaric"]],
+      squadPortraits: [null, null],
+      squadReader: 2,
+    });
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ schemaVersion: 2, runs: [shot("same"), shot("moved")] }),
+    );
+    const store = await freshStore();
+    expect(store.runsAwaitingSquadRows().map((r) => r.id)).toEqual(["same", "moved"]);
+    const rows = [
+      { top: 0.2, bottom: 0.23 },
+      { top: 0.26, bottom: 0.29 },
+    ];
+    const read = { names: [["Kemani"], ["Alaric"]], portraits: [null, null], thumbs: [null, null] };
+    store.recordSquadRows("same", { ...read, rows });
+    // A read that found other rows would put the highlight on the wrong player.
+    store.recordSquadRows("moved", { ...read, names: [["Kemani"]], rows: rows.slice(0, 1) });
+    const byId = new Map(store.getRuns().map((r) => [r.id, r]));
+    expect(byId.get("same")?.squadRows).toEqual(rows);
+    expect(byId.get("moved")?.squadRows).toEqual([]);
+    expect(store.runsAwaitingSquadRows()).toEqual([]);
+  });
+
   it("reads a squad again once when an older reader found no portraits", async () => {
     const file = path.join(tmpDir, "userData", "level-cap-runs.json");
     const portrait = Buffer.alloc(16 * 16 * 3, 90).toString("base64");

@@ -1,3 +1,7 @@
+/** The squad list's corner of a screenshot, as the name review shows it: 1080p
+ *  pixels in from the right edge, and fractions of the height top and bottom. */
+export const LEVEL_CAP_SQUAD_CROP = { width: 460, top: 0.05, bottom: 0.45 };
+
 /** Exolizers retired before a Void Cascade counts as a level cap run. */
 export const LEVEL_CAP_EXOLIZER_TARGET = 107;
 
@@ -102,6 +106,9 @@ export interface LevelCapRun {
   squadPortraits?: Array<string | null>;
   /** Version of the squad reader behind `squadReads`; a newer one reads runs again. */
   squadReader?: number;
+  /** Where each `squadReads` row sits on the screenshot, as fractions of its
+   *  height; empty when a later read no longer matched the saved rows. */
+  squadRows?: Array<{ top: number; bottom: number }>;
   /** Corrections the user made to squad rows the screenshot read got wrong. */
   squadFixes?: LevelCapSquadFix[];
   /** Who was in each squad row and what they played, as far as the screenshot

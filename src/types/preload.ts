@@ -334,6 +334,12 @@ export interface PreloadAPI {
   fixLevelCapSquadmate: (
     ...args: IpcInvokeMap["fixLevelCapSquadmate"]["args"]
   ) => Promise<IpcInvokeMap["fixLevelCapSquadmate"]["return"]>;
+  getLevelCapPortraitThumb: (
+    ...args: IpcInvokeMap["getLevelCapPortraitThumb"]["args"]
+  ) => Promise<IpcInvokeMap["getLevelCapPortraitThumb"]["return"]>;
+  labelLevelCapPortrait: (
+    ...args: IpcInvokeMap["labelLevelCapPortrait"]["args"]
+  ) => Promise<IpcInvokeMap["labelLevelCapPortrait"]["return"]>;
   openLevelCapScreenshot: (
     id: IpcInvokeMap["openLevelCapScreenshot"]["args"][0],
   ) => Promise<IpcInvokeMap["openLevelCapScreenshot"]["return"]>;

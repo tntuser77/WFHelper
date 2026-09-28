@@ -780,6 +780,16 @@ export interface IpcInvokeMap {
     args: [id: string, slot: number, fix: LevelCapSquadFixPatch | null];
     return: LevelCapPayload;
   };
+  /** PNG data URL of the portrait saved beside one squad row, if any. */
+  getLevelCapPortraitThumb: {
+    args: [id: string, slot: number];
+    return: string | null;
+  };
+  /** Names the frame of a portrait look; every portrait like it follows. */
+  labelLevelCapPortrait: {
+    args: [portrait: string, frame: string];
+    return: LevelCapPayload;
+  };
   openLevelCapScreenshot: {
     args: [id: string];
     return: { ok: boolean };

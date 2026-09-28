@@ -74,6 +74,11 @@ export async function fixLevelCapSquadmate(
   levelCap.set(await invoke("fixLevelCapSquadmate", id, slot, fix));
 }
 
+/** Names a portrait look's frame; every squadmate with a portrait like it follows. */
+export async function labelLevelCapPortrait(portrait: string, frame: string): Promise<void> {
+  levelCap.set(await invoke("labelLevelCapPortrait", portrait, frame));
+}
+
 export async function deleteLevelCapRun(id: string): Promise<void> {
   levelCap.set(await invoke("deleteLevelCapRun", id));
 }
