@@ -2771,5 +2771,8 @@
   "analytics.sentence.top": "前",
   "analytics.section.filters": "筛选记录",
   "analytics.section.layout": "标题和布局",
-  "analytics.summary.allRuns": "全部记录"
+  "analytics.summary.allRuns": "全部记录",
+  "analytics.resize": "拖动调整大小，或使用方向键",
+  "analytics.width.quarter": "四分之一宽度",
+  "analytics.width.threeQuarters": "四分之三宽度"
 }

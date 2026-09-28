@@ -2,6 +2,7 @@ import { writable, type Readable } from "svelte/store";
 
 import {
   ANALYTICS_CHARTS,
+  ANALYTICS_COLS,
   ANALYTICS_HEIGHTS,
   ANALYTICS_MEASURES,
   ANALYTICS_RANGES,
@@ -11,6 +12,7 @@ import {
   isAnalyticsPie,
   isAnalyticsTimeSplit,
   type AnalyticsChartSpec,
+  type AnalyticsCols,
   type AnalyticsSquadCondition,
 } from "../lib/analytics/runAnalytics.js";
 import { readStoredJson, writeStorage } from "../lib/persistence.js";
@@ -38,18 +40,18 @@ const BLANK: ChartDraft = {
   squadConditions: [],
   exclude: [],
   limit: 10,
-  wide: false,
+  cols: 2,
   height: "normal",
 };
 
 /** What a fresh dashboard shows; ordinary cards once they are on it. */
 const STARTER: ChartDraft[] = [
-  { ...BLANK, splitBy: "week", chart: "columns", wide: true },
+  { ...BLANK, splitBy: "week", chart: "columns", cols: 4 },
   { ...BLANK, splitBy: "squadmate" },
   { ...BLANK, splitBy: "squadmateFrame" },
   { ...BLANK, splitBy: "frame" },
   { ...BLANK, splitBy: "squad" },
-  { ...BLANK, splitBy: "month", seriesBy: "frame", chart: "columns", wide: true },
+  { ...BLANK, splitBy: "month", seriesBy: "frame", chart: "columns", cols: 4 },
 ];
 
 export function newChartDraft(): ChartDraft {
@@ -128,7 +130,8 @@ export function normalizeChartSpec(raw: unknown): AnalyticsChartSpec | null {
           .slice(0, 50)
       : [],
     limit: pick<number>(ANALYTICS_LIMITS, value.limit, BLANK.limit),
-    wide: value.wide === true,
+    // Cards saved before the four-column grid were half or full width.
+    cols: pick<number>(ANALYTICS_COLS, value.cols, value.wide === true ? 4 : 2) as AnalyticsCols,
     height: pick(ANALYTICS_HEIGHTS, value.height, BLANK.height),
   };
 }

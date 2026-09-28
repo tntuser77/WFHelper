@@ -62,6 +62,9 @@ describe("run analytics dashboard store", () => {
         },
         { id: "h", height: "tall" },
         { id: "i", height: "giant" },
+        { id: "j", wide: true },
+        { id: "k", cols: 3 },
+        { id: "l", cols: 9 },
       ],
     });
     expect(get(store.analyticsCharts)).toMatchObject([
@@ -77,6 +80,10 @@ describe("run analytics dashboard store", () => {
       { id: "g", chart: "pie", limit: 0, exclude: ["Operator"] },
       { id: "h", height: "tall" },
       { id: "i", height: "normal" },
+      // Old full-width cards span all four columns.
+      { id: "j", cols: 4 },
+      { id: "k", cols: 3 },
+      { id: "l", cols: 2 },
     ]);
   });
 

@@ -7,6 +7,7 @@ import {
   ANALYTICS_UNKNOWN,
   type AnalyticsChartKind,
   type AnalyticsChartSpec,
+  type AnalyticsCols,
   type AnalyticsHeight,
   type AnalyticsMeasure,
   type AnalyticsRange,
@@ -53,6 +54,13 @@ export const HEIGHT_LABEL: Record<AnalyticsHeight, MessageKey> = {
   short: "analytics.height.short",
   normal: "common.normal",
   tall: "analytics.height.tall",
+};
+
+export const WIDTH_LABEL: Record<AnalyticsCols, MessageKey> = {
+  1: "analytics.width.quarter",
+  2: "analytics.halfWidth",
+  3: "analytics.width.threeQuarters",
+  4: "layout.spanFull",
 };
 
 export const RANGE_LABEL: Record<AnalyticsRange, MessageKey> = {

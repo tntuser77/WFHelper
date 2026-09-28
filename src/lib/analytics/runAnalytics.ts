@@ -47,6 +47,10 @@ export type AnalyticsRange = (typeof ANALYTICS_RANGES)[number];
 
 export const ANALYTICS_SQUAD_FILTERS = ["all", "solo", "squad"] as const;
 
+/** Columns a card spans on the dashboard's four-column grid. */
+export const ANALYTICS_COLS = [1, 2, 3, 4] as const;
+export type AnalyticsCols = (typeof ANALYTICS_COLS)[number];
+
 export const ANALYTICS_HEIGHTS = ["short", "normal", "tall"] as const;
 export type AnalyticsHeight = (typeof ANALYTICS_HEIGHTS)[number];
 export type AnalyticsSquadFilter = (typeof ANALYTICS_SQUAD_FILTERS)[number];
@@ -83,7 +87,7 @@ export interface AnalyticsChartSpec {
   /** Categories shown before the rest fold into "Other"; 0 shows them all, and
    *  time splits never fold. */
   limit: number;
-  wide: boolean;
+  cols: AnalyticsCols;
   /** How much room the card's chart gets; a list longer than that scrolls. */
   height: AnalyticsHeight;
 }

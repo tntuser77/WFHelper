@@ -2791,5 +2791,8 @@
   "analytics.sentence.top": "top",
   "analytics.section.filters": "Filter runs",
   "analytics.section.layout": "Title & layout",
-  "analytics.summary.allRuns": "All runs"
+  "analytics.summary.allRuns": "All runs",
+  "analytics.resize": "Drag to resize, or use the arrow keys",
+  "analytics.width.quarter": "Quarter width",
+  "analytics.width.threeQuarters": "Three-quarter width"
 }

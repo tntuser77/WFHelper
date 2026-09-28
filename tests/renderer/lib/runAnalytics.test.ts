@@ -49,7 +49,7 @@ function spec(overrides: Partial<AnalyticsChartSpec> = {}): AnalyticsChartSpec {
     squadConditions: [],
     exclude: [],
     limit: 10,
-    wide: false,
+    cols: 2,
     height: "normal",
     ...overrides,
   };

@@ -6,6 +6,7 @@
     analyticsConditionText,
     analyticsKeyLabel,
     HEIGHT_LABEL,
+    WIDTH_LABEL,
     CHART_LABEL,
     MEASURE_LABEL,
     RANGE_LABEL,
@@ -14,6 +15,7 @@
   } from "../../lib/analytics/analyticsLabels.js";
   import {
     ANALYTICS_CHARTS,
+    ANALYTICS_COLS,
     ANALYTICS_HEIGHTS,
     ANALYTICS_OTHER,
     ANALYTICS_MEASURES,
@@ -185,7 +187,7 @@
       .join(", ") || $tr("common.none"),
   );
   const layoutSummary = $derived(
-    `${$tr(HEIGHT_LABEL[draft.height])} · ${draft.wide ? $tr("layout.spanFull") : $tr("analytics.halfWidth")}`,
+    `${$tr(HEIGHT_LABEL[draft.height])} · ${$tr(WIDTH_LABEL[draft.cols])}`,
   );
 
   function save(): void {
@@ -405,12 +407,10 @@
           <div class="flex flex-col gap-1">
             <span class="text-text-secondary">{$tr("analytics.field.width")}</span>
             <SegmentedControl
-              value={draft.wide ? "full" : "half"}
-              options={[
-                { value: "half", label: $tr("analytics.halfWidth") },
-                { value: "full", label: $tr("layout.spanFull") },
-              ]}
-              onChange={(v) => (draft.wide = v === "full")}
+              value={draft.cols}
+              options={ANALYTICS_COLS.map((value) => ({ value, label: $tr(WIDTH_LABEL[value]) }))}
+              onChange={(v) => (draft.cols = v)}
+              wrap
             />
           </div>
         </AnalyticsSection>

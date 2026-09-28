@@ -2771,5 +2771,8 @@
   "analytics.sentence.top": "Top",
   "analytics.section.filters": "Durchläufe filtern",
   "analytics.section.layout": "Titel und Layout",
-  "analytics.summary.allRuns": "Alle Durchläufe"
+  "analytics.summary.allRuns": "Alle Durchläufe",
+  "analytics.resize": "Ziehen zum Ändern der Größe oder Pfeiltasten nutzen",
+  "analytics.width.quarter": "Viertel Breite",
+  "analytics.width.threeQuarters": "Dreiviertel Breite"
 }

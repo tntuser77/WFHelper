@@ -94,7 +94,7 @@
 {#if cards.length === 0}
   <p class="py-10 text-center text-sm text-text-muted">{$tr("analytics.empty")}</p>
 {:else}
-  <div class="grid grid-cols-1 gap-4 md:grid-cols-2" data-analytics-grid>
+  <div class="grid grid-cols-1 gap-4 md:grid-cols-4" data-analytics-grid>
     {#each cards as card, index (card.spec.id)}
       <AnalyticsChartCard
         spec={card.spec}
@@ -105,6 +105,7 @@
         onGrabKey={(e) => drag.onKeyDown(index, e)}
         onEdit={() => (editing = structuredClone(card.spec))}
         onRemove={() => removeAnalyticsChart(card.spec.id)}
+        onResize={(cols, height) => updateAnalyticsChart({ ...card.spec, cols, height })}
       />
     {/each}
   </div>
