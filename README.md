@@ -20,6 +20,10 @@
 - [x] Even on my Caliban builds, where I kept the archgun, its not showing up in a box that makes it obvious that I was using the archgun heavily
 - [x] Right click on the search box to clear it
 - [x] Show the amount of exolizers reached when opening the frames, not just the amount of runs
+- [x] Gear hover lists each weapon once with its builds as chips, and pets show the weapon they carry.
+- [x] Run screenshots open in an in-app viewer: click to zoom to the spot, right-click or Escape to close.
+- [x] WebP screenshots get thumbnails and squad crops like PNGs do.
+- [x] Right-click clears things: mods, shards and Helminth in the build editor, and filter chips, Leave out chips and squad conditions in the chart editor.
 
 
 ## Analytics work
