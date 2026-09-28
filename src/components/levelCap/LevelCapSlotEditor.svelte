@@ -264,9 +264,12 @@
 
   const fittingMods = $derived(catalog.mods.filter(fitsItem));
 
-  function modOptions(compat: readonly string[]) {
+  const exilusMods = $derived(fittingMods.filter((mod) => mod.exilus));
+
+  function modOptions(compat: readonly string[], role: string) {
     if (!compat.length) return catalog.arcanes;
-    return fittingMods.filter((mod) => compat.includes(mod.compat));
+    const pool = role === "exilus" ? exilusMods : fittingMods;
+    return pool.filter((mod) => compat.includes(mod.compat));
   }
 </script>
 
@@ -399,8 +402,12 @@
             <span class="text-[11px] text-text-muted">{$t("levelCap.editor.rivenHint")}</span>
           {/if}
           <LevelCapPicker
-            options={modOptions(pickedSpec.compat)}
-            fallback={pickedSpec.compat.length ? fittingMods : []}
+            options={modOptions(pickedSpec.compat, pickedSpec.role)}
+            fallback={!pickedSpec.compat.length
+              ? []
+              : pickedSpec.role === "exilus"
+                ? exilusMods
+                : fittingMods}
             placeholder={$t(
               pickedSpec.role === "arcane"
                 ? "levelCap.editor.searchArcane"

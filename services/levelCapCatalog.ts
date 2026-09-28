@@ -17,6 +17,7 @@ interface PepEntry {
   baseDrain?: number;
   holsterCategory?: string;
   isFrivolous?: boolean;
+  isUtility?: boolean;
   abilities?: Array<{ uniqueName?: string; name?: string }>;
 }
 
@@ -113,16 +114,21 @@ function levelCapModFamily(name: string, compat: string, known: ReadonlySet<stri
   return `${compat}|${base !== name && known.has(`${compat}|${base}`) ? base : name}`;
 }
 
-/** Max-rank stat lines from WFCD, keyed by uniqueName; the DE export has no card text. */
-function loadStatText(): Map<string, string> {
+/** Max-rank stat lines from WFCD, keyed by uniqueName, since the DE export has no card
+ *  text; plus the mods WFCD calls exilus, which the export misses a couple of. */
+function loadWfcdMods(): { text: Map<string, string>; exilus: Set<string> } {
   const text = new Map<string, string>();
+  const exilus = new Set<string>();
   try {
     const Items = require("@wfcd/items");
     const items = new Items({ category: ["Mods", "Arcanes"] }) as Array<{
       uniqueName?: string;
       levelStats?: Array<{ stats?: string[] }>;
+      isExilus?: boolean;
+      isUtility?: boolean;
     }>;
     for (const item of items) {
+      if (item.uniqueName && (item.isExilus || item.isUtility)) exilus.add(item.uniqueName);
       const stats = item.levelStats?.[item.levelStats.length - 1]?.stats;
       if (!item.uniqueName || !stats?.length) continue;
       const lines = stats.map((line) =>
@@ -137,7 +143,7 @@ function loadStatText(): Map<string, string> {
   } catch (err) {
     log.warn("[LevelCap] mod stat text unavailable:", normalizeErrorMessage(err));
   }
-  return text;
+  return { text, exilus };
 }
 
 /** WFCD's weapon class ("Shotgun", "Sniper", ...) by uniqueName; it knows Phage is a
@@ -213,7 +219,7 @@ function build(): LevelCapCatalog {
       if (ability.uniqueName && name) abilityNames.set(ability.uniqueName, name);
     }
   }
-  const statText = loadStatText();
+  const { text: statText, exilus: wfcdExilus } = loadWfcdMods();
   const allMods = Object.entries(pep.ExportUpgrades ?? {}).flatMap(([type, entry]) => {
     const name = nameOf(entry);
     if (!name || !entry.type || RIVEN_RE.test(type) || FLAWED_RE.test(type)) return [];
@@ -296,6 +302,7 @@ function build(): LevelCapCatalog {
         family: levelCapModFamily(name, compat, knownMods),
         stats: statText.get(type) ?? "",
         drain: modDrain(entry),
+        ...(entry.isUtility || wfcdExilus.has(type) ? { exilus: true } : {}),
         ...augmentOf(type, entry, statText.get(type) ?? ""),
         ...targetOf(entry),
       })),

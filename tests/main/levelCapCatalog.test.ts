@@ -99,6 +99,16 @@ describe("levelCapCatalog", () => {
     expect(catalog.mods.filter((m) => m.name === "Rush")).toHaveLength(1);
   });
 
+  it("marks the mods an exilus slot takes", () => {
+    const exilus = (name: string) => catalog.mods.find((m) => m.name === name)?.exilus;
+    expect(exilus("Power Drift")).toBe(true);
+    expect(exilus("Primed Point Blank")).toBeUndefined();
+    expect(exilus("Serration")).toBeUndefined();
+    expect(exilus("Vigilante Supplies")).toBe(true);
+    // The export misses this one; WFCD has it.
+    expect(exilus("Shock Absorbers")).toBe(true);
+  });
+
   it("carries each mod's max-rank drain, negative for auras", () => {
     const mod = (name: string) => catalog.mods.find((m) => m.name === name);
     expect(mod("Serration")?.drain).toBe(14);

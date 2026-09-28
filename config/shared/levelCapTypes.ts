@@ -172,6 +172,8 @@ export interface LevelCapCatalog {
       stats: string;
       /** Capacity at max rank; auras give it back, so theirs is negative. */
       drain: number;
+      /** Fits an exilus slot; every other mod is barred from it. */
+      exilus?: boolean;
       /** Set on augments: the base suit they fit and the ability they change. */
       augment?: { suit: string; ability: string | null };
       /** Set on weapon mods only some weapons take: a single weapon's (Thundermiter,
