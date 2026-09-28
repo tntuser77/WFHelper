@@ -2945,7 +2945,6 @@
   "analytics.names.done": "Every squadmate has a full name.",
   "analytics.names.missing": "Squadmates to fill in",
   "analytics.names.frameHint": "Names every squadmate with this portrait look, in every run.",
-  "analytics.data": "Data",
   "analytics.measure.exolizersTotal": "Total Exolizers",
   "analytics.field.exclude": "Leave out",
   "analytics.field.height": "Height",

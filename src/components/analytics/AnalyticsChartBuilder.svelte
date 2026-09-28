@@ -276,13 +276,7 @@
     </div>
 
     <div class="grid gap-5 p-5 md:grid-cols-[minmax(0,23rem)_minmax(0,1fr)]">
-      <form
-        class="flex flex-col text-xs"
-        onsubmit={(e) => {
-          e.preventDefault();
-          save();
-        }}
-      >
+      <div class="flex flex-col text-xs">
         <!-- The whole chart as one sentence; each gold word is a menu. -->
         <p class="m-0 mb-4 text-base leading-[2.4] text-text-primary" data-analytics-sentence>
           {$tr("analytics.sentence.show")}
@@ -491,12 +485,7 @@
             />
           </div>
         </AnalyticsSection>
-
-        <div class="mt-auto flex justify-end gap-2 border-t border-border-subtle pt-4">
-          <ThemedButton onClick={onClose}>{$tr("common.cancel")}</ThemedButton>
-          <ThemedButton type="submit" active>{$tr("common.save")}</ThemedButton>
-        </div>
-      </form>
+      </div>
 
       <section class="flex min-w-0 flex-col gap-2" aria-label={$tr("analytics.preview")}>
         <div
@@ -510,16 +499,10 @@
           >
           <AnalyticsChart {spec} {result} title={spec.title || autoTitle} />
         </div>
-        <!-- The numbers behind the chart, to check it while building it. -->
-        {#if spec.chart !== "table" && spec.chart !== "stat" && result.runCount}
-          <span class="mt-2 text-xs text-text-secondary">{$tr("analytics.data")}</span>
-          <div
-            class="rounded-[var(--radius-lg)] border border-[color:var(--ui-panel-border)] bg-[var(--ui-panel-bg)] p-4"
-            data-analytics-builder-table
-          >
-            <AnalyticsChart {spec} {result} title={spec.title || autoTitle} asTable />
-          </div>
-        {/if}
+        <div class="mt-auto flex justify-end gap-2 pt-4">
+          <ThemedButton onClick={onClose}>{$tr("common.cancel")}</ThemedButton>
+          <ThemedButton active onClick={save}>{$tr("common.save")}</ThemedButton>
+        </div>
       </section>
     </div>
   </div>
