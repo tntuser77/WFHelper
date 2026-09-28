@@ -69,8 +69,8 @@
   let showAllTags = $state(false);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
-  // The panel sits below the chip across the row gap, so closing waits a beat
-  // for the pointer to cross into it.
+  // The panel sits above the chip, so closing waits a beat for the pointer to
+  // cross into it.
   function openTags(): void {
     clearTimeout(hideTimer);
     showAllTags = true;
@@ -215,20 +215,45 @@
     <span class="font-mono text-3xl font-bold text-accent">{matchedCount}</span>
   </div>
 
-  <div class="flex min-h-5 flex-wrap gap-1">
+  <div class="relative flex min-h-5 flex-wrap gap-1">
     {#each tags as tag (tag)}
       {@render tagChip(tag)}
     {/each}
     {#if hiddenTags.length}
       <span
-        class="rounded border px-1.5 py-0.5 text-[10px] font-semibold transition-colors duration-100 {showAllTags
-          ? 'border-info/40 text-info'
-          : 'border-border text-text-secondary'} bg-bg-surface"
+        class="cursor-default rounded border px-1.5 py-0.5 text-[10px] font-semibold transition-colors duration-100 {showAllTags
+          ? 'border-info bg-info/10 text-info'
+          : 'border-info/40 bg-transparent text-info/70'}"
         role="presentation"
         onmouseenter={openTags}
         onmouseleave={closeTagsSoon}
+        oncontextmenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          clearTimeout(hideTimer);
+          showAllTags = false;
+        }}
         data-level-cap-more-tags>+{hiddenTags.length}</span
       >
+    {/if}
+    {#if showAllTags}
+      <!-- Opens upward over the header, so a pointer heading down to the gear
+           row never lands on it. The bottom padding bridges the gap to the chip. -->
+      <div
+        role="presentation"
+        class="absolute inset-x-0 bottom-full z-30 pb-1.5"
+        onmouseenter={openTags}
+        onmouseleave={closeTagsSoon}
+        data-level-cap-more-tags-panel
+      >
+        <div
+          class="flex flex-wrap gap-1 rounded-[var(--radius-md)] border border-border-strong bg-bg-surface p-1.5 shadow-lg"
+        >
+          {#each hiddenTags as tag (tag)}
+            {@render tagChip(tag)}
+          {/each}
+        </div>
+      </div>
     {/if}
   </div>
 
@@ -271,19 +296,6 @@
       {#if open}
         {@render slotPanel(open.slot, open.items)}
       {/if}
-    {/if}
-    {#if showAllTags}
-      <!-- Grows past the gear row into the card padding rather than clipping. -->
-      <div
-        role="presentation"
-        onmouseenter={openTags}
-        onmouseleave={closeTagsSoon}
-        class="absolute inset-x-0 top-0 z-10 flex min-h-full flex-wrap content-center gap-1 rounded-[var(--radius-md)] border border-border-strong bg-bg-surface/95 p-2"
-      >
-        {#each hiddenTags as tag (tag)}
-          {@render tagChip(tag)}
-        {/each}
-      </div>
     {/if}
   </div>
 
