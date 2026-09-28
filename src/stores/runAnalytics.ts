@@ -188,6 +188,17 @@ export function moveAnalyticsChart(from: number, to: number): void {
   });
 }
 
+/** Puts the cards in the order a drag ended with; ids it does not know are skipped
+ *  and cards it leaves out keep their place at the end. */
+export function setAnalyticsOrder(ids: readonly string[]): void {
+  save((charts) => {
+    const byId = new Map(charts.map((c) => [c.id, c]));
+    const ordered = ids.flatMap((id) => byId.get(id) ?? []);
+    const placed = new Set(ordered.map((c) => c.id));
+    return [...ordered, ...charts.filter((c) => !placed.has(c.id))];
+  });
+}
+
 export function resetAnalyticsCharts(): void {
   save(() => starterCharts());
 }

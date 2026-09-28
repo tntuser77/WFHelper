@@ -121,4 +121,14 @@ describe("run analytics dashboard store", () => {
     store.removeAnalyticsChart(charts[0].id);
     expect(saved().charts.map((c: { splitBy: string }) => c.splitBy)).toEqual(["tag"]);
   });
+
+  it("takes a whole new order from a finished drag", async () => {
+    const store = await freshStore({ version: 1, charts: [] });
+    for (const splitBy of ["tag", "melee", "frame"] as const) {
+      store.addAnalyticsChart({ ...store.newChartDraft(), splitBy });
+    }
+    const [tag, melee, frame] = get(store.analyticsCharts).map((c) => c.id);
+    store.setAnalyticsOrder([frame, "gone", tag]);
+    expect(get(store.analyticsCharts).map((c) => c.id)).toEqual([frame, tag, melee]);
+  });
 });
