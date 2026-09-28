@@ -10,11 +10,15 @@ vi.mock("../../services/win32Process", () => ({
   getProcessSessionId: vi.fn((pid: number) => probe.sessionOf(pid)),
   isWarframeExePath: vi.fn(() => false),
   queryExePath: vi.fn(() => null),
+  queryCommandLine: vi.fn(() => ({
+    status: "ok",
+    commandLine: "Warframe.x64.exe -cluster:public",
+  })),
 }));
 
 vi.mock("../../services/x11WindowQuery", () => ({
-  findWindowBoundsByTitle: vi.fn(() => null),
-  isWindowFocusedByTitle: vi.fn(() => false),
+  findWindowBoundsMatching: vi.fn(() => null),
+  isActiveWindowMatching: vi.fn(() => false),
 }));
 
 vi.mock("electron", () => ({
@@ -80,5 +84,22 @@ describe("warframe status keeps an unknown process sample from reading as an exi
     const status = await loadStatus();
 
     expect((await status.getStatus({ force: true })).isOpen).toBe(false);
+    expect(status.isWarframeRunningCached()).toBeNull();
+  });
+
+  it("stops reporting a held state as known once no sample answers", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const status = await loadStatus();
+
+    probe.processes = [{ pid: 2, name: "explorer.exe" }];
+    await status.getStatus({ force: true });
+    expect(status.isWarframeRunningCached()).toBe(false);
+
+    probe.processes = null;
+    for (let poll = 0; poll < 12; poll++) {
+      vi.setSystemTime(Date.now() + 3_000);
+      expect((await status.getStatus({ force: true })).processRunning).toBe(false);
+    }
+    expect(status.isWarframeRunningCached()).toBeNull();
   });
 });

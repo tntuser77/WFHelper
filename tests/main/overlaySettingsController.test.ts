@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { OVERLAY_SETTINGS_DEFAULTS } from "../../config/runtime/overlaySettings";
+import {
+  OVERLAY_SETTINGS_DEFAULTS,
+  overlaysStartInteractive,
+} from "../../config/runtime/overlaySettings";
 import { createOverlaySettingsController } from "../../ipc/overlay/settings";
 
 function buildController() {
@@ -67,16 +70,22 @@ describe("overlay settings controller", () => {
       version: 1,
       fields: { platinumValue: { x: 35, y: -4, scale: 2, color: "#123456", hidden: false } },
     };
+    // Loading restores the opt-in reward fields alongside what the file held.
+    const normalized = {
+      version: 1,
+      fields: {
+        vaulted: { x: 0, y: 0, scale: 1, color: null, hidden: true },
+        ...rewardLayout.fields,
+      },
+    };
     deps.fs.existsSync.mockReturnValue(true);
     deps.fs.readFileSync.mockReturnValue(JSON.stringify({ rewardLayout }));
     const loaded = controller.loadOverlaySettings();
-    expect(loaded.rewardLayout).toEqual(rewardLayout);
+    expect(loaded.rewardLayout).toEqual(normalized);
     expect(loaded.overlayLayouts?.planner?.fields.reward0Name?.hidden).toBe(true);
     const saved = controller.setOverlaySettings({ notificationSoundEnabled: false });
-    expect(saved.rewardLayout).toEqual(rewardLayout);
-    expect(JSON.parse(deps.writeFileAtomic.mock.calls.at(-1)![1]).rewardLayout).toEqual(
-      rewardLayout,
-    );
+    expect(saved.rewardLayout).toEqual(normalized);
+    expect(JSON.parse(deps.writeFileAtomic.mock.calls.at(-1)![1]).rewardLayout).toEqual(normalized);
   });
 
   it("retains editor layouts across ordinary settings saves and strips foreign fields", () => {
@@ -300,6 +309,54 @@ describe("overlay settings controller", () => {
     });
   });
 
+  // Files written before the trade toast joined the placement steps have no
+  // entry for it, and that absence is what keeps its top-right default.
+  it("loads a file without a trade toast position unchanged", () => {
+    const { controller, deps } = buildController();
+    const legacyBounds = {
+      reward: { x: 120, y: 240, displayId: "7" },
+      rivenLeft: { x: 30, y: 40 },
+    };
+    deps.fs.existsSync.mockReturnValue(true);
+    deps.fs.readFileSync.mockReturnValue(
+      JSON.stringify({ overlayWindowBounds: legacyBounds, overlayWindowScales: { reward: 1.2 } }),
+    );
+
+    const loaded = controller.loadOverlaySettings();
+
+    expect(loaded.overlayWindowBounds).toEqual(legacyBounds);
+    expect(loaded.overlayWindowBounds).not.toHaveProperty("tradeNotification");
+    expect(loaded.overlayWindowScales).toEqual({ reward: 1.2 });
+  });
+
+  it("round-trips a saved trade toast position through save and load", () => {
+    const { controller, deps } = buildController();
+    const saved = controller.setOverlaySettings({
+      overlayWindowBounds: { tradeNotification: { x: 640.4, y: 88, displayId: "2" } },
+    });
+    expect(saved.overlayWindowBounds?.tradeNotification).toEqual({ x: 640, y: 88, displayId: "2" });
+
+    deps.fs.existsSync.mockReturnValue(true);
+    deps.fs.readFileSync.mockReturnValue(JSON.stringify(saved));
+
+    expect(controller.loadOverlaySettings().overlayWindowBounds?.tradeNotification).toEqual({
+      x: 640,
+      y: 88,
+      displayId: "2",
+    });
+  });
+
+  // The toast has a fixed size, so an imported scale for it is dropped.
+  it("never keeps a scale for the fixed-size trade toast", () => {
+    const { controller } = buildController();
+
+    const normalized = controller.normalizeOverlaySettings({
+      overlayWindowScales: { tradeNotification: 1.3, planner: 1.1 },
+    });
+
+    expect(normalized.overlayWindowScales).toEqual({ planner: 1.1 });
+  });
+
   it("bounds the configured Warframe interface scale", () => {
     const { controller } = buildController();
 
@@ -317,6 +374,49 @@ describe("overlay settings controller", () => {
     expect(
       controller.normalizeOverlaySettings({ overlayDragHintDismissed: true })
         .overlayDragHintDismissed,
+    ).toBe(true);
+  });
+
+  it("lists riven auctions under similar rivens until they are switched off", () => {
+    const { controller } = buildController();
+
+    expect(controller.normalizeOverlaySettings({}).rivenSimilarAuctionsShown).toBe(true);
+    expect(
+      controller.normalizeOverlaySettings({ rivenSimilarAuctionsShown: false })
+        .rivenSimilarAuctionsShown,
+    ).toBe(false);
+    expect(
+      controller.setOverlaySettings({ rivenSimilarAuctionsShown: false }).rivenSimilarAuctionsShown,
+    ).toBe(false);
+    expect(controller.setOverlaySettings({ overlayScale: 1.2 }).rivenSimilarAuctionsShown).toBe(
+      false,
+    );
+  });
+
+  it("opens overlays interactive only on linux and only once asked to", () => {
+    const { controller } = buildController();
+
+    const normalized = controller.normalizeOverlaySettings({});
+    expect(normalized.linuxOverlaysInteractive).toBe(false);
+    const saved = controller.normalizeOverlaySettings({ linuxOverlaysInteractive: 1 });
+    expect(saved.linuxOverlaysInteractive).toBe(true);
+
+    expect(overlaysStartInteractive(normalized, "linux")).toBe(false);
+    expect(overlaysStartInteractive(saved, "linux")).toBe(true);
+    expect(overlaysStartInteractive(saved, "win32")).toBe(false);
+    expect(overlaysStartInteractive(saved, "darwin")).toBe(false);
+  });
+
+  it("keeps mission tracking off unless it is set", () => {
+    const { controller } = buildController();
+
+    expect(OVERLAY_SETTINGS_DEFAULTS.missionTrackingEnabled).toBe(false);
+    expect(controller.normalizeOverlaySettings({}).missionTrackingEnabled).toBe(false);
+    expect(
+      controller.normalizeOverlaySettings({ arbiTrackingEnabled: true }).missionTrackingEnabled,
+    ).toBe(false);
+    expect(
+      controller.normalizeOverlaySettings({ missionTrackingEnabled: true }).missionTrackingEnabled,
     ).toBe(true);
   });
 

@@ -7,6 +7,7 @@ import {
 import { normalizeErrorMessage } from "../../config/shared/errors";
 import { pendingRecipeCounts, withoutFoundryPending } from "../../config/shared/foundryPending";
 import { RELIC_REWARD_ITEMS, RELIC_REWARD_TRIGGER } from "../../config/shared/ipcChannels";
+import { stripQuantityPrefix } from "../../config/shared/quantityPrefix";
 import { normalizeWfmSlug } from "../../config/shared/wfm";
 import { REFERENCE_WARFRAME_UI_SCALE } from "../../config/runtime/overlaySettings";
 import { resolveWarframeUiScale } from "../../services/eeLogPath";
@@ -22,6 +23,8 @@ const SCAN_MAX_ATTEMPTS = 10;
 // Consecutive no-layout scans before the trigger is written off as a false one.
 const NO_LAYOUT_MAX_ATTEMPTS = 3;
 const MAX_REWARD_ITEMS = 4;
+// Fewest tradable components a parent needs before warframe.market lists a set.
+const MIN_TRADABLE_SET_PARTS = 2;
 // Fixed delay from the "Got rewards" line to the capture, the value AlecaFrame uses;
 // the cards are drawn and the card bars settle the count by then.
 const EELOG_REWARD_SCAN_DELAY_MS = 650;
@@ -43,10 +46,6 @@ const OVERLAY_AUTO_HIDE_SUCCESS_MS = 8_500;
 // eat the reading time - never show the card for less than this.
 const REWARD_MIN_VISIBLE_MS = 5_000;
 const OVERLAY_AUTO_HIDE_FAILURE_MS = 3_500;
-// Keep the overlay visible while Warframe is unfocused.
-const AUTO_HIDE_FOCUS_RECHECK_MS = 2_000;
-const AUTO_HIDE_REFOCUS_GRACE_MS = 2_500;
-const AUTO_HIDE_MAX_HOLD_MS = 90_000;
 // Retry once when a fade leaves reward slots unread.
 const PARTIAL_LAYOUT_BONUS_ATTEMPTS = 1;
 // long enough to read the "Windows OCR missing" instructions
@@ -62,6 +61,7 @@ type RewardScanResult = {
   triggerSource?: string;
   /** Set when the retries ended short of the counted cards, so nothing is shown. */
   partial?: { itemCount: number; cardCount: number };
+  notRewardScreen?: boolean;
 };
 
 type RewardItem = {
@@ -228,6 +228,10 @@ function buildPendingBlueprints(inventoryData: InventoryData): Set<string> {
   return new Set(pendingRecipeCounts(inventoryData.PendingRecipes).keys());
 }
 
+function isFormaReward(name: unknown): boolean {
+  return typeof name === "string" && stripQuantityPrefix(name) === "Forma Blueprint";
+}
+
 function enrichRewardItems(items: unknown[], inventoryData: InventoryData): unknown[] {
   const ownedCounts = buildOwnedCounts(inventoryData);
   const pending = buildPendingBlueprints(inventoryData);
@@ -241,10 +245,15 @@ function enrichRewardItems(items: unknown[], inventoryData: InventoryData): unkn
     const parentUniqueName = entry?.componentOf || null;
     const parent = parentUniqueName ? itemDatabase.lookupItem(parentUniqueName) : null;
     const parentName = parent?.name || null;
-    const setName = parentName ? `${parentName} Set` : null;
     const partRequiredCount = componentRequiredCount(parent, uniqueName);
     const partOwnedCount = ownedComponentCount(uniqueName, ownedCounts);
     const progress = setProgress(parent, ownedCounts, pending, uniqueName);
+    // Forma Blueprint builds into Forma, which is no set: warframe.market has no
+    // forma_set, so a chip for it could only ever wait for a price.
+    const setName =
+      parentName && (progress?.parts.length ?? 0) >= MIN_TRADABLE_SET_PARTS
+        ? `${parentName} Set`
+        : null;
     const ducats = finitePositiveInteger(item.ducats) ?? entry?.ducats ?? null;
     const mastered =
       masteredMap && parent && parentUniqueName
@@ -252,12 +261,17 @@ function enrichRewardItems(items: unknown[], inventoryData: InventoryData): unkn
           masteredMap.get(String(parent.name || "").toLowerCase()))
         : undefined;
 
+    const { vaulted: rawVaulted, ...rest } = item;
+    const vaulted =
+      typeof rawVaulted === "boolean" && !isFormaReward(item.name) ? rawVaulted : undefined;
+
     return {
-      ...item,
+      ...rest,
       ...(uniqueName ? { uniqueName } : {}),
       ducats,
       partOwnedCount,
       partRequiredCount,
+      ...(vaulted === undefined ? {} : { vaulted }),
       ...(mastered === undefined ? {} : { mastered }),
       ...(isInFoundry(uniqueName, pending) ? { building: true } : {}),
       ...(progress
@@ -278,15 +292,23 @@ function enrichRewardItems(items: unknown[], inventoryData: InventoryData): unkn
   });
 }
 
+function readItemCount(result: RewardScanResult | null | undefined): number {
+  return Array.isArray(result?.items) ? result.items.length : 0;
+}
+
 function chooseBetterScanResult(
   currentBest: RewardScanResult | null,
   candidate: RewardScanResult | null | undefined,
+  countedCards: number,
 ): RewardScanResult | null {
   if (!candidate) return currentBest;
   if (!currentBest) return candidate;
 
-  const currentCount = Array.isArray(currentBest.items) ? currentBest.items.length : 0;
-  const candidateCount = Array.isArray(candidate.items) ? candidate.items.length : 0;
+  const currentCount = readItemCount(currentBest);
+  const candidateCount = readItemCount(candidate);
+  if (countedCards > 0 && (currentCount === countedCards) !== (candidateCount === countedCards)) {
+    return candidateCount === countedCards ? candidate : currentBest;
+  }
   if (candidateCount !== currentCount) {
     return candidateCount > currentCount ? candidate : currentBest;
   }
@@ -303,7 +325,6 @@ export function createOverlayScanController(options: OverlayScanControllerOption
   let eelogTriggerAt = 0;
   let rewardUiSignalLoggedAt = 0;
   let rewardScreenClosedAt = 0;
-  let autoHideFocusTimer: ReturnType<typeof setTimeout> | null = null;
 
   // "ProjectionRewardChoice.lua: Missing icon data!" fires while the reward
   // cards render. Logged only: a tester log then shows how late the game drew them.
@@ -315,53 +336,6 @@ export function createOverlayScanController(options: OverlayScanControllerOption
     if (rewardUiSignalLoggedAt === eelogTriggerAt) return;
     rewardUiSignalLoggedAt = eelogTriggerAt;
     log.info(`[Trigger] reward UI render signal ${sinceTrigger}ms after the trigger`);
-  }
-
-  function clearAutoHideFocusHold(): void {
-    if (!autoHideFocusTimer) return;
-    clearTimeout(autoHideFocusTimer);
-    autoHideFocusTimer = null;
-  }
-
-  function scheduleRewardAutoHide(delayMs: number): void {
-    clearAutoHideFocusHold();
-    if (!warframeStatus?.getStatus) {
-      windows.scheduleOverlayAutoHide(delayMs);
-      return;
-    }
-    const holdDeadline = Date.now() + delayMs + AUTO_HIDE_MAX_HOLD_MS;
-    let wasHeld = false;
-    const check = async (): Promise<void> => {
-      let isOpen = true;
-      let isFocused = true;
-      try {
-        const status = await warframeStatus.getStatus();
-        isOpen = status.isOpen;
-        isFocused = status.isFocused;
-      } catch {
-        // Fall through to a plain hide.
-      }
-      if (!isOpen || Date.now() >= holdDeadline) {
-        windows.scheduleOverlayAutoHide(250);
-        return;
-      }
-      if (isFocused) {
-        windows.scheduleOverlayAutoHide(wasHeld ? AUTO_HIDE_REFOCUS_GRACE_MS : 250);
-        return;
-      }
-      if (!wasHeld) {
-        wasHeld = true;
-        log.info("[Trigger] reward overlay held open: Warframe unfocused at auto-hide time");
-      }
-      autoHideFocusTimer = setTimeout(() => {
-        autoHideFocusTimer = null;
-        void check();
-      }, AUTO_HIDE_FOCUS_RECHECK_MS);
-    };
-    autoHideFocusTimer = setTimeout(() => {
-      autoHideFocusTimer = null;
-      void check();
-    }, delayMs);
   }
 
   function rewardSuccessAutoHideDelay(source: string): number {
@@ -385,7 +359,7 @@ export function createOverlayScanController(options: OverlayScanControllerOption
       eelogTriggerAt + REWARD_MIN_VISIBLE_MS - Date.now(),
     );
     log.info(`[Trigger] reward screen closed -> overlay hides in ${delay}ms`);
-    scheduleRewardAutoHide(delay);
+    windows.scheduleOverlayAutoHide(delay);
   }
 
   async function runRewardScanWithRetries(triggerSource: string): Promise<RewardScanResult> {
@@ -394,6 +368,10 @@ export function createOverlayScanController(options: OverlayScanControllerOption
     let noLayoutAttempts = 0;
     let partialAttempts = 0;
     let bestResult: RewardScanResult | null = null;
+    let layoutGone = false;
+    // The squad cannot change within one screen, so the latest bar count holds
+    // for every attempt, including ones whose frame showed no bars.
+    let countedCards = 0;
 
     while (attempts < SCAN_MAX_ATTEMPTS && Date.now() - startedAt < SCAN_RETRY_WINDOW_MS) {
       attempts += 1;
@@ -412,13 +390,13 @@ export function createOverlayScanController(options: OverlayScanControllerOption
         log.error(`[Trigger] scan attempt ${attempts} failed:`, normalizeErrorMessage(err));
       }
 
-      bestResult = chooseBetterScanResult(bestResult, result);
+      countedCards = Number(result?.meta?.cardCount || 0) || countedCards;
+      bestResult = chooseBetterScanResult(bestResult, result, countedCards);
 
-      const itemCount = Array.isArray(result?.items) ? result.items.length : 0;
+      const itemCount = readItemCount(result);
       if (itemCount > 0) {
         const layoutCount = Number(result?.meta?.layoutCount || 0);
         const slotCount = Number(result?.meta?.slotCount || 0);
-        const cardCount = Number(result?.meta?.cardCount || 0);
         // A full 3-slot read is complete by geometry: those cards sit half a card
         // off the 4-card grid. The 1- and 2-card grids share their centres with
         // the 3- and 4-card ones, so a full read there can still be a wider
@@ -429,25 +407,22 @@ export function createOverlayScanController(options: OverlayScanControllerOption
         // The card bars settle the count outright; the geometry rules only
         // apply when the frame had to be searched.
         const partial =
-          cardCount > 0
-            ? itemCount < cardCount
+          countedCards > 0
+            ? itemCount !== countedCards
             : layoutKnown && itemCount < MAX_REWARD_ITEMS && !geometryComplete;
         if (!partial || partialAttempts >= PARTIAL_LAYOUT_BONUS_ATTEMPTS) {
           const best = bestResult as RewardScanResult;
-          // The bars counted more cards than were read and the retries are spent.
-          // Showing the fuller partial would be a wrong set, so ship nothing and
-          // keep the meta for the anchor.
-          if (partial && cardCount > 0) {
+          // The read does not match the counted cards and the retries are spent.
+          // Showing it would be a wrong set, so ship nothing and keep the meta
+          // for the anchor.
+          if (countedCards > 0 && readItemCount(best) !== countedCards) {
             return {
               meta: best.meta ?? null,
               items: [],
               attempts,
               elapsedMs: Date.now() - startedAt,
               timedOut: false,
-              partial: {
-                itemCount: Array.isArray(best.items) ? best.items.length : 0,
-                cardCount,
-              },
+              partial: { itemCount: readItemCount(best), cardCount: countedCards },
             };
           }
           return {
@@ -459,13 +434,15 @@ export function createOverlayScanController(options: OverlayScanControllerOption
         }
         partialAttempts += 1;
         log.info(
-          `[Trigger] partial layout (${itemCount}/${cardCount || slotCount || layoutCount} slots) - one more attempt`,
+          `[Trigger] partial layout (${itemCount}/${countedCards || slotCount || layoutCount} slots) - one more attempt`,
         );
       }
 
-      // The trigger lines also fire on plain pauses; no card layout = not the reward screen.
+      // The trigger lines also fire on plain pauses: no card layout and nothing read is
+      // not the reward screen.
       noLayoutAttempts = Number(result?.meta?.layoutCount || 0) > 0 ? 0 : noLayoutAttempts + 1;
       if (noLayoutAttempts >= NO_LAYOUT_MAX_ATTEMPTS) {
+        layoutGone = true;
         log.info(`[Trigger] no reward layout in ${attempts} attempt(s) - not the reward screen`);
         break;
       }
@@ -480,12 +457,27 @@ export function createOverlayScanController(options: OverlayScanControllerOption
     }
 
     const fallback = bestResult || { items: [], meta: null };
+    const elapsedMs = Date.now() - startedAt;
+    const readCount = readItemCount(fallback);
+    // A read that does not match the counted cards is a wrong set however the
+    // retries ended.
+    if (readCount > 0 && countedCards > 0 && countedCards !== readCount) {
+      return {
+        meta: fallback.meta ?? null,
+        items: [],
+        attempts,
+        elapsedMs,
+        timedOut: true,
+        partial: { itemCount: readCount, cardCount: countedCards },
+      };
+    }
     return {
       ...fallback,
       attempts,
-      elapsedMs: Date.now() - startedAt,
+      elapsedMs,
       timedOut: true,
       triggerSource,
+      notRewardScreen: layoutGone && readCount === 0,
     };
   }
 
@@ -496,7 +488,6 @@ export function createOverlayScanController(options: OverlayScanControllerOption
     }
 
     rewardScanInFlight = true;
-    clearAutoHideFocusHold();
     // Backdate by the log flush lag so the auto-hide tracks when the reward
     // screen actually appeared, not when the line finally reached us.
     if (source === "eelog") {
@@ -552,9 +543,17 @@ export function createOverlayScanController(options: OverlayScanControllerOption
         windows.positionOverlayWindow(windows.getAnchorMeta());
       }
 
-      if (source === "eelog" && items.length > 0) {
-        windows.createOverlayWindow({ show: true });
-      }
+      // An EE.log card stays hidden until its own result is revealed here, except after a
+      // plain pause (no reward layout); the trigger already reset the last round's cards.
+      const presentResult = (
+        payload: unknown,
+        autoHideMs: number,
+        reveal = !result?.notRewardScreen,
+      ): void => {
+        if (source === "eelog" && reveal) windows.createOverlayWindow({ show: true });
+        windows.sendOverlayEvent(RELIC_REWARD_ITEMS, payload);
+        windows.scheduleOverlayAutoHide(autoHideMs);
+      };
 
       if (result?.partial) {
         log.warn(
@@ -582,14 +581,12 @@ export function createOverlayScanController(options: OverlayScanControllerOption
       const captureFailure =
         items.length === 0 && process.platform === "linux" ? getLinuxCaptureFailure() : null;
       if (captureFailure) {
-        log.warn(
-          `[Trigger] no screen capture (${captureFailure}) - allow WFHelper in the share dialog`,
+        log.warn(`[Trigger] no screen capture (${captureFailure})`);
+        presentResult(
+          { items: [], failureReason: "capture-unavailable" },
+          OVERLAY_AUTO_HIDE_OCR_UNAVAILABLE_MS,
+          true,
         );
-        windows.sendOverlayEvent(RELIC_REWARD_ITEMS, {
-          items: [],
-          failureReason: "capture-unavailable",
-        });
-        windows.scheduleOverlayAutoHide(OVERLAY_AUTO_HIDE_OCR_UNAVAILABLE_MS);
         return;
       }
 
@@ -600,22 +597,17 @@ export function createOverlayScanController(options: OverlayScanControllerOption
           `[Trigger] Windows OCR unavailable: ${ocrHealth.reason} - install a Windows OCR ` +
             `language pack (Windows Settings > Time & Language > Language), then restart WFHelper`,
         );
-        windows.sendOverlayEvent(RELIC_REWARD_ITEMS, {
-          items: [],
-          failureReason: "ocr-unavailable",
-        });
-        windows.scheduleOverlayAutoHide(OVERLAY_AUTO_HIDE_OCR_UNAVAILABLE_MS);
+        presentResult(
+          { items: [], failureReason: "ocr-unavailable" },
+          OVERLAY_AUTO_HIDE_OCR_UNAVAILABLE_MS,
+        );
         return;
       }
 
-      windows.sendOverlayEvent(RELIC_REWARD_ITEMS, items);
-      if (items.length > 0 && source === "eelog") {
-        scheduleRewardAutoHide(rewardSuccessAutoHideDelay(source));
-      } else {
-        windows.scheduleOverlayAutoHide(
-          items.length > 0 ? rewardSuccessAutoHideDelay(source) : OVERLAY_AUTO_HIDE_FAILURE_MS,
-        );
-      }
+      presentResult(
+        items,
+        items.length > 0 ? rewardSuccessAutoHideDelay(source) : OVERLAY_AUTO_HIDE_FAILURE_MS,
+      );
     } catch (err) {
       log.error("[Trigger] scan pipeline error:", normalizeErrorMessage(err));
       windows.sendOverlayEvent(RELIC_REWARD_ITEMS, []);
@@ -628,15 +620,16 @@ export function createOverlayScanController(options: OverlayScanControllerOption
   function onRelicRewardTrigger(source = "manual", stalenessMs = 0): void {
     if (source === "eelog" && !ctx.overlaySettings.autoTriggerEnabled) return;
 
-    clearAutoHideFocusHold();
     windows.clearOverlayAutoHideTimer();
     const showImmediately = source !== "eelog";
     windows.createOverlayWindow({ show: showImmediately });
     if (!ctx.overlayWindow || ctx.overlayWindow.isDestroyed()) return;
 
     windows.positionOverlayWindow(windows.getAnchorMeta());
+    // A hidden EE.log card is reset too, so the show at its result cannot paint a frame
+    // of the last round's cards before the new ones arrive.
+    windows.sendOverlayEvent(RELIC_REWARD_TRIGGER);
     if (showImmediately) {
-      windows.sendOverlayEvent(RELIC_REWARD_TRIGGER);
       windows.scheduleOverlayAutoHide(OVERLAY_AUTO_HIDE_DETECTING_MAX_MS);
     }
 

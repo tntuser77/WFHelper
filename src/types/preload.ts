@@ -5,6 +5,7 @@ import type {
   UpdateRivenAuctionPayload,
 } from "./ipc.js";
 import type { WfmStatus } from "./market.js";
+import type { RelicOverlayFilterPush } from "../../config/shared/relicPlannerView.js";
 
 export interface PreloadAPI {
   getPersonalProfile: (
@@ -42,9 +43,11 @@ export interface PreloadAPI {
   setInventorySource: (
     source: IpcInvokeMap["setInventorySource"]["args"][0],
   ) => Promise<IpcInvokeMap["setInventorySource"]["return"]>;
+  exportInventory: () => Promise<IpcInvokeMap["exportInventory"]["return"]>;
   getItemDatabase: () => Promise<IpcInvokeMap["getItemDatabase"]["return"]>;
   getWorldState: () => Promise<IpcInvokeMap["getWorldState"]["return"]>;
   getRelicDatabase: () => Promise<IpcInvokeMap["getRelicDatabase"]["return"]>;
+  getRelicDataInfo: () => Promise<IpcInvokeMap["getRelicDataInfo"]["return"]>;
   getWfmItems: () => Promise<IpcInvokeMap["getWfmItems"]["return"]>;
   wfmSignIn: (
     creds: IpcInvokeMap["wfmSignIn"]["args"][0],
@@ -84,6 +87,10 @@ export interface PreloadAPI {
     query: IpcInvokeMap["searchDrops"]["args"][0],
     mode: IpcInvokeMap["searchDrops"]["args"][1],
   ) => Promise<IpcInvokeMap["searchDrops"]["return"]>;
+  dropSourcesForItem: (
+    name: IpcInvokeMap["dropSourcesForItem"]["args"][0],
+  ) => Promise<IpcInvokeMap["dropSourcesForItem"]["return"]>;
+  getSpawnNodes: () => Promise<IpcInvokeMap["getSpawnNodes"]["return"]>;
   confirmDialog: (
     payload: IpcInvokeMap["confirmDialog"]["args"][0],
   ) => Promise<IpcInvokeMap["confirmDialog"]["return"]>;
@@ -121,6 +128,12 @@ export interface PreloadAPI {
     source: IpcInvokeMap["setNotificationSourceChannels"]["args"][0],
     toggles: IpcInvokeMap["setNotificationSourceChannels"]["args"][1],
   ) => Promise<IpcInvokeMap["setNotificationSourceChannels"]["return"]>;
+  setNotificationGameGate: (
+    enabled: IpcInvokeMap["setNotificationGameGate"]["args"][0],
+  ) => Promise<IpcInvokeMap["setNotificationGameGate"]["return"]>;
+  setNotificationDiscordPing: (
+    userId: IpcInvokeMap["setNotificationDiscordPing"]["args"][0],
+  ) => Promise<IpcInvokeMap["setNotificationDiscordPing"]["return"]>;
   testNotificationWebhook: (
     channel: IpcInvokeMap["testNotificationWebhook"]["args"][0],
   ) => Promise<IpcInvokeMap["testNotificationWebhook"]["return"]>;
@@ -156,6 +169,7 @@ export interface PreloadAPI {
     callback: (status: IpcEventMap["inventory-status-updated"]) => void,
   ) => () => void;
   onItemDbUpdated: (callback: (data: IpcEventMap["item-db-updated"]) => void) => () => void;
+  onRelicDbUpdated: (callback: (data: IpcEventMap["relic-db-updated"]) => void) => () => void;
   onAppUpdateStatus: (callback: (state: IpcEventMap["app-update-status"]) => void) => () => void;
   onWfmNotification: (
     callback: (notification: IpcEventMap["wfm:notification"]) => void,
@@ -172,11 +186,12 @@ export interface PreloadAPI {
   updateOverlayTheme: (themeVars: Record<string, string>) => void;
   updateOverlayLocale: (locale: string) => void;
   updateGameLocale: (locale: string) => void;
-  pushRelicFilters: (filters: { squadSize: number; tierFilter: string | null }) => void;
+  pushRelicFilters: (filters: RelicOverlayFilterPush) => void;
   getLinuxDisplay: () => Promise<IpcInvokeMap["getLinuxDisplay"]["return"]>;
   setLinuxDisplay: (
     preference: IpcInvokeMap["setLinuxDisplay"]["args"][0],
   ) => Promise<IpcInvokeMap["setLinuxDisplay"]["return"]>;
+  setUpLinuxCapture: () => Promise<IpcInvokeMap["setUpLinuxCapture"]["return"]>;
   getOverlaySettings: () => Promise<IpcInvokeMap["getOverlaySettings"]["return"]>;
   getDetectedWarframeUiScale: () => Promise<IpcInvokeMap["getDetectedWarframeUiScale"]["return"]>;
   setOverlaySettings: (
@@ -260,6 +275,9 @@ export interface PreloadAPI {
   onWarframeUiScaleUpdated: (
     callback: (scale: IpcEventMap["warframe-ui-scale-updated"]) => void,
   ) => () => void;
+  onRivenSimilarAuctions: (
+    callback: (shown: IpcEventMap["riven-similar-auctions"]) => void,
+  ) => () => void;
   onArbiOpenRun: (callback: (runId: IpcEventMap["arbi-open-run"]) => void) => () => void;
   getPtRuns: () => Promise<IpcInvokeMap["getPtRuns"]["return"]>;
   refreshPtRuns: () => Promise<IpcInvokeMap["refreshPtRuns"]["return"]>;
@@ -285,6 +303,13 @@ export interface PreloadAPI {
     id: IpcInvokeMap["showPtRunLogInFolder"]["args"][0],
   ) => Promise<IpcInvokeMap["showPtRunLogInFolder"]["return"]>;
   onPtRunSaved: (callback: (run: IpcEventMap["pt-run-saved"]) => void) => () => void;
+  getMissionRewards: () => Promise<IpcInvokeMap["getMissionRewards"]["return"]>;
+  getMissionRewardsPage: (
+    query: IpcInvokeMap["getMissionRewardsPage"]["args"][0],
+  ) => Promise<IpcInvokeMap["getMissionRewardsPage"]["return"]>;
+  onMissionRewardsUpdated: (
+    callback: (payload: IpcEventMap["mission-rewards-updated"]) => void,
+  ) => () => void;
   getLevelCap: () => Promise<IpcInvokeMap["getLevelCap"]["return"]>;
   setLevelCapNotes: (
     frame: IpcInvokeMap["setLevelCapNotes"]["args"][0],
@@ -405,6 +430,10 @@ export interface TradePreloadAPI {
   wfmDeleteOrder: (
     orderId: IpcInvokeMap["wfmDeleteOrder"]["args"][0],
   ) => Promise<IpcInvokeMap["wfmDeleteOrder"]["return"]>;
+  wfmCloseOrder: (
+    orderId: IpcInvokeMap["wfmCloseOrder"]["args"][0],
+    quantity: IpcInvokeMap["wfmCloseOrder"]["args"][1],
+  ) => Promise<IpcInvokeMap["wfmCloseOrder"]["return"]>;
   wfmSetVisible: (
     orderIds: IpcInvokeMap["wfmSetVisible"]["args"][0],
     visible: IpcInvokeMap["wfmSetVisible"]["args"][1],

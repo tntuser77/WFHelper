@@ -10,6 +10,7 @@ import {
   INVENTORY_OPEN_ALECA_FRAME_FILE,
   INVENTORY_GET_STATUS,
   INVENTORY_SET_SOURCE,
+  INVENTORY_EXPORT,
   INVENTORY_UPDATED,
   INVENTORY_STATUS_UPDATED,
   DB_GET_ITEM_DATABASE,
@@ -17,7 +18,11 @@ import {
   GAME_LOCALE_UPDATED,
   DB_GET_WORLD_STATE,
   DB_GET_RELIC_DATABASE,
+  DB_GET_RELIC_DATA_INFO,
+  RELIC_DB_UPDATED,
   DROP_SEARCH,
+  DROP_ITEM_SOURCES,
+  SPAWN_NODES_GET,
   DB_GET_WFM_ITEMS,
   DB_GET_MASTERY,
   DB_GET_CODEX_SCANS,
@@ -34,6 +39,7 @@ import {
   WFM_CREATE_ORDER,
   WFM_UPDATE_ORDER,
   WFM_DELETE_ORDER,
+  WFM_CLOSE_ORDER,
   WFM_SET_VISIBLE,
   WFM_SEARCH_ITEMS,
   WFM_LOOKUP_ITEM,
@@ -53,6 +59,7 @@ import {
   LOGS_OPEN_FOLDER,
   LINUX_DISPLAY_GET,
   LINUX_DISPLAY_SET,
+  LINUX_CAPTURE_SETUP,
   WINDOW_MINIMIZE,
   WINDOW_MAXIMIZE,
   WINDOW_CLOSE,
@@ -70,6 +77,7 @@ import {
   OVERLAY_SET_SETTINGS,
   OVERLAY_GET_DETECTED_UI_SCALE,
   WARFRAME_UI_SCALE_UPDATED,
+  RIVEN_SIMILAR_AUCTIONS,
   OPEN_EXTERNAL,
   LOG_WARN,
   NOTIFICATION_HISTORY_GET,
@@ -85,6 +93,8 @@ import {
   NOTIFICATION_CHANNELS_SET_WEBHOOK,
   NOTIFICATION_CHANNELS_CLEAR_WEBHOOK,
   NOTIFICATION_CHANNELS_SET_SOURCE,
+  NOTIFICATION_CHANNELS_SET_GAME_GATE,
+  NOTIFICATION_CHANNELS_SET_DISCORD_PING,
   NOTIFICATION_CHANNELS_TEST,
   RANKED_HOTSET_LOAD,
   RANKED_HOTSET_SAVE,
@@ -188,6 +198,9 @@ import {
   MARKET_ALERTS_SET_ENABLED,
   MARKET_ALERTS_STATUS,
   MARKET_ALERTS_TEST_FIRE,
+  MISSION_REWARDS_GET,
+  MISSION_REWARDS_PAGE,
+  MISSION_REWARDS_UPDATED,
 } from "./config/shared/ipcChannels";
 
 // invoke() is typed any; this wrapper pins each call's args+return to its IpcInvokeMap entry so drift fails typecheck.
@@ -212,10 +225,12 @@ try {
     ),
     getInventoryStatus: inv<"getInventoryStatus">(INVENTORY_GET_STATUS),
     setInventorySource: inv<"setInventorySource">(INVENTORY_SET_SOURCE),
+    exportInventory: inv<"exportInventory">(INVENTORY_EXPORT),
 
     getItemDatabase: inv<"getItemDatabase">(DB_GET_ITEM_DATABASE),
     getWorldState: inv<"getWorldState">(DB_GET_WORLD_STATE),
     getRelicDatabase: inv<"getRelicDatabase">(DB_GET_RELIC_DATABASE),
+    getRelicDataInfo: inv<"getRelicDataInfo">(DB_GET_RELIC_DATA_INFO),
     getWfmItems: inv<"getWfmItems">(DB_GET_WFM_ITEMS),
 
     wfmSignIn: inv<"wfmSignIn">(WFM_SIGNIN),
@@ -240,6 +255,8 @@ try {
     saveOverlayScale: inv<"saveOverlayScale">(OVERLAY_SAVE_SCALE),
     searchDrops: (query, mode): Ret<"searchDrops"> =>
       ipcRenderer.invoke(DROP_SEARCH, { query, mode }),
+    dropSourcesForItem: inv<"dropSourcesForItem">(DROP_ITEM_SOURCES),
+    getSpawnNodes: inv<"getSpawnNodes">(SPAWN_NODES_GET),
     confirmDialog: inv<"confirmDialog">(SYSTEM_CONFIRM),
     checkForAppUpdates: inv<"checkForAppUpdates">(APP_UPDATE_CHECK),
     getAppUpdateState: inv<"getAppUpdateState">(APP_UPDATE_STATE),
@@ -259,6 +276,7 @@ try {
       INVENTORY_STATUS_UPDATED,
     ),
     onItemDbUpdated: ipcDataBridge<IpcEventMap["item-db-updated"]>(ipcRenderer, ITEM_DB_UPDATED),
+    onRelicDbUpdated: ipcDataBridge<IpcEventMap["relic-db-updated"]>(ipcRenderer, RELIC_DB_UPDATED),
     onAppUpdateStatus: ipcDataBridge<IpcEventMap["app-update-status"]>(
       ipcRenderer,
       APP_UPDATE_STATUS,
@@ -285,6 +303,7 @@ try {
     pushRelicFilters: (filters) => ipcRenderer.send(OVERLAY_PUSH_RELIC_FILTERS, filters),
     getLinuxDisplay: inv<"getLinuxDisplay">(LINUX_DISPLAY_GET),
     setLinuxDisplay: inv<"setLinuxDisplay">(LINUX_DISPLAY_SET),
+    setUpLinuxCapture: inv<"setUpLinuxCapture">(LINUX_CAPTURE_SETUP),
     getOverlaySettings: inv<"getOverlaySettings">(OVERLAY_GET_SETTINGS),
     beginOverlayEdit: inv<"beginOverlayEdit">(OVERLAY_EDIT_BEGIN),
     getOverlayPreview: inv<"getOverlayPreview">(OVERLAY_EDIT_PREVIEW),
@@ -325,6 +344,10 @@ try {
     clearNotificationWebhook: inv<"clearNotificationWebhook">(NOTIFICATION_CHANNELS_CLEAR_WEBHOOK),
     setNotificationSourceChannels: inv<"setNotificationSourceChannels">(
       NOTIFICATION_CHANNELS_SET_SOURCE,
+    ),
+    setNotificationGameGate: inv<"setNotificationGameGate">(NOTIFICATION_CHANNELS_SET_GAME_GATE),
+    setNotificationDiscordPing: inv<"setNotificationDiscordPing">(
+      NOTIFICATION_CHANNELS_SET_DISCORD_PING,
     ),
     testNotificationWebhook: inv<"testNotificationWebhook">(NOTIFICATION_CHANNELS_TEST),
 
@@ -383,6 +406,10 @@ try {
       ipcRenderer,
       WARFRAME_UI_SCALE_UPDATED,
     ),
+    onRivenSimilarAuctions: ipcDataBridge<IpcEventMap["riven-similar-auctions"]>(
+      ipcRenderer,
+      RIVEN_SIMILAR_AUCTIONS,
+    ),
     onArbiOpenRun: ipcDataBridge<IpcEventMap["arbi-open-run"]>(ipcRenderer, ARBI_OPEN_RUN),
 
     getPtRuns: inv<"getPtRuns">(PT_GET_RUNS),
@@ -395,6 +422,13 @@ try {
     importPtLog: inv<"importPtLog">(PT_IMPORT_LOG),
     showPtRunLogInFolder: inv<"showPtRunLogInFolder">(PT_SHOW_LOG_IN_FOLDER),
     onPtRunSaved: ipcDataBridge<IpcEventMap["pt-run-saved"]>(ipcRenderer, PT_RUN_SAVED),
+
+    getMissionRewards: inv<"getMissionRewards">(MISSION_REWARDS_GET),
+    getMissionRewardsPage: inv<"getMissionRewardsPage">(MISSION_REWARDS_PAGE),
+    onMissionRewardsUpdated: ipcDataBridge<IpcEventMap["mission-rewards-updated"]>(
+      ipcRenderer,
+      MISSION_REWARDS_UPDATED,
+    ),
 
     getLevelCap: inv<"getLevelCap">(LEVEL_CAP_GET),
     setLevelCapNotes: inv<"setLevelCapNotes">(LEVEL_CAP_SET_NOTES),
@@ -457,6 +491,8 @@ try {
       ipcRenderer.invoke(WFM_UPDATE_ORDER, { orderId, updates }),
     wfmDeleteOrder: (orderId): Ret<"wfmDeleteOrder"> =>
       ipcRenderer.invoke(WFM_DELETE_ORDER, { orderId }),
+    wfmCloseOrder: (orderId, quantity): Ret<"wfmCloseOrder"> =>
+      ipcRenderer.invoke(WFM_CLOSE_ORDER, { orderId, quantity }),
     wfmSetVisible: (orderIds, visible): Ret<"wfmSetVisible"> =>
       ipcRenderer.invoke(WFM_SET_VISIBLE, { orderIds, visible }),
     wfmSetStatus: (status): Ret<"wfmSetStatus"> => ipcRenderer.invoke(WFM_SET_STATUS, { status }),

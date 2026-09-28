@@ -27,6 +27,7 @@ export const NAV_ICON_URLS = {
   stats: new URL("../../assets/icons/Stats.png", import.meta.url).href,
   wiki: new URL("../../assets/icons/Wiki.svg", import.meta.url).href,
   arbi: new URL("../../assets/icons/ArbiAnalyze.png", import.meta.url).href,
+  missions: new URL("../../assets/icons/Missions.svg", import.meta.url).href,
 } as const;
 
 export const POLARITY_ICON_URLS = {
@@ -130,10 +131,14 @@ export const BOUNTY_FALLBACK_ICON_URLS = {
   mod: new URL("../../assets/Bounties/IconMods.png", import.meta.url).href,
 } as const;
 
+const SETUP_PLANNER_BG_URL = new URL("../../assets/setup/overlay-demo-planner.jpg", import.meta.url)
+  .href;
+
 /** Backdrops for the setup overlay-placement step; real screenshots can replace these files. */
 export const SETUP_OVERLAY_BG_URLS: Record<string, string> = {
   reward: new URL("../../assets/setup/overlay-demo-reward.jpg", import.meta.url).href,
-  planner: new URL("../../assets/setup/overlay-demo-planner.jpg", import.meta.url).href,
+  planner: SETUP_PLANNER_BG_URL,
   riven: new URL("../../assets/setup/overlay-demo-riven.jpg", import.meta.url).href,
   arbiSummary: new URL("../../assets/setup/overlay-demo-arbi.jpg", import.meta.url).href,
+  tradeNotification: SETUP_PLANNER_BG_URL,
 };

@@ -7,7 +7,8 @@
     showOwnedParentBadges,
     showVaultedBadges,
   } from "../stores/preferences.js";
-  import { activeItem } from "../stores/modals.js";
+  import { activeItem, openRelicDetailed } from "../stores/modals.js";
+  import { relicDb } from "../stores/relics.js";
   import {
     itemDb,
     wfmItems,
@@ -19,11 +20,14 @@
   import { enrichComponents, resolveItemPriceLookup } from "../lib/componentResolution.js";
   import { buildCraftingTree } from "../lib/craftingTree.js";
   import { buildParsedItemFromDb } from "../lib/parsedItemFromDb.js";
+  import { detailedRelicFor } from "../lib/relic/relicView.js";
+  import { resolveDrops } from "../lib/resolveDrops.js";
   import ItemImage from "../components/ItemImage.svelte";
   import DropsList from "../components/DropsList.svelte";
   import MarketPrice from "../components/MarketPrice.svelte";
   import WikiButton from "../components/WikiButton.svelte";
   import DetailModalBase from "./DetailModalBase.svelte";
+  import RelicViewSwitch from "./RelicViewSwitch.svelte";
   import ComponentPanel from "../components/ComponentPanel.svelte";
   import CraftingTree from "../components/CraftingTree.svelte";
   import ArchonShardPips from "../components/archon/ArchonShardPips.svelte";
@@ -73,6 +77,10 @@
   $: itemKey = item?.uniqueName || item?.internalName || "";
   $: if (itemKey) void loadBaroHistory();
   $: dbEntry = itemKey ? ($itemDb || {})[itemKey] : null;
+  $: relicGroup = detailedRelicFor($relicDb, itemKey);
+  $: itemDrops = item
+    ? resolveDrops({ drops: item.drops, uniqueName: itemKey }, $itemDb || {}, $relicDb)
+    : [];
   $: parentUniqueName = dbEntry?.isBuildComponent ? dbEntry.componentOf || null : null;
   $: parentEntry = parentUniqueName ? ($itemDb || {})[parentUniqueName] || null : null;
   // Blueprints have no recipe; root the tree at the product they build.
@@ -148,14 +156,25 @@
     selectedComp = comp;
   }
 
-  function close() {
+  function resetState(): void {
     priceLoader.clear();
     selectedComp = null;
     lastItemKey = "";
     navigationStack = [];
     pendingShowCraftingTree = null;
     internalNavigation = false;
+  }
+
+  // The relic switch, a relic redirect and the app Escape clear the store without close().
+  $: if (!item) resetState();
+
+  function close() {
+    resetState();
     activeItem.set(null);
+  }
+
+  function showDetailedRelic(): void {
+    if (relicGroup) openRelicDetailed(relicGroup);
   }
 
   function closeCompPanel() {
@@ -225,6 +244,9 @@
         >
           {showCraftingTree ? $tr("detail.backToDetails") : $tr("detail.craftingTree")}
         </button>
+      {/if}
+      {#if relicGroup}
+        <RelicViewSwitch view="simple" onSwitch={showDetailedRelic} />
       {/if}
       <WikiButton wikiUrl={item.wikiaUrl} fallbackName={item.name} />
       <button class="detail-close" aria-label={$tr("common.close")} on:click={close}>&times;</button
@@ -434,7 +456,7 @@
           </div>
         {/if}
 
-        <DropsList drops={item.drops || []} />
+        <DropsList drops={itemDrops} />
 
         <MarketPrice text={priceText} slug={priceSlug} />
       </div>

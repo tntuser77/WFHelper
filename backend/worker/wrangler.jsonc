@@ -98,6 +98,11 @@
 		// slug per tick on top of prewarm; "0" stops the sweep and its aggregate.
 		"TOP_TRADED_ENABLED": "1",
 		"TOP_TRADED_BATCH_SIZE": "150",
+		// "enforce" locks out every installed version that sends no x-wfhelper-client, so keep
+		// "log" until those have updated (ARCHITECTURE.md, Client identity).
+		"PUBLIC_CLIENT_POLICY": "log",
+		"PUBLIC_CLIENT_ALLOW": "WFHelper",
+		"PUBLIC_CLIENT_DENY": "",
 		// Discord-sourced supporter credits. Empty means disabled; the map is
 		// {"<discord role id>":"basic"|"big"|"biggest"}. DISCORD_BOT_TOKEN is a secret.
 		"DISCORD_GUILD_ID": "1486065926192500746",

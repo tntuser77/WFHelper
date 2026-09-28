@@ -16,6 +16,8 @@ import {
 import { scheduleClickThroughReassert, setClickThrough } from "./overlay/clickThrough";
 import { createKeepMappedMode } from "./overlay/keepMapped";
 import { createLayerPresentation } from "./overlay/layerPresentation";
+import { clampIntoArea, findDisplayById } from "./overlay/windows";
+import { registerZOrderSubscriber, syncUnfocusHide } from "./overlay/zOrder";
 import { isNativeWayland } from "../services/linuxDisplayBackend";
 import { probeLayerShell } from "../services/layerShell";
 import { tradeNotificationBody, tradeNotificationTitle } from "../config/shared/notifications";
@@ -44,6 +46,49 @@ const REP_VISIBLE_MS = 12_000;
 const REP_RESULT_VISIBLE_MS = 4_000;
 const RENDERER_FADE_MS = 400;
 const MAIN_HIDE_BUFFER_MS = 600;
+
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Top-right of the primary work area unless a position was saved; a saved one
+ *  stays whole inside its own display, or the primary one when that is gone. */
+export function getTradeNotificationPlacementRect(): Rect {
+  const size = { width: WIN_W, height: WIN_H };
+  const saved = ctx.overlaySettings.overlayWindowBounds?.tradeNotification;
+  const primary = screen.getPrimaryDisplay();
+  if (!saved || !Number.isFinite(saved.x) || !Number.isFinite(saved.y)) {
+    const area = primary.workArea;
+    return { x: area.x + area.width - WIN_W - MARGIN, y: area.y + MARGIN, ...size };
+  }
+  const displays = screen.getAllDisplays();
+  const display =
+    findDisplayById(displays, saved.displayId) ||
+    displays.find(
+      ({ workArea: a }) =>
+        saved.x >= a.x && saved.x < a.x + a.width && saved.y >= a.y && saved.y < a.y + a.height,
+    ) ||
+    primary;
+  return { ...clampIntoArea(saved.x, saved.y, WIN_W, WIN_H, display.workArea), ...size };
+}
+
+// A saved spot becomes margins on the game's output; no saved spot keeps the
+// top-right anchor the compositor places.
+function _layerGeometry() {
+  if (!ctx.overlaySettings.overlayWindowBounds?.tradeNotification) return null;
+  const rect = getTradeNotificationPlacementRect();
+  const origin = screen.getDisplayMatching(rect).bounds;
+  return { ...rect, x: rect.x - origin.x, y: rect.y - origin.y, zoomFactor: 1 };
+}
+
+function _applyPosition(win: InstanceType<typeof BrowserWindow>): void {
+  const { x, y } = getTradeNotificationPlacementRect();
+  const [currentX, currentY] = win.getPosition();
+  if (currentX !== x || currentY !== y) win.setPosition(x, y);
+}
 
 /** A finished level cap run, shown in the trade toast's window. */
 export interface LevelCapToastCard {
@@ -97,11 +142,17 @@ function _setContentVisible(win: InstanceType<typeof BrowserWindow>): (visible: 
   return (visible) => win.webContents.send(OVERLAY_CONTENT_VISIBLE, visible);
 }
 
+let _visible = false;
+let _hiddenByUnfocus = false;
+
 function _presentWindow(win: InstanceType<typeof BrowserWindow>): void {
+  _visible = true;
+  _hiddenByUnfocus = false;
   if (_layer) {
     void _layer.show();
     return;
   }
+  _applyPosition(win);
   if (_keepMapped.isActive()) {
     _keepMapped.present(win, _setContentVisible(win));
   } else {
@@ -116,6 +167,8 @@ function _presentWindow(win: InstanceType<typeof BrowserWindow>): void {
 }
 
 function _hideWindow(win: InstanceType<typeof BrowserWindow>): void {
+  _visible = false;
+  _hiddenByUnfocus = false;
   if (_layer) {
     _layer.hide();
     return;
@@ -127,6 +180,29 @@ function _hideWindow(win: InstanceType<typeof BrowserWindow>): void {
   }
   win.hide();
 }
+
+const _unfocusHide = {
+  hideForUnfocus(): boolean {
+    const win = ctx.tradeNotificationWindow;
+    if (!_visible || !win || win.isDestroyed()) return false;
+    _hideWindow(win);
+    _hiddenByUnfocus = true;
+    return true;
+  },
+  restoreAfterUnfocus(): boolean {
+    const win = ctx.tradeNotificationWindow;
+    if (!_hiddenByUnfocus || !win || win.isDestroyed()) return false;
+    _presentWindow(win);
+    return true;
+  },
+};
+
+registerZOrderSubscriber({
+  isActive: () => _visible || _hiddenByUnfocus,
+  sync: (warframeFocused, foreground) => {
+    syncUnfocusHide("trade notification", [_unfocusHide], warframeFocused, foreground);
+  },
+});
 
 type PendingTradeNotification =
   | { kind: "trade"; match: TradeMatchPayload; status: TradeNotificationStatus; revision: number }
@@ -297,18 +373,17 @@ function _getOrCreateWindow(): InstanceType<typeof BrowserWindow> {
     "preload-trade-notification.js",
   );
 
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { x: dX, y: dY, width: dW } = primaryDisplay.workArea;
-
   const layerMode = _layerModeAvailable();
   const nextLayer = layerMode
     ? createLayerPresentation({
         label: "TradeNotification",
         anchor: "top-right",
         inset: MARGIN,
+        resolveGeometry: _layerGeometry,
         log,
       })
     : null;
+  const { x, y } = getTradeNotificationPlacementRect();
 
   const win = new BrowserWindow({
     // Notification windows prevent Linux focus-on-map for non-interactive toasts.
@@ -319,7 +394,7 @@ function _getOrCreateWindow(): InstanceType<typeof BrowserWindow> {
     width: WIN_W,
     height: WIN_H,
     // The compositor places a layer surface, so screen coordinates say nothing.
-    ...(layerMode ? {} : { x: dX + dW - WIN_W - MARGIN, y: dY + MARGIN }),
+    ...(layerMode ? {} : { x, y }),
     show: false,
     transparent: true,
     frame: false,
@@ -373,6 +448,8 @@ function _getOrCreateWindow(): InstanceType<typeof BrowserWindow> {
   win.on("closed", () => {
     ctx.tradeNotificationWindow = null;
     _rendererReady = false;
+    _visible = false;
+    _hiddenByUnfocus = false;
     _layer?.hide();
     _layer = null;
     _invalidateNotification();

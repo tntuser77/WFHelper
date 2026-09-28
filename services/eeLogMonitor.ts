@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import chokidar from "chokidar";
 import { withScope } from "./logger";
+import { createEchoFilter } from "./echoFilter";
 import { EeUptimeTracker } from "./eeUptime";
 import { startDbwinWorker, stopDbwinWorker, isDbwinActive } from "./dbwinMonitor";
 
@@ -99,21 +100,9 @@ export function parseWhisperUsername(line: string): string | null {
   return name.slice(1).trim() || null;
 }
 
-// The file poll re-delivers dbwin-handled lines up to ~26s later (lazy flush)
-// - dedupe per sender; a line dbwin missed is first-seen here and still fires.
-const WHISPER_DEDUP_MS = 30_000;
-const _lastWhisperSeen = new Map<string, number>();
-
-function isWhisperEcho(playerName: string, now: number): boolean {
-  const previous = _lastWhisperSeen.get(playerName);
-  _lastWhisperSeen.set(playerName, now);
-  if (_lastWhisperSeen.size > 64) {
-    for (const [name, ts] of _lastWhisperSeen) {
-      if (now - ts >= WHISPER_DEDUP_MS) _lastWhisperSeen.delete(name);
-    }
-  }
-  return previous !== undefined && now - previous < WHISPER_DEDUP_MS;
-}
+// The file poll re-delivers DBWIN-handled lines up to ~26 s later (lazy flush), so
+// dedupe per sender; a line DBWIN missed is first seen here and still fires.
+const whisperEchoes = createEchoFilter(30_000);
 
 /** Debounce before firing the reward-screen overlay after a log pattern match. */
 const TRIGGER_DELAY_MS = 250;
@@ -130,13 +119,10 @@ const RELIC_PICKER_CLOSE_COOLDOWN_MS = 500;
 // Entry InitMapping trails the open dispatch only briefly.
 const RELIC_PICKER_ENTRY_WINDOW_MS = 800;
 
-/** InitMapping also fires on picker entry; skip it once per session, near open. */
-export function isPickerEntryMapping(
-  now: number,
-  lastOpenAt: number,
-  entrySkipUsed: boolean,
-): boolean {
-  return !entrySkipUsed && now - lastOpenAt < RELIC_PICKER_ENTRY_WINDOW_MS;
+/** InitMapping also fires on picker entry, sometimes twice (measured 3 ms apart), so
+ *  every line inside the entry window is entry, not a close. */
+export function isPickerEntryMapping(now: number, lastOpenAt: number): boolean {
+  return now - lastOpenAt < RELIC_PICKER_ENTRY_WINDOW_MS;
 }
 // Suppress reward scans while the relic picker renders reward-preview cards.
 const REWARD_AFTER_PICKER_SUPPRESS_MS = 3000;
@@ -171,6 +157,16 @@ let messageCallback: ((playerName: string) => void) | null = null;
 let activeMissionTagCallback: ((tag: string) => void) | null = null;
 let loginCompleteCallback: (() => void) | null = null;
 let lastLoginCompleteAt = 0;
+
+type EeLogLineListener = (line: string, source: "dbwin" | "file") => void;
+const lineListeners = new Set<EeLogLineListener>();
+
+export function addLineListener(listener: EeLogLineListener): () => void {
+  lineListeners.add(listener);
+  return () => {
+    lineListeners.delete(listener);
+  };
+}
 
 export { RIVEN_PATTERNS, forceEndRivenSession, resumeRivenSession };
 
@@ -224,6 +220,31 @@ const TRADE_DIALOG_TIMEOUT_MS = 60_000;
 let _tradeDialogStartAt = 0;
 /** Set once the dialog's log entry ends - later log lines must not leak into the buffer. */
 let _tradeDialogSealed = false;
+/** Buffer length when a glued entry was skipped. The dialog's own tail clears it;
+ *  a dialog that never got its tail is cut there, so later lines cannot join it. */
+let _tradeDialogGlueMark: number | null = null;
+const TRADE_DIALOG_TAIL_PATTERN = /\b(?:leftItem|rightItem)=/;
+
+/** The engine can flush its next log entry behind a description line after a
+ *  bare CR, so the seal check runs per CR segment: the dialog's own arg tail or
+ *  a fresh framework line seals, a glued entry ends the line without sealing. */
+function bufferTradeDialogLine(buffer: string[], line: string): void {
+  const segments = line.split("\r");
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    if (isLogFrameworkLine(stripDialogArgTail(segment))) {
+      if (index === 0) _tradeDialogSealed = true;
+      else _tradeDialogGlueMark ??= buffer.length;
+      return;
+    }
+    if (segment.trim()) buffer.push(segment);
+    if (TRADE_DIALOG_TAIL_PATTERN.test(segment)) {
+      _tradeDialogSealed = true;
+      _tradeDialogGlueMark = null;
+      return;
+    }
+  }
+}
 
 let pendingRewardTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingRelicPickerTimer: ReturnType<typeof setTimeout> | null = null;
@@ -232,7 +253,6 @@ let lastRelicPickerAt = 0;
 let lastRelicPickerPatternAt = 0;
 let lastRelicPickerCloseAt = 0;
 let relicPickerSessionOpen = false;
-let relicPickerEntrySkipUsed = false;
 
 function clearPendingTimers(): void {
   if (pendingRewardTimer) {
@@ -373,7 +393,6 @@ function scheduleTrigger(
     pendingRelicPickerTimer = null;
     lastRelicPickerAt = Date.now();
     relicPickerSessionOpen = true;
-    relicPickerEntrySkipUsed = false;
     if (relicPickerCallback) {
       log.info(
         `[EELog] Relic picker trigger detected (via ${source}${staleNote}) -> dispatching recommendation overlay`,
@@ -442,7 +461,7 @@ function handleLine(line: string, source: "dbwin" | "file" = "file"): void {
 
   if (messageCallback) {
     const whisperUser = parseWhisperUsername(line);
-    if (whisperUser && !isWhisperEcho(whisperUser, Date.now())) {
+    if (whisperUser && !whisperEchoes.isEcho(whisperUser, Date.now())) {
       log.info("[EELog] In-game conversation from:", whisperUser);
       messageCallback(whisperUser);
     }
@@ -458,29 +477,33 @@ function handleLine(line: string, source: "dbwin" | "file" = "file"): void {
     }
   }
 
-  // A new framework prefix seals multiline dialogs; single-line dialogs seal immediately.
+  // A single-line dialog already carries its arg tail, so it seals at once. Only
+  // the tail after the start marker counts: a previous dialog's tail shares the
+  // line when the engine flushed this entry behind it.
   if (line.includes(TRADE_DIALOG_START)) {
     _tradeDialogBuffer = [line];
     _tradeDialogStartAt = Date.now();
-    _tradeDialogSealed = false;
-    // Single-line dialogs (..., leftItem=/Menu/Confirm_Item_Ok) are already complete
-    // at this point - the buffered line stands; we just wait for the success line.
+    _tradeDialogGlueMark = null;
+    _tradeDialogSealed = TRADE_DIALOG_TAIL_PATTERN.test(
+      line.slice(line.indexOf(TRADE_DIALOG_START)),
+    );
   } else if (_tradeDialogBuffer !== null) {
     if (Date.now() - _tradeDialogStartAt > TRADE_DIALOG_TIMEOUT_MS) {
       _tradeDialogBuffer = null;
-    } else if (/\[(Info|Error|Warning)\]/.test(line)) {
-      // Next log framework line marks the end of the dialog's multi-line entry.
-      // Seal so intervening log entries can't leak in as trade items.
-      _tradeDialogSealed = true;
     } else if (!_tradeDialogSealed) {
-      _tradeDialogBuffer.push(line);
+      bufferTradeDialogLine(_tradeDialogBuffer, line);
     }
   }
 
   if (line.includes(TRADE_SUCCESS) && _tradeDialogBuffer !== null) {
-    const parsed = _parseTradeDialog(_tradeDialogBuffer);
+    const dialogLines =
+      _tradeDialogGlueMark === null
+        ? _tradeDialogBuffer
+        : _tradeDialogBuffer.slice(0, _tradeDialogGlueMark);
+    const parsed = _parseTradeDialog(dialogLines);
     _tradeDialogBuffer = null;
     _tradeDialogSealed = false;
+    _tradeDialogGlueMark = null;
     if (parsed && tradeConfirmedCallback) {
       log.info(
         `[EELog] Trade confirmed: ${parsed.type} ${parsed.platChange}p with ${parsed.partner}, ${parsed.items.length} item(s)`,
@@ -505,15 +528,24 @@ function handleLine(line: string, source: "dbwin" | "file" = "file"): void {
   ) {
     const now = Date.now();
     if (relicPickerSessionOpen && now - lastRelicPickerCloseAt >= RELIC_PICKER_CLOSE_COOLDOWN_MS) {
-      if (isPickerEntryMapping(now, lastRelicPickerAt, relicPickerEntrySkipUsed)) {
-        relicPickerEntrySkipUsed = true;
-        log.info("[EELog] Relic picker close skipped - entry InitMapping");
+      if (isPickerEntryMapping(now, lastRelicPickerAt)) {
+        log.info(
+          `[EELog] Relic picker close skipped - entry InitMapping ${now - lastRelicPickerAt}ms after open`,
+        );
       } else if (relicPickerCloseCallback) {
         lastRelicPickerCloseAt = now;
         relicPickerSessionOpen = false;
         log.info("[EELog] Relic picker close detected -> dispatching overlay close");
         relicPickerCloseCallback();
       }
+    }
+  }
+
+  for (const listener of lineListeners) {
+    try {
+      listener(line, source);
+    } catch (err) {
+      log.warn("[EELog] Line listener threw:", normalizeErrorMessage(err));
     }
   }
 }
@@ -726,7 +758,6 @@ export function startWatching(
   relicPickerCallback = normalized.onRelicSelectionOpen;
   relicPickerCloseCallback = normalized.onRelicSelectionClose;
   relicPickerSessionOpen = false;
-  relicPickerEntrySkipUsed = false;
   tradePartnerCallback = normalized.onTradingPartner;
   tradeConfirmedCallback = normalized.onTradeConfirmed;
   messageCallback = normalized.onInGameMessage;
@@ -821,5 +852,4 @@ export function stopWatching(): void {
   resetRivenState();
   lineRemainder = "";
   relicPickerSessionOpen = false;
-  relicPickerEntrySkipUsed = false;
 }

@@ -22,7 +22,7 @@ test("mixed rewards align prices and keep equal part cells at logical sizes and 
       ducats: count ? 100 : 0,
       setParts: Array.from({ length: count }, (_, part) => ({
         name: `Part ${part + 1}`,
-        ownedCount: [1, 20, 1000, 999999, 0, 5][part],
+        ownedCount: [1, 104, 1000, 999999, 0, 5][part],
         requiredCount: (part % 2) + 1,
         isReward: part === count - 1,
       })),
@@ -97,8 +97,8 @@ test("mixed rewards align prices and keep equal part cells at logical sizes and 
           )
           .toBeLessThanOrEqual(0.1);
         const where = `width ${logicalWidth}, zoom ${zoom}`;
-        // The chip widths and the one-line name fit are applied from a
-        // requestAnimationFrame the window resize schedules, so they land after
+        // The one-line fit of the names and the part counts is applied from a
+        // requestAnimationFrame the window resize schedules, so it lands after
         // innerWidth already reports the new size.
         await expect(async () => {
           const widths = await overlay
@@ -113,6 +113,35 @@ test("mixed rewards align prices and keep equal part cells at logical sizes and 
           expect(rows[0]).toBe(rows[2]);
           expect(rows[3]).toBe(rows[5]);
           expect(rows[3]).toBeGreaterThan(rows[0]);
+          const counts = await overlay.locator(".slot-set-part-count").evaluateAll((elements) =>
+            elements.map((element) => {
+              const styles = getComputedStyle(element);
+              return {
+                text: element.textContent ?? "",
+                scale: Number.parseFloat(styles.getPropertyValue("--reward-fit-scale")) || 1,
+                fontSize: Number.parseFloat(styles.fontSize),
+                chipFontSize: Number.parseFloat(getComputedStyle(element.parentElement!).fontSize),
+                overflow: element.scrollWidth - element.clientWidth,
+                icon: element.parentElement!.querySelector(".slot-set-part-icon")!.clientWidth,
+                ellipsis: styles.textOverflow,
+              };
+            }),
+          );
+          expect(counts.length).toBeGreaterThan(0);
+          expect(
+            counts.some((count) => count.scale < 1 || count.icon < 30),
+            `no count needed room at ${where}`,
+          ).toBe(true);
+          for (const count of counts) {
+            const at = `count ${count.text} at ${where}`;
+            // Up to four owned digits must fit; only a stress value may end in an ellipsis.
+            if (count.text.split("/")[0].length <= 4)
+              expect(count.overflow, `clipped ${at}`).toBeLessThanOrEqual(0);
+            expect(count.fontSize, `unreadable ${at}`).toBeGreaterThanOrEqual(
+              count.chipFontSize * 0.75 - 0.01,
+            );
+            if (count.overflow > 0) expect(count.ellipsis, `truncated ${at}`).toBe("ellipsis");
+          }
           const names = await overlay.locator(".slot-name").evaluateAll((elements) =>
             elements.map((element) => {
               const range = document.createRange();

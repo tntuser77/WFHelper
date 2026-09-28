@@ -5,6 +5,7 @@ export const INVENTORY_OPEN_FILE = "open-inventory-file";
 export const INVENTORY_OPEN_ALECA_FRAME_FILE = "open-alecaframe-inventory-file";
 export const INVENTORY_GET_STATUS = "get-inventory-status";
 export const INVENTORY_SET_SOURCE = "set-inventory-source";
+export const INVENTORY_EXPORT = "export-inventory";
 export const INVENTORY_UPDATED = "inventory-updated";
 export const INVENTORY_STATUS_UPDATED = "inventory-status-updated";
 
@@ -14,12 +15,16 @@ export const GAME_LOCALE_UPDATED = "game-locale-updated";
 export const DB_GET_WORLD_STATE = "get-world-state";
 export const WORLD_STATE_FETCH_ERROR = "world-state-fetch-error";
 export const DB_GET_RELIC_DATABASE = "get-relic-database";
+export const DB_GET_RELIC_DATA_INFO = "get-relic-data-info";
+export const RELIC_DB_UPDATED = "relic-db-updated";
 export const DB_GET_WFM_ITEMS = "get-wfm-items";
 export const DB_GET_MASTERY = "get-mastery-progress";
 export const PERSONAL_PROFILE_GET = "personal-profile:get";
 export const PROFILE_ACCOUNT_CHANGED = "profile-account-changed";
 export const DB_GET_CODEX_SCANS = "get-codex-scans";
 export const DROP_SEARCH = "drop-search";
+export const DROP_ITEM_SOURCES = "drop-item-sources";
+export const SPAWN_NODES_GET = "spawn-nodes:get";
 export const OVERLAY_EDIT_BEGIN = "overlay-edit:begin";
 export const OVERLAY_EDIT_PREVIEW = "overlay-edit:preview";
 export const OVERLAY_EDIT_UPDATE = "overlay-edit:update";
@@ -37,6 +42,7 @@ export const WFM_GET_CONTRACTS = "wfm:get-contracts";
 export const WFM_CREATE_ORDER = "wfm:create-order";
 export const WFM_UPDATE_ORDER = "wfm:update-order";
 export const WFM_DELETE_ORDER = "wfm:delete-order";
+export const WFM_CLOSE_ORDER = "wfm:close-order";
 export const WFM_SET_VISIBLE = "wfm:set-visible";
 export const WFM_SEARCH_ITEMS = "wfm:search-items";
 export const WFM_LOOKUP_ITEM = "wfm:lookup-item-by-slug";
@@ -72,6 +78,7 @@ export const LOGS_OPEN_FOLDER = "logs:open-folder";
 
 export const LINUX_DISPLAY_GET = "linux-display:get";
 export const LINUX_DISPLAY_SET = "linux-display:set";
+export const LINUX_CAPTURE_SETUP = "linux-capture:setup";
 
 export const WINDOW_MINIMIZE = "window-minimize";
 export const WINDOW_MAXIMIZE = "window-maximize";
@@ -94,6 +101,8 @@ export const NOTIFICATION_CHANNELS_GET = "notification-channels:get";
 export const NOTIFICATION_CHANNELS_SET_WEBHOOK = "notification-channels:set-webhook";
 export const NOTIFICATION_CHANNELS_CLEAR_WEBHOOK = "notification-channels:clear-webhook";
 export const NOTIFICATION_CHANNELS_SET_SOURCE = "notification-channels:set-source";
+export const NOTIFICATION_CHANNELS_SET_GAME_GATE = "notification-channels:set-game-gate";
+export const NOTIFICATION_CHANNELS_SET_DISCORD_PING = "notification-channels:set-discord-ping";
 export const NOTIFICATION_CHANNELS_TEST = "notification-channels:test";
 
 export const STATS_GET_HISTORY = "stats:get-history";
@@ -168,6 +177,8 @@ export const RIVEN_GRADING_INITIAL = "riven-grading-initial";
 export const RIVEN_GRADING_ROLL = "riven-grading-roll";
 export const RIVEN_BEST_ATTRIBUTES = "riven-best-attributes";
 export const RIVEN_SIMILAR_LISTINGS = "riven-similar-listings";
+export const RIVEN_SET_SIMILAR_AUCTIONS = "riven-set-similar-auctions";
+export const RIVEN_SIMILAR_AUCTIONS = "riven-similar-auctions";
 export const RIVEN_RESCAN_REQUEST = "riven-rescan-request";
 export const RIVEN_RESCAN = "riven-rescan";
 export const RIVEN_WEAPON_MISSING = "riven-weapon-missing";
@@ -253,3 +264,7 @@ export const POPOUT_CLOSE_ALL = "popout:close-all";
 export const POPOUT_STATE_CHANGED = "popout-state-changed";
 
 export const INVENTORY_SELECTION_COMPLETE = "inventory-selection-complete";
+
+export const MISSION_REWARDS_GET = "mission-rewards:get";
+export const MISSION_REWARDS_PAGE = "mission-rewards:page";
+export const MISSION_REWARDS_UPDATED = "mission-rewards-updated";

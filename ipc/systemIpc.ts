@@ -12,6 +12,7 @@ import { mergeCodexInventoryScans } from "../config/shared/codexInventory";
 import { broadcastToRenderers } from "./popoutIpc";
 import * as relicService from "../services/relicService";
 import * as dropData from "../services/dropData";
+import { getSpawnNodes } from "../services/spawnNodes";
 import * as autoUpdater from "../services/autoUpdater";
 import { normalizeErrorMessage } from "../config/shared/errors";
 import { isAllowedExternalHost } from "../config/runtime/security";
@@ -27,7 +28,10 @@ import {
   PROFILE_ACCOUNT_CHANGED,
   INVENTORY_STATUS_UPDATED,
   DB_GET_RELIC_DATABASE,
+  DB_GET_RELIC_DATA_INFO,
   DROP_SEARCH,
+  DROP_ITEM_SOURCES,
+  SPAWN_NODES_GET,
   APP_UPDATE_CHECK,
   SYSTEM_CONFIRM,
   APP_UPDATE_STATE,
@@ -38,6 +42,7 @@ import {
   LOGS_OPEN_FOLDER,
   LINUX_DISPLAY_GET,
   LINUX_DISPLAY_SET,
+  LINUX_CAPTURE_SETUP,
   WINDOW_MINIMIZE,
   WINDOW_MAXIMIZE,
   WINDOW_CLOSE,
@@ -47,6 +52,7 @@ import {
 import fs from "node:fs";
 import { getScanDebugDir } from "../services/rewardScanDebug";
 import * as linuxDisplay from "../services/linuxDisplayBackend";
+import { setUpLinuxCapture } from "../services/linuxStreamCapture";
 import { isObject } from "./ipcValidators";
 import { toNonEmptyString } from "../config/shared/stringValidation";
 import { parsePersonalLoadouts } from "../services/personalLoadouts";
@@ -54,6 +60,14 @@ import { parsePersonalLoadouts } from "../services/personalLoadouts";
 const log = withScope("systemIpc");
 let stopProfileAccountListener: (() => void) | null = null;
 let stopInventoryBindingListener: (() => void) | null = null;
+
+async function ensureDropData(): Promise<void> {
+  try {
+    await dropData.ensureLoaded();
+  } catch (error) {
+    log.warn("[Drops] ensureLoaded failed:", normalizeErrorMessage(error));
+  }
+}
 
 function register(): void {
   stopProfileAccountListener ??= codexProfile.onProfileAccountChanged(() =>
@@ -142,13 +156,18 @@ function register(): void {
         ? payload.mode
         : null;
     if (!query || !mode) return [];
-    try {
-      await dropData.ensureLoaded();
-    } catch (error) {
-      log.warn("[Drops] ensureLoaded failed:", normalizeErrorMessage(error));
-    }
+    await ensureDropData();
     return dropData.searchDrops(query, mode);
   });
+
+  handleAuthorized(DROP_ITEM_SOURCES, assertMainRendererSender, async (_event, name: unknown) => {
+    const itemName = toNonEmptyString(name, 200);
+    if (!itemName) return [];
+    await ensureDropData();
+    return dropData.dropsForItem(itemName);
+  });
+
+  handleAuthorized(SPAWN_NODES_GET, assertMainRendererSender, () => getSpawnNodes());
 
   // window.confirm leaves renderer keyboard input dead on Windows after it
   // closes (Chromium bug), so destructive confirmations use the native dialog.
@@ -220,11 +239,18 @@ function register(): void {
   handleAuthorized(DB_GET_RELIC_DATABASE, assertMainRendererSender, () =>
     relicService.getRelicDatabase(),
   );
+  handleAuthorized(DB_GET_RELIC_DATA_INFO, assertMainRendererSender, () =>
+    relicService.getRelicDataInfo(),
+  );
 
   handleAuthorized(LINUX_DISPLAY_GET, assertMainRendererSender, () => linuxDisplay.info());
 
   handleAuthorized(LINUX_DISPLAY_SET, assertMainRendererSender, (_event, preference: unknown) =>
     linuxDisplay.applyPreference(preference),
+  );
+
+  handleAuthorized(LINUX_CAPTURE_SETUP, assertMainRendererSender, async () =>
+    linuxDisplay.usesCapturePortal() ? setUpLinuxCapture() : { state: "unsupported" as const },
   );
 
   onAuthorized(WINDOW_MINIMIZE, assertMainRendererSender, () => {

@@ -9,14 +9,20 @@ import { app, BrowserWindow, crashReporter, globalShortcut, powerMonitor } from 
 
 import * as linuxDisplay from "./services/linuxDisplayBackend";
 import { layerOutputRects, probeLayerShell } from "./services/layerShell";
+import { isOverlayToggleLaunch, secondLaunchAction, startupAction } from "./services/launchArgs";
+import { choosePasswordStore } from "./services/linuxKeyring";
 
-const DISPLAY_BACKEND = linuxDisplay.initialize(
-  app.getPath("userData"),
-  process.env,
-  process.platform,
-  app.getVersion(),
-  process.argv,
-);
+// Without a display backend a toggle launch skips the XWayland re-exec, so one key
+// press reaches the running instance once.
+const DISPLAY_BACKEND = isOverlayToggleLaunch(process.argv)
+  ? "auto"
+  : linuxDisplay.initialize(
+      app.getPath("userData"),
+      process.env,
+      process.platform,
+      app.getVersion(),
+      process.argv,
+    );
 // Ozone reads its platform before this script runs, so appendSwitch alone never
 // joins XWayland; re-exec once with the flag in argv instead.
 const OZONE_X11_ARG = "--ozone-platform=x11";
@@ -75,6 +81,7 @@ import * as wfmCatalog from "./services/wfmCatalog";
 import * as wfmSession from "./services/wfmSession";
 import * as wfmPresence from "./services/wfmPresence";
 import * as relicService from "./services/relicService";
+import * as relicDataUpdate from "./services/relicDataUpdate";
 import * as eeLogMonitor from "./services/eeLogMonitor";
 import * as rewardScanner from "./services/rewardScanner";
 import * as rewardOcrOnnx from "./services/rewardOcrOnnx";
@@ -108,6 +115,7 @@ import * as tradeNotificationIpc from "./ipc/tradeNotificationIpc";
 import * as notificationLogIpc from "./ipc/notificationLogIpc";
 import * as notificationChannelsIpc from "./ipc/notificationChannelsIpc";
 import * as marketAlertsIpc from "./ipc/marketAlertsIpc";
+import * as missionRewardsIpc from "./ipc/missionRewardsIpc";
 import * as inventorySelectionIpc from "./ipc/inventorySelectionIpc";
 import * as tradeWorkflow from "./ipc/tradeWorkflow";
 import * as tradeWorkbenchIpc from "./ipc/tradeWorkbenchIpc";
@@ -116,7 +124,7 @@ import * as popoutIpc from "./ipc/popoutIpc";
 import * as trayIpc from "./ipc/trayIpc";
 import { isQuitting, markQuitting, shouldHideOnClose } from "./services/appLifecycle";
 import { applyMainWindowZoom } from "./ipc/mainWindowZoom";
-import { assertMainRendererSender, handleAuthorized } from "./ipc/ipcSecurity";
+import { assertMainRendererSender, handleAuthorized, invokeTimingSummary } from "./ipc/ipcSecurity";
 import {
   HELPER_GET_STATUS,
   HELPER_RUN_NOW,
@@ -124,6 +132,7 @@ import {
   HELPER_DOWNLOAD_PROGRESS,
   INVENTORY_UPDATED,
   ITEM_DB_UPDATED,
+  RELIC_DB_UPDATED,
   ARBI_RUN_SAVED,
   PT_RUN_SAVED,
   WARFRAME_UI_SCALE_UPDATED,
@@ -175,7 +184,7 @@ app.commandLine.appendSwitch("disable-lcd-text");
 
 // A wayland portal that never answers leaves getDisplayMedia pending; the X11 capturer
 // needs no portal. WFHELPER_PORTAL_CAPTURE=1 puts a portal-only compositor back on it.
-if (DISPLAY_BACKEND === "x11" && process.env.WFHELPER_PORTAL_CAPTURE !== "1") {
+if (DISPLAY_BACKEND === "x11" && !linuxDisplay.usesCapturePortal()) {
   app.commandLine.appendSwitch("disable-features", "WebRTCPipeWireCapturer");
 }
 const GPU_ACCELERATION_ENABLED = process.env.WFHELPER_ENABLE_GPU === "1";
@@ -199,13 +208,27 @@ process.on("unhandledRejection", (reason: unknown) => {
 const MAIN_WINDOW_SHOW_GRACE_MS = 2_000;
 const MAIN_WINDOW_SHOW_DEADLINE_MS = 15_000;
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
-if (!hasSingleInstanceLock) {
+const startup = startupAction(process.argv, app.requestSingleInstanceLock());
+const hasSingleInstanceLock = startup === "start";
+// Only the instance that starts pays for the bus probe; toggle and second launches exit.
+const PASSWORD_STORE = hasSingleInstanceLock
+  ? choosePasswordStore(process.platform, process.argv, process.env)
+  : null;
+if (PASSWORD_STORE?.store) app.commandLine.appendSwitch("password-store", PASSWORD_STORE.store);
+if (startup === "exit-quietly") {
+  app.exit(0);
+} else if (startup === "quit") {
   app.quit();
 } else {
   // A second launch means "bring the app up", so a destroyed window is recreated.
   app.on("second-instance", (_event, argv) => {
-    if (!argv.includes("--warframe-auto-launch")) revealMainWindow();
+    const action = secondLaunchAction(argv);
+    if (action === "reveal") revealMainWindow();
+    if (action !== "toggle-overlay-interaction") return;
+    const mode = overlayIpc.toggleOverlayInteractionMode("launch-flag");
+    log.info(
+      `[Main] toggle launch: ${mode === null ? "no overlay on screen" : mode ? "interactive" : "click-through"}`,
+    );
   });
 }
 
@@ -273,12 +296,25 @@ function createWindow(): void {
   // forever, so first load and a hard deadline show it too.
   let mainWindowShowTimer: ReturnType<typeof setTimeout> | null = null;
   let windowShown = false;
+  let maximizePending = false;
   const showMainWindow = (via: string): void => {
     if (windowShown || mainWindow.isDestroyed()) return;
     windowShown = true;
     if (mainWindowShowTimer) clearTimeout(mainWindowShowTimer);
     mainWindowShowTimer = null;
     if (via !== "ready-to-show") log.warn(`[Main] window shown via ${via} fallback`);
+    if (process.argv.includes("--warframe-auto-launch")) {
+      // maximize() on Windows shows the window active, so it waits for the player.
+      mainWindow.showInactive();
+      if (savedState?.maximized) {
+        maximizePending = true;
+        mainWindow.once("focus", () => {
+          maximizePending = false;
+          mainWindow.maximize();
+        });
+      }
+      return;
+    }
     if (savedState?.maximized) mainWindow.maximize();
     mainWindow.show();
   };
@@ -308,14 +344,14 @@ function createWindow(): void {
   let stateSaveTimer: ReturnType<typeof setTimeout> | null = null;
   const queueStateSave = (): void => {
     if (stateSaveTimer) clearTimeout(stateSaveTimer);
-    stateSaveTimer = setTimeout(() => saveMainWindowState(mainWindow), 1000);
+    stateSaveTimer = setTimeout(() => saveMainWindowState(mainWindow, maximizePending), 1000);
   };
   mainWindow.on("move", queueStateSave);
   mainWindow.on("resize", queueStateSave);
   mainWindow.on("close", (event) => {
     if (stateSaveTimer) clearTimeout(stateSaveTimer);
     stateSaveTimer = null;
-    saveMainWindowState(mainWindow);
+    saveMainWindowState(mainWindow, maximizePending);
     if (!keepRunningInTray()) return;
     event.preventDefault();
     mainWindow.hide();
@@ -405,6 +441,7 @@ function logStartupPaths(profileStage: ProfileStage): void {
       `[Startup] display=${DISPLAY_BACKEND} gpu=${GPU_ACCELERATION_ENABLED ? "on" : "off"}` +
         ` tiling=${linuxDisplay.isTilingCompositor()}`,
     );
+    if (PASSWORD_STORE) log.info(`[Startup] keyring: ${PASSWORD_STORE.summary}`);
   }
   reportSessionHealth(profileStage);
 }
@@ -510,6 +547,7 @@ function registerIpcHandlers(profileStage: ProfileStage): void {
   tradeLedgerIpc.register();
   popoutIpc.register();
   inventorySelectionIpc.register();
+  missionRewardsIpc.register();
 
   const attachInventoryAfterHelperRun = (ok: boolean) => {
     if (!ok || ctx.currentInventoryPath || inventoryIpc.getInventorySource() !== "helper") return;
@@ -677,6 +715,16 @@ function initGameMonitoring(profileStage: ProfileStage): void {
   profileStage("relic-reward-items:prepare", rewardItemsStart);
 }
 
+function onRelicDataUpdated(): void {
+  try {
+    rewardScanner.setRelicItems(relicService.getRelicRewardItems());
+  } catch (err) {
+    log.error("[RewardScanner] Failed to load relic items:", (err as Error).message);
+  }
+  rewardOverlayIpc.onRelicDatabaseChanged();
+  popoutIpc.broadcastToRenderers(RELIC_DB_UPDATED);
+}
+
 void app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   const startupStartedAt = Date.now();
@@ -690,12 +738,15 @@ void app.whenReady().then(async () => {
   logStartupPaths(profileStage);
   initTrackersAndSettings(profileStage);
   registerIpcHandlers(profileStage);
-  initDataSources(profileStage);
 
+  // The renderer loads while the item DB builds. Its invokes queue until this
+  // callback returns and nothing here yields, so no handler sees an unbuilt DB.
   const windowStart = Date.now();
   createWindow();
   profileStage("window:create", windowStart);
   watchRendererBuild(MAIN_WINDOW_ENTRY_FILE);
+
+  initDataSources(profileStage);
 
   if (DISPLAY_BACKEND === "x11") {
     if (XWAYLAND_REEXEC_FAILED) {
@@ -762,14 +813,10 @@ void app.whenReady().then(async () => {
   startOverlayHotkeyGate();
   profileStage("overlay-hotkey:register", hotkeyStart);
 
-  // Keep prewarming off the first-paint path.
+  // Keep prewarming off the first-paint path; the hotkey gate warms on game start.
   setTimeout(() => {
-    if (isQuitting()) return;
-    try {
-      rewardOverlayIpc.warmPlannerOverlayWindow();
-    } catch (err) {
-      log.warn("[Overlay] planner pre-warm failed:", err);
-    }
+    _plannerWarmArmed = true;
+    if (_hotkeyGameActive) warmPlannerOverlay();
   }, 4000).unref();
 
   // Load Paddle before the first reward scan needs it.
@@ -777,6 +824,12 @@ void app.whenReady().then(async () => {
     if (isQuitting()) return;
     void rewardOcrOnnx.warmupRewardStripOnnx();
   }, 6000).unref();
+
+  // Newer relic data replaces the bundled relics; the 4.9 MB parse stays off first paint.
+  setTimeout(() => {
+    if (isQuitting()) return;
+    void relicDataUpdate.startRelicDataUpdates(onRelicDataUpdated);
+  }, 5000).unref();
 
   initGameMonitoring(profileStage);
 
@@ -798,6 +851,16 @@ app.on("window-all-closed", () => {
 // Release global shortcuts when Warframe exits so they do not affect other apps.
 let _hotkeyGateTimer: ReturnType<typeof setInterval> | null = null;
 let _hotkeyGameActive = false;
+let _plannerWarmArmed = false;
+
+function warmPlannerOverlay(): void {
+  if (isQuitting()) return;
+  try {
+    rewardOverlayIpc.warmPlannerOverlayWindow();
+  } catch (err) {
+    log.warn("[Overlay] planner pre-warm failed:", err);
+  }
+}
 
 async function syncOverlayHotkeyGate(): Promise<void> {
   try {
@@ -806,6 +869,7 @@ async function syncOverlayHotkeyGate(): Promise<void> {
     _hotkeyGameActive = isOpen;
     overlayIpc.setOverlayHotkeysActive(isOpen);
     void wfmPresence.syncGameRunning(isOpen);
+    if (isOpen && _plannerWarmArmed) warmPlannerOverlay();
   } catch {
     // best effort; keep the gate in its current state
   }
@@ -850,7 +914,9 @@ app.on("before-quit", (event) => {
   inventoryIpc.stopInventoryWatcher();
   apiHelperRunner.stopPolling();
   eeLogMonitor.stopWatching();
+  missionRewardsIpc.stop();
   marketAlerts.stopMarketAlerts();
+  relicDataUpdate.stopRelicDataUpdates();
   stopOverlayHotkeyGate();
   stopWarframeLifecycle();
   overlayIpc.unregisterOverlayHotkey();
@@ -878,6 +944,8 @@ function endSessionAndTray(): void {
 
 app.on("will-quit", () => {
   endSessionAndTray();
+  const ipcTiming = invokeTimingSummary();
+  if (ipcTiming) log.info(ipcTiming);
   try {
     globalShortcut.unregisterAll();
   } catch {

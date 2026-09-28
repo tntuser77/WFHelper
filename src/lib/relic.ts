@@ -1,9 +1,8 @@
-/** Barrel re-exports for `src/lib/relic/` - keeps `./relic.js` imports working. */
+/** Barrel re-exports for `src/lib/relic/`, keeping `./relic.js` imports working. */
 
 export {
   RELIC_ICON_PATHS,
   RELIC_QUALITY_SHORT_KEY,
-  RELIC_TIER_ORDER,
   QUALITY_MODES,
   fissureTierClass,
   highestOwnedQuality,
@@ -13,7 +12,7 @@ export {
   relicGroupMatchesSearch,
   relicGroupHasMatchingReward,
   buildRelicSearchKeywordIndex,
-} from "./relic/relicSearch.js";
+} from "../../config/shared/relicSearch.js";
 
 export { parseOwnedRelics, relicGroupForUniqueName } from "./relic/relicInventory.js";
 

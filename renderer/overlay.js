@@ -1,4 +1,9 @@
 const SLOTS = 4;
+const MAX_SET_PARTS = 6;
+const SET_PART_COUNT_FIELDS = Array.from(
+  { length: MAX_SET_PARTS },
+  (_, part) => `part${part}Count`,
+);
 const params = new URLSearchParams(window.location.search);
 const mode = params.get("mode");
 const planner = mode === "planner" || (mode === "editor" && params.get("kind") === "planner");
@@ -173,7 +178,7 @@ function partTooltip(part) {
 }
 
 function appendSetParts(container, parts) {
-  const visibleParts = Array.isArray(parts) ? parts.filter(Boolean).slice(0, 6) : [];
+  const visibleParts = Array.isArray(parts) ? parts.filter(Boolean).slice(0, MAX_SET_PARTS) : [];
   if (visibleParts.length === 0) return;
 
   const row = document.createElement("div");
@@ -323,6 +328,14 @@ function renderSlot(index) {
     appendMetaChip(metaEl, t("overlay.reward.setPrice", { value }), "set-price");
   }
 
+  if (typeof item.vaulted === "boolean") {
+    appendMetaChip(
+      metaEl,
+      t(item.vaulted ? "common.vaulted" : "common.unvaulted"),
+      `vault-tag ${item.vaulted ? "vaulted" : "unvaulted"}`,
+    );
+  }
+
   appendSetParts(metaEl, item.setParts);
 }
 
@@ -397,7 +410,7 @@ function showPlannerHint(show) {
   renderPlannerHint();
 }
 
-let dragHintInfo = { hotkey: null, dismissed: true };
+let dragHintInfo = { hotkey: null, dismissed: true, viaSettings: false };
 
 function prettyHotkey(hotkey) {
   return String(hotkey || "")
@@ -410,8 +423,13 @@ function renderPlannerHint() {
   const hint = plannerHintElement();
   if (!hint) return;
   const label = prettyHotkey(dragHintInfo.hotkey);
-  hint.textContent = label ? t("overlay.hint.interactPanel", { hotkey: label }) : "";
-  hint.classList.toggle("is-hidden", !plannerHintWanted || !label);
+  const text = dragHintInfo.viaSettings
+    ? t("overlay.hint.interactViaSettings")
+    : label
+      ? t("overlay.hint.interactPanel", { hotkey: label })
+      : "";
+  hint.textContent = text;
+  hint.classList.toggle("is-hidden", !plannerHintWanted || !text);
 }
 
 function updateDragHint() {
@@ -425,9 +443,11 @@ function updateDragHint() {
   } else if (!dragHintInfo.dismissed) {
     text = overlayInteractiveMode
       ? t("overlay.hint.dragToMove")
-      : hotkeyLabel
-        ? t("overlay.hint.unlockThenDrag", { hotkey: hotkeyLabel })
-        : "";
+      : dragHintInfo.viaSettings
+        ? t("overlay.hint.settingsThenDrag")
+        : hotkeyLabel
+          ? t("overlay.hint.unlockThenDrag", { hotkey: hotkeyLabel })
+          : "";
   }
 
   hint.textContent = text;
@@ -705,7 +725,7 @@ async function applyRewardItems(payload) {
         slotState[slot].price = 0;
         const setPrice = item?.setUrlName ? await fetchPrice(item.setUrlName) : 0;
         if (generation !== rewardGeneration) return;
-        slotState[slot].setPrice = setPrice;
+        slotState[slot].setPrice = setPrice ?? 0;
         renderSlot(slot);
         return;
       }
@@ -737,6 +757,7 @@ async function applyRewardItems(payload) {
                 partOwnedCount: item.partOwnedCount ?? 0,
                 partRequiredCount: item.partRequiredCount ?? 0,
                 ...(typeof item.mastered === "boolean" ? { mastered: item.mastered } : {}),
+                ...(typeof item.vaulted === "boolean" ? { vaulted: item.vaulted } : {}),
                 building: item.building === true,
                 setOwnedCount: item.setOwnedCount ?? 0,
                 setRequiredCount: item.setRequiredCount ?? 0,
@@ -780,6 +801,18 @@ function tag(root, selector, field) {
   if (element) element.dataset.rewardField = field;
 }
 
+// Inline chips whose row closes up when one is moved; every other card field is a
+// block that keeps its space and is drawn at its moved spot.
+const REWARD_CHIP_FIELDS = [
+  "rarity",
+  "owned",
+  "mastery",
+  "foundry",
+  "setOwned",
+  "setPrice",
+  "vaulted",
+];
+
 function tagRewardFields() {
   for (const card of document.querySelectorAll(".reward-slot")) {
     for (const [selector, field] of Object.entries({
@@ -796,6 +829,7 @@ function tagRewardFields() {
       ".slot-meta-chip.building": "foundry",
       ".slot-meta-chip.set": "setOwned",
       ".slot-meta-chip.set-price": "setPrice",
+      ".slot-meta-chip.vault-tag": "vaulted",
     }))
       tag(card, selector, field);
     const parts = card.querySelectorAll(".slot-set-part");
@@ -841,8 +875,12 @@ function startOverlay() {
     rewardLayoutEditor = window.installOverlayLayout({
       tagFields: tagRewardFields,
       fitWidthFields: ["itemName", "errorText"],
-      fitOneLineFields: ["itemName"],
+      fitOneLineFields: ["itemName", ...SET_PART_COUNT_FIELDS],
+      fitCompactFor: (element) => element.closest(".slot-set-part"),
       boundsFor: (element) => element.closest(".reward-slot"),
+      cardFor: (element) => element.closest(".reward-slot"),
+      cardIndex: (card) => Number(card.dataset.slot),
+      chipFields: REWARD_CHIP_FIELDS,
       ...(mode === "editor" ? { defaultFieldStyle: window.overlay.defaultFieldStyle } : {}),
       renderPreview: renderRewardPreview,
       resetPreview: () => {
@@ -912,6 +950,63 @@ function renderPlannerPreview(state) {
   showPlannerHint(true);
 }
 
+const PREVIEW_PART_NAMES = ["Blueprint", "Barrel", "Receiver", "Stock", "Blade", "Handle"];
+const PREVIEW_RARITIES = ["rare", "common", "uncommon", "common"];
+const PREVIEW_DUCATS = [100, 15, 45, 15];
+const PREVIEW_MIXED_PART_COUNTS = [3, 0, 3, 4];
+const PREVIEW_MIXED_PART_OWNED = [1, 20, 1000, 999999];
+
+function previewItemName(index, mixed) {
+  if (index === 0) return mixed ? "Sevagoth Prime Neuroptics Blueprint" : "Braton Prime Receiver";
+  return ["", "Forma Blueprint", "Lex Prime Barrel", "Paris Prime String"][index];
+}
+
+function rewardPreviewSlot(index, variant) {
+  const missing = variant === "missing";
+  const mixed = variant === "mixed";
+  // Forma Blueprint builds into no tradable set, is worth no ducats and is never vaulted.
+  const forma = index === 1;
+  const partCount = missing || forma ? 0 : mixed ? PREVIEW_MIXED_PART_COUNTS[index] : MAX_SET_PARTS;
+  const item = {
+    name: previewItemName(index, mixed),
+    rarity: PREVIEW_RARITIES[index],
+    ducats: missing || forma ? 0 : PREVIEW_DUCATS[index],
+    partOwnedCount: index,
+    partRequiredCount: 1,
+    ...(forma ? {} : { vaulted: index % 2 === 0 }),
+  };
+  const price = missing ? 0 : mixed ? [245, 0, 18, 9][index] : [42, 0, 18, 9][index];
+  if (partCount < 2) return { item, price, setPrice: 0 };
+
+  const rewardPart = mixed ? (index === 0 ? 0 : partCount - 1) : index;
+  const setParts = Array.from({ length: partCount }, (_, part) => ({
+    name: PREVIEW_PART_NAMES[part],
+    ownedCount: mixed ? PREVIEW_MIXED_PART_OWNED[part] : part % 2,
+    requiredCount: 1,
+    isReward: part === rewardPart,
+    building: part === 2,
+  }));
+  const reward = setParts[rewardPart];
+  return {
+    item: {
+      ...item,
+      partOwnedCount: reward.ownedCount,
+      partRequiredCount: reward.requiredCount,
+      mastered: index % 2 === 0,
+      ...(reward.building ? { building: true } : {}),
+      setOwnedCount: setParts.reduce(
+        (total, part) => total + Math.min(part.ownedCount, part.requiredCount),
+        0,
+      ),
+      setRequiredCount: setParts.reduce((total, part) => total + part.requiredCount, 0),
+      setUrlName: "preview",
+      setParts,
+    },
+    price,
+    setPrice: mixed && index === 0 ? 620 : 120,
+  };
+}
+
 function renderRewardPreview(state) {
   showRewardModeScanning();
   setOverlayInteractiveMode(true);
@@ -934,45 +1029,8 @@ function renderRewardPreview(state) {
     updateBestPick();
     return;
   }
-  const names = [
-    state.previewVariant === "mixed"
-      ? "Sevagoth Prime Neuroptics Blueprint"
-      : "Braton Prime Receiver",
-    "Forma Blueprint",
-    "Lex Prime Barrel",
-    "Paris Prime String",
-  ];
   for (let index = 0; index < state.previewCount; index += 1) {
-    const missing = state.previewVariant === "missing";
-    const mixed = state.previewVariant === "mixed";
-    const partCount = missing ? 0 : mixed ? [3, 0, 3, 4][index] : 6;
-    slotState[index] = {
-      item: {
-        name: names[index],
-        rarity: ["rare", "common", "uncommon", "common"][index],
-        ducats: missing || (mixed && index === 1) ? 0 : [100, 15, 45, 15][index],
-        ...(!partCount
-          ? {}
-          : {
-              partOwnedCount: index,
-              partRequiredCount: 2,
-              mastered: index % 2 === 0,
-              building: true,
-              setOwnedCount: 2,
-              setRequiredCount: partCount,
-              setUrlName: "preview",
-              setParts: Array.from({ length: partCount }, (_, part) => ({
-                name: ["Blueprint", "Barrel", "Receiver", "Stock", "Blade", "Handle"][part],
-                ownedCount: mixed ? [1, 20, 1000, 999999][part] : part % 2,
-                requiredCount: 1,
-                isReward: part === (mixed ? (index === 0 ? 0 : partCount - 1) : index),
-                building: part === 2,
-              })),
-            }),
-      },
-      price: missing ? 0 : mixed ? [245, 0, 18, 9][index] : [42, 0, 18, 9][index],
-      setPrice: !partCount ? 0 : mixed && index === 0 ? 620 : 120,
-    };
+    slotState[index] = rewardPreviewSlot(index, state.previewVariant);
     renderSlot(index);
   }
   bestPlaceholderKey = "overlay.reward.noPricedRewards";
@@ -1051,6 +1109,7 @@ document.addEventListener("DOMContentLoaded", () => {
       dragHintInfo = {
         hotkey: info && typeof info.hotkey === "string" ? info.hotkey : null,
         dismissed: !info || info.dismissed !== false,
+        viaSettings: info?.viaSettings === true,
       };
       updateDragHint();
       renderPlannerHint();

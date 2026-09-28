@@ -3,7 +3,12 @@ import path from "node:path";
 
 import { test, expect } from "@playwright/test";
 
-import { launchElectronTestHarness, openView, selectOptionValues } from "./electronTestHarness";
+import {
+  closeElectronTestHarness,
+  launchElectronTestHarness,
+  openView,
+  selectOptionValues,
+} from "./electronTestHarness";
 
 const SEED_RULE_ID = "seed-riven-rule";
 
@@ -31,7 +36,19 @@ const SEEDED_RULES = {
 
 test("the riven alert editor offers stat layouts and clamps the rank fields", async () => {
   const harness = await launchElectronTestHarness("wfh-alert-editor-", {
-    userDataFiles: { "market-alert-rules.json": SEEDED_RULES },
+    userDataFiles: {
+      "market-alert-rules.json": SEEDED_RULES,
+      // /v1/snapshot allows 2 requests a minute per IP, so in a suite run its 429 logs
+      // a console error, sometimes after the listener below is attached. A fresh
+      // cache means startup never fetches it.
+      "snapshot-cache.json": {
+        version: 1,
+        generatedAt: Date.now(),
+        prices: {},
+        meta: {},
+        orderSummaries: {},
+      },
+    },
   });
   const page = harness.page;
   const rendererErrors: string[] = [];
@@ -95,10 +112,27 @@ test("the riven alert editor offers stat layouts and clamps the rank fields", as
     await mastery.fill("99");
     await expect(mastery).toHaveValue("16");
 
+    const sellerStatus = editor.locator('[data-alert-seller-status="riven"]');
+    const anySeller = sellerStatus.locator('[data-status="all"]');
+    const online = sellerStatus.locator('[data-status="online"]');
+    const inGame = sellerStatus.locator('[data-status="ingame"]');
+    await expect(anySeller).toBeChecked();
+    await online.check();
+    await expect(anySeller).not.toBeChecked();
+    await online.uncheck();
+    await expect(anySeller).toBeChecked();
+    await inGame.check();
+    await online.check();
+    await anySeller.check();
+    await expect(inGame).not.toBeChecked();
+    await expect(online).not.toBeChecked();
+    await anySeller.click();
+    await expect(anySeller).toBeChecked();
+    await page.screenshot({ path: test.info().outputPath("alert-seller-status-picker.png") });
+
     expect(rendererErrors).toEqual([]);
   } finally {
-    await harness.app.close();
-    fs.rmSync(harness.sandboxDir, { recursive: true, force: true });
+    await closeElectronTestHarness(harness);
   }
 });
 
@@ -152,8 +186,7 @@ test("the card's no cooldown toggle persists and mutes the minutes field", async
     await editorToggle.uncheck();
     await expect(minutes).toBeEnabled();
   } finally {
-    await harness.app.close();
-    fs.rmSync(harness.sandboxDir, { recursive: true, force: true });
+    await closeElectronTestHarness(harness);
   }
 });
 
@@ -240,7 +273,8 @@ test("the hit history narrows by who was around, without changing the search", a
     expect(await selectOptionValues(filter)).toEqual(["all", "online", "ingame"]);
 
     await filter.selectOption("online");
-    await expect(rows).toHaveCount(2);
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText("OnlineSeller");
     await filter.selectOption("ingame");
     await expect(rows).toHaveCount(1);
     await expect(rows.first()).toContainText("InGameSeller");
@@ -249,8 +283,7 @@ test("the hit history narrows by who was around, without changing the search", a
     await filter.selectOption("all");
     await expect(rows).toHaveCount(4);
   } finally {
-    await harness.app.close();
-    fs.rmSync(harness.sandboxDir, { recursive: true, force: true });
+    await closeElectronTestHarness(harness);
   }
 });
 
@@ -276,7 +309,6 @@ test("a history with no recorded presence says so instead of claiming it is empt
     expect(await empty.innerText()).not.toContain("recorded yet");
     expect(await empty.innerText()).not.toContain("marketAlerts.");
   } finally {
-    await harness.app.close();
-    fs.rmSync(harness.sandboxDir, { recursive: true, force: true });
+    await closeElectronTestHarness(harness);
   }
 });

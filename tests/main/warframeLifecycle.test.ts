@@ -17,6 +17,8 @@ const h = vi.hoisted(() => ({
   pids: vi.fn(),
   session: vi.fn((_pid: number): number | null => 1),
   exe: vi.fn(),
+  commandLines: new Map<number, { status: string; commandLine?: string }>(),
+  readCommandLine: vi.fn(),
   packaged: false,
   spawnError: false,
   failWrite: false,
@@ -54,8 +56,20 @@ vi.mock("../../services/win32Process", () => ({
   enumProcessNames: h.pids,
   getProcessSessionId: h.session,
   queryExePath: h.exe,
+  queryCommandLine: h.readCommandLine,
   isWarframeExePath: (file: string) => file.toLowerCase().endsWith("\\warframe.x64.exe"),
 }));
+
+const GAME = {
+  status: "ok",
+  commandLine:
+    '"C:\\Warframe\\Warframe.x64.exe" -windowMode:2 -graphicsDriver:dx12 -cluster:public -clienttype:Steam',
+};
+const APPLET = {
+  status: "ok",
+  commandLine:
+    '"C:\\Warframe\\Warframe.x64.exe" -silent -log:/Preprocess.log -graphicsDriver:dx12 -applet:/EE/Types/Framework/ContentUpdate',
+};
 
 type Lifecycle = typeof import("../../services/warframeLifecycle");
 let lifecycle: Lifecycle;
@@ -132,6 +146,8 @@ beforeEach(async () => {
     });
     return child;
   });
+  h.commandLines.clear();
+  h.readCommandLine.mockImplementation((pid: number) => h.commandLines.get(pid) ?? GAME);
   gameRunning(false);
   lifecycle = await import("../../services/warframeLifecycle");
 });
@@ -191,11 +207,13 @@ describe("Warframe lifecycle", () => {
       appPid: process.pid,
       exitGraceMs: 10_000,
     });
+    // A detached powershell.exe exits at once without running the watcher.
     expect(h.spawn).toHaveBeenCalledWith(
-      expect.stringContaining("powershell.exe"),
-      expect.arrayContaining(["-WindowStyle", "Hidden", "-ConfigPath", configPath]),
+      expect.stringContaining("conhost.exe"),
+      expect.arrayContaining(["--headless", "-WindowStyle", "Hidden", "-ConfigPath", configPath]),
       { windowsHide: true, detached: true, stdio: "ignore" },
     );
+    expect(h.spawn.mock.calls[0]?.[1]?.[1]).toContain("powershell.exe");
     expect(h.login).toHaveBeenCalledWith({
       name: LEGACY_TASK,
       openAtLogin: false,
@@ -256,7 +274,7 @@ describe("Warframe lifecycle", () => {
     expect(h.warn).not.toHaveBeenCalled();
   });
 
-  it("shares the process snapshot with status callers without opening processes", async () => {
+  it("shares the process snapshot with status callers and reads the game command line once per sample", async () => {
     gameRunning(true);
     lifecycle.startWarframeLifecycle(quit);
     await lifecycle.configureWarframeLifecycle(true);
@@ -264,10 +282,87 @@ describe("Warframe lifecycle", () => {
     expect(status.getWarframeProcessState()).toBe(true);
     expect(h.pids).toHaveBeenCalledTimes(1);
     expect(h.exe).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(2000);
+    // Two 2 s ticks and a 3 s hotkey-gate read all fall inside one sample.
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(status.getWarframeProcessState()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.pids).toHaveBeenCalledTimes(1);
+    expect(h.readCommandLine).toHaveBeenCalledExactlyOnceWith(10);
+    await vi.advanceTimersByTimeAsync(1000);
     expect(status.getWarframeProcessState()).toBe(true);
     expect(h.pids).toHaveBeenCalledTimes(2);
     expect(h.exe).not.toHaveBeenCalled();
+    expect(h.readCommandLine.mock.calls).toEqual([[10], [10]]);
+  });
+
+  it("counts a Warframe.x64 process as the game only without -applet:", async () => {
+    h.commandLines.set(30, APPLET);
+    h.pids.mockReturnValue([{ pid: 30, name: "Warframe.x64.exe" }]);
+    const status = await import("../../services/warframeStatus");
+    expect(status.getWarframeProcessState(true)).toBe(false);
+    h.pids.mockReturnValue([
+      { pid: 30, name: "Warframe.x64.exe" },
+      { pid: 40, name: "Warframe.x64.exe" },
+    ]);
+    expect(status.getWarframeProcessState(true)).toBe(true);
+  });
+
+  it("reads each candidate again on every sample and forgets an exited game", async () => {
+    h.commandLines.set(30, APPLET);
+    h.pids.mockReturnValue([{ pid: 30, name: "Warframe.x64.exe" }]);
+    const status = await import("../../services/warframeStatus");
+    expect(status.getWarframeProcessState(true)).toBe(false);
+    expect(status.getWarframeProcessState(true)).toBe(false);
+    expect(h.readCommandLine).toHaveBeenCalledTimes(2);
+    // The applet's pid is reused by the game.
+    h.commandLines.set(30, GAME);
+    expect(status.getWarframeProcessState(true)).toBe(true);
+    expect(status.getWarframeProcessState(true)).toBe(true);
+    expect(h.readCommandLine).toHaveBeenCalledTimes(4);
+    h.pids.mockReturnValue([]);
+    expect(status.getWarframeProcessState(true)).toBe(false);
+    h.commandLines.set(30, APPLET);
+    h.pids.mockReturnValue([{ pid: 30, name: "Warframe.x64.exe" }]);
+    expect(status.getWarframeProcessState(true)).toBe(false);
+    expect(h.readCommandLine).toHaveBeenCalledTimes(5);
+  });
+
+  it("drops a game whose pid an applet took over before any sample missed it", async () => {
+    h.pids.mockReturnValue([{ pid: 30, name: "Warframe.x64.exe" }]);
+    const status = await import("../../services/warframeStatus");
+    expect(status.getWarframeProcessState(true)).toBe(true);
+    h.commandLines.set(30, { status: "unreadable" });
+    expect(status.getWarframeProcessState(true)).toBe(true);
+    h.commandLines.set(30, APPLET);
+    expect(status.getWarframeProcessState(true)).toBe(false);
+    h.commandLines.set(30, GAME);
+    expect(status.getWarframeProcessState(true)).toBe(true);
+    h.commandLines.set(30, { status: "exiting" });
+    expect(status.getWarframeProcessState(true)).toBe(false);
+  });
+
+  it.each([
+    ["unreadable", true],
+    ["exiting", false],
+  ])(
+    "treats a Warframe.x64 process whose command line is %s as running=%s",
+    async (kind, running) => {
+      h.commandLines.set(30, { status: kind });
+      h.pids.mockReturnValue([{ pid: 30, name: "Warframe.x64.exe" }]);
+      const status = await import("../../services/warframeStatus");
+      expect(status.getWarframeProcessState(true)).toBe(running);
+    },
+  );
+
+  it("keeps a running app open when only the launcher's content-update applet came and went", async () => {
+    h.commandLines.set(30, APPLET);
+    h.pids.mockReturnValue([{ pid: 30, name: "Warframe.x64.exe" }]);
+    lifecycle.startWarframeLifecycle(quit);
+    await lifecycle.configureWarframeLifecycle(true);
+    await vi.advanceTimersByTimeAsync(6000);
+    gameRunning(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(quit).not.toHaveBeenCalled();
   });
 
   it("refreshes the process sample when status is forced inside the cache TTL", async () => {
@@ -314,7 +409,8 @@ describe("Warframe lifecycle", () => {
     lifecycle.startWarframeLifecycle(quit);
     await lifecycle.configureWarframeLifecycle(true);
     gameRunning(false);
-    await vi.advanceTimersByTimeAsync(10_000);
+    // The sample taken at 0 s is served until 5 s, so the 6 s tick sees the exit.
+    await vi.advanceTimersByTimeAsync(14_000);
     expect(quit).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(2000);
     expect(quit).toHaveBeenCalledOnce();
@@ -327,14 +423,14 @@ describe("Warframe lifecycle", () => {
     lifecycle.startWarframeLifecycle(quit);
     await lifecycle.configureWarframeLifecycle(true);
     gameRunning(false);
-    await vi.advanceTimersByTimeAsync(8000);
+    await vi.advanceTimersByTimeAsync(6000);
     if (scan === "present") gameRunning(true);
     else h.pids.mockReturnValue(null);
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(6000);
     gameRunning(false);
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     expect(quit).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(1000);
     expect(quit).toHaveBeenCalledOnce();
   });
 

@@ -4,6 +4,7 @@ import {
   assertLocalizedOverlaySender,
   assertMainRendererSender,
   assertOverlayRendererSender,
+  assertRivenOverlayRendererSender,
   handleAuthorized,
   onAuthorized,
 } from "./ipcSecurity";
@@ -12,7 +13,9 @@ import { createTray, destroyTray, isTrayActive } from "./trayIpc";
 import { disposeAppHotkeys, overlayHotkeyBackend } from "./hotkeyRegistry";
 import { createOverlaySettingsController } from "./overlay/settings";
 import { moveOverlayWindowBy } from "./overlay/windows";
-import { hideTradeNotification } from "./tradeNotificationIpc";
+import { broadcastToRenderers } from "./popoutIpc";
+import { returnFocusToWarframe } from "./overlay/zOrder";
+import { getTradeNotificationPlacementRect, hideTradeNotification } from "./tradeNotificationIpc";
 import { writeFileAtomicSync } from "../services/atomicFile";
 import { userDataPath } from "../services/userDataPath";
 import { asRecord } from "../config/shared/objectValidation";
@@ -26,6 +29,7 @@ import * as rewardOverlayIpc from "./rewardOverlayIpc";
 import * as arbiOverlayIpc from "./arbiOverlayIpc";
 import * as arbiRunTracker from "../services/arbiRunTracker";
 import * as ptRunTracker from "../services/profitTakerTracker";
+import * as missionRewards from "../services/missionRewards";
 import * as wfmPresence from "../services/wfmPresence";
 import * as inventorySync from "../services/inventorySync";
 import { setOcrDebugDumpsEnabled } from "../services/rewardScanDebug";
@@ -35,16 +39,17 @@ import {
   isRelicRecommendationOverlayEnabled,
   isRelicRewardsOverlayEnabled,
   isRivenOverlayEnabled,
+  isScalableOverlayWindow,
   isTradeNotificationOverlayEnabled,
   OVERLAY_SETTINGS_DEFAULTS,
   OVERLAY_SETTINGS_FILE_NAME,
   OVERLAY_WINDOW_KEYS,
+  overlaysStartInteractive,
   type OverlaySettings,
   type OverlayWindowKey,
 } from "../config/runtime/overlaySettings";
 import { clampNumber } from "../config/shared/numeric";
 import {
-  OVERLAY_INTERACTION_MODE,
   OVERLAY_THEME_VARS,
   OVERLAY_GET_SETTINGS,
   OVERLAY_GET_DETECTED_UI_SCALE,
@@ -59,6 +64,8 @@ import {
   OVERLAY_PLACEMENT_LAYOUT,
   OVERLAY_SAVE_PLACEMENT,
   OVERLAY_SAVE_SCALE,
+  RIVEN_SET_SIMILAR_AUCTIONS,
+  RIVEN_SIMILAR_AUCTIONS,
 } from "../config/shared/ipcChannels";
 import {
   OVERLAY_FORWARDED_COLOR_VARS,
@@ -73,14 +80,6 @@ const log = withScope("overlayIpc");
 
 import { app, BrowserWindow, screen, type WebContents } from "electron";
 import fs from "node:fs";
-
-function pushOverlayInteractionMode(): void {
-  const payload = {
-    interactive: !!ctx.overlayInteractiveMode,
-  };
-  rewardOverlayIpc.rewardWindowsController.sendOverlayEvent(OVERLAY_INTERACTION_MODE, payload);
-  rewardOverlayIpc.plannerWindowsController.sendOverlayEvent(OVERLAY_INTERACTION_MODE, payload);
-}
 
 async function bringOverlayToWarframeDisplayIfAvailable(): Promise<void> {
   try {
@@ -99,27 +98,39 @@ async function bringOverlayToWarframeDisplayIfAvailable(): Promise<void> {
   }
 }
 
-function setOverlayInteractionMode(enabled: boolean, source = "unknown"): void {
+function setOverlayInteractionMode(enabled: boolean, source = "unknown", focus = true): void {
   const rwc = rewardOverlayIpc.rewardWindowsController;
   const pwc = rewardOverlayIpc.plannerWindowsController;
   const next = !!enabled;
   const rewardExists = !!(ctx.overlayWindow && !ctx.overlayWindow.isDestroyed());
   const plannerExists = !!(ctx.plannerOverlayWindow && !ctx.plannerOverlayWindow.isDestroyed());
   if (ctx.overlayInteractiveMode === next && (rewardExists || plannerExists)) {
-    if (rewardExists) rwc.setOverlayInteractiveMode(next);
-    if (plannerExists) pwc.setOverlayInteractiveMode(next);
-    pushOverlayInteractionMode();
+    if (rewardExists) rwc.setOverlayInteractiveMode(next, { focus });
+    if (plannerExists) pwc.setOverlayInteractiveMode(next, { focus });
+    rewardOverlayIpc.pushOverlayInteractionMode();
     return;
   }
 
   ctx.overlayInteractiveMode = next;
-  if (rewardExists) rwc.setOverlayInteractiveMode(next);
-  if (plannerExists) pwc.setOverlayInteractiveMode(next);
-  pushOverlayInteractionMode();
+  if (rewardExists) rwc.setOverlayInteractiveMode(next, { focus });
+  if (plannerExists) pwc.setOverlayInteractiveMode(next, { focus });
+  rewardOverlayIpc.pushOverlayInteractionMode();
   log.info(`[OverlayInteraction] mode=${next ? "interactive" : "passive"} source=${source}`);
 }
 
-function toggleOverlayInteractionMode(source = "unknown"): void {
+// The player is in Settings, so the overlays change mode without taking focus.
+function applyOverlayInteractionSetting(previousSettings: OverlaySettings): void {
+  const next = overlaysStartInteractive(ctx.overlaySettings, process.platform);
+  if (next === overlaysStartInteractive(previousSettings, process.platform)) return;
+  setOverlayInteractionMode(next, "settings", false);
+  rivenOverlayIpc.setRivenInteractiveMode(next, { focus: false });
+}
+
+/** The mode the overlays on screen switched to, or null when none was on screen. */
+function toggleOverlayInteractionMode(source = "unknown"): boolean | null {
+  rewardOverlayIpc.rewardWindowsController.restoreAfterUnfocus();
+  rewardOverlayIpc.plannerWindowsController.restoreAfterUnfocus();
+  rivenOverlayIpc.restoreRivenAfterUnfocus();
   const plannerVisible = rewardOverlayIpc.plannerWindowsController.isOverlayWindowVisible();
   const rewardVisible = rewardOverlayIpc.rewardWindowsController.isOverlayWindowVisible();
   const rivenLeftExists = !!(
@@ -130,28 +141,20 @@ function toggleOverlayInteractionMode(source = "unknown"): void {
   const anyActive = plannerVisible || rewardVisible || (anyRivenVisible && rivenLeftExists);
 
   if (!anyActive) {
-    return;
+    return null;
   }
 
   const next = anyRivenVisible
     ? !rivenOverlayIpc.isRivenInteractiveMode()
     : !ctx.overlayInteractiveMode;
-  if (next) {
-    warframeStatus.captureWarframeFocus();
-  } else {
-    const handles = [
-      ctx.overlayWindow,
-      ctx.plannerOverlayWindow,
-      ctx.rivenOverlayLeftWindow,
-      ctx.rivenOverlayRightWindow,
-    ].flatMap((win) => (win && !win.isDestroyed() ? [win.getNativeWindowHandle()] : []));
-    warframeStatus.restoreWarframeFocus(handles);
-  }
+  if (next) warframeStatus.captureWarframeFocus();
   if (anyRivenVisible) {
     rivenOverlayIpc.setRivenInteractiveMode(next);
   }
-
-  setOverlayInteractionMode(next, source);
+  if (plannerVisible || rewardVisible) setOverlayInteractionMode(next, source);
+  // After the flip: going unfocusable hands the foreground down the z-order first.
+  if (!next) returnFocusToWarframe();
+  return next;
 }
 
 const OVERLAY_THEME_VAR_ALLOWLIST: ReadonlySet<string> = new Set(OVERLAY_FORWARDED_CSS_VARS);
@@ -257,11 +260,21 @@ function pushOverlayMessages(): void {
   broadcastToOpenOverlays(OVERLAY_MESSAGES, overlayMessages());
 }
 
+// Compared with what the windows were last sent, not with the settings before a
+// save: a riven panel flip can land while an earlier settings save is queued.
+let sharedRivenSimilarAuctions = true;
+
+function shareRivenSimilarAuctions(): void {
+  const shown = ctx.overlaySettings.rivenSimilarAuctionsShown !== false;
+  sharedRivenSimilarAuctions = shown;
+  rivenOverlayIpc.forEachRivenWindow((win) => win.webContents.send(RIVEN_SIMILAR_AUCTIONS, shown));
+  broadcastToRenderers(RIVEN_SIMILAR_AUCTIONS, shown);
+}
+
 function onRelicRewardTrigger(source = "manual", stalenessMs = 0): void {
   rewardOverlayIpc.onRelicRewardTrigger(
     source,
     stalenessMs,
-    pushOverlayInteractionMode,
     pushOverlayThemeVars,
     bringOverlayToWarframeDisplayIfAvailable,
   );
@@ -290,14 +303,13 @@ arbiOverlayIpc.configureOverlaySettingsPersistence(settingsController.saveOverla
 function onRelicSelectionTrigger(source: string): void {
   rewardOverlayIpc.onRelicSelectionTrigger(
     source,
-    pushOverlayInteractionMode,
     pushOverlayThemeVars,
     bringOverlayToWarframeDisplayIfAvailable,
   );
 }
 
 function onRelicSelectionClose(): void {
-  rewardOverlayIpc.onRelicSelectionClose(pushOverlayInteractionMode);
+  rewardOverlayIpc.onRelicSelectionClose();
 }
 
 function applyOverlayAvailabilitySettings(previousSettings: OverlaySettings): void {
@@ -362,6 +374,7 @@ function moveInteractiveOverlayWindow(sender: WebContents, rawDelta: unknown): v
 }
 
 function register(): void {
+  sharedRivenSimilarAuctions = ctx.overlaySettings.rivenSimilarAuctionsShown !== false;
   if (process.platform === "win32") {
     // The game-only keyboard hook stops matching once an overlay takes focus.
     const attachInteractionShortcut = (win: BrowserWindow) => {
@@ -411,7 +424,7 @@ function register(): void {
     },
   );
   rivenOverlayIpc.register();
-  rewardOverlayIpc.register(pushOverlayInteractionMode, pushOverlayThemeVars);
+  rewardOverlayIpc.register(pushOverlayThemeVars);
   arbiOverlayIpc.register();
 
   handleAuthorized(OVERLAY_GET_SETTINGS, assertMainRendererSender, async () => {
@@ -462,8 +475,10 @@ function register(): void {
       );
       settingsController.registerOverlayHotkey();
       applyOverlayAvailabilitySettings(previousSettings);
+      applyOverlayInteractionSetting(previousSettings);
       arbiRunTracker.setArbiTrackingEnabled(settings.arbiTrackingEnabled !== false);
       ptRunTracker.setPtTrackingEnabled(settings.arbiTrackingEnabled !== false);
+      missionRewards.setTrackingEnabled(settings.missionTrackingEnabled === true);
       if (settings.keepRunningOnClose === true) createTray();
       else destroyTray();
       setOcrDebugDumpsEnabled(settings.ocrDebugImagesEnabled !== false);
@@ -483,8 +498,24 @@ function register(): void {
         rewardOverlayIpc.plannerWindowsController.getAnchorMeta(),
       );
       rivenOverlayIpc.positionRivenOverlayWindows();
+      if ((settings.rivenSimilarAuctionsShown !== false) !== sharedRivenSimilarAuctions) {
+        shareRivenSimilarAuctions();
+      }
       if (importsLayouts) overlayEditor.refresh();
       return settings;
+    },
+  );
+
+  handleAuthorized(
+    RIVEN_SET_SIMILAR_AUCTIONS,
+    assertRivenOverlayRendererSender,
+    async (_event, shown: unknown) => {
+      if (typeof shown !== "boolean") throw new Error("Similar auctions setting must be a boolean");
+      const settings = await settingsController.setOverlaySettingsWithLifecycle({
+        rivenSimilarAuctionsShown: shown,
+      });
+      shareRivenSimilarAuctions();
+      return settings.rivenSimilarAuctionsShown;
     },
   );
 
@@ -539,6 +570,7 @@ function register(): void {
           ...rel(arbiOverlayIpc.getArbiSummaryPlacementRect()),
           scale: userScale("arbiSummary"),
         },
+        tradeNotification: { ...rel(getTradeNotificationPlacementRect()), scale: 1 },
       },
     };
   });
@@ -586,7 +618,7 @@ function register(): void {
         ? (rawKey as OverlayWindowKey)
         : null;
       const scale = clampNumber(rawScale, 0.75, 1.5, NaN);
-      if (!key || !Number.isFinite(scale)) return { ok: false };
+      if (!key || !isScalableOverlayWindow(key) || !Number.isFinite(scale)) return { ok: false };
 
       ctx.overlaySettings = {
         ...ctx.overlaySettings,
@@ -616,7 +648,13 @@ function register(): void {
   );
 }
 
-export const loadOverlaySettings = settingsController.loadOverlaySettings;
+// The planner is pre-warmed before any overlay opens, so the idle mode has to match
+// the start mode already or X11 rebuilds that window on its first show.
+export function loadOverlaySettings(): OverlaySettings {
+  const settings = settingsController.loadOverlaySettings();
+  ctx.overlayInteractiveMode = overlaysStartInteractive(settings, process.platform);
+  return settings;
+}
 export const unregisterOverlayHotkey = settingsController.unregisterOverlayHotkey;
 export const setOverlayHotkeysActive = settingsController.setHotkeysActive;
 
@@ -624,4 +662,10 @@ export function disposeOverlayHotkeys(): void {
   disposeAppHotkeys();
 }
 
-export { register, onRelicRewardTrigger, onRelicSelectionTrigger, onRelicSelectionClose };
+export {
+  register,
+  onRelicRewardTrigger,
+  onRelicSelectionTrigger,
+  onRelicSelectionClose,
+  toggleOverlayInteractionMode,
+};

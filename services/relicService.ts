@@ -1,7 +1,9 @@
 import { withScope } from "./logger";
+import { readWfcdItems, readWfcdVersion, type WfcdItem } from "./bundledGameData";
 import { normalizeErrorMessage } from "../config/shared/errors";
 import { normalizeDucats } from "../config/shared/numeric";
 import { normalizeWfmSlug } from "../config/shared/wfm";
+import type { RelicDataInfo } from "../config/shared/relicDataInfo";
 import { relicRewardRarity } from "./relicRarity";
 import {
   localizedNameFields,
@@ -56,16 +58,53 @@ interface RelicRewardItem {
   urlName: string | null;
   rarity: string;
   ducats: number | null;
+  /** True only while every relic that can drop this reward is vaulted. */
+  vaulted: boolean;
+}
+
+/** A relic as @wfcd/items ships it, or as the backend's trimmed copy of it carries it. */
+type RelicSourceRow = Pick<
+  WfcdItem,
+  "uniqueName" | "name" | "vaulted" | "imageName" | "drops" | "rewards"
+> & { dropCount?: number };
+
+interface DownloadedRelics {
+  version: string;
+  publishedAt: string | null;
+  relics: readonly RelicSourceRow[];
 }
 
 let _db: RelicDatabase | null = null;
+let _downloaded: DownloadedRelics | null = null;
+
+/** Rebuilds from these rows on the next read instead of the bundled package; null goes back to it. */
+export function setDownloadedRelics(data: DownloadedRelics | null): void {
+  _downloaded = data;
+  _db = null;
+}
+
+export function getRelicDataInfo(): RelicDataInfo {
+  if (_downloaded) {
+    return {
+      version: _downloaded.version,
+      source: "downloaded",
+      publishedAt: _downloaded.publishedAt,
+    };
+  }
+  return { version: readWfcdVersion(), source: "bundled", publishedAt: null };
+}
 
 export function getRelicRewardItems(): RelicRewardItem[] {
   const seen = new Map<string, RelicRewardItem>();
   for (const group of Object.values(getRelicDatabase().groups)) {
     for (const quality of Object.values(group.qualities)) {
       for (const reward of quality.rewards) {
-        if (!reward.name || seen.has(reward.name)) continue;
+        if (!reward.name) continue;
+        const existing = seen.get(reward.name);
+        if (existing) {
+          existing.vaulted = existing.vaulted && group.vaulted;
+          continue;
+        }
         const resolved = lookupItemByNameOrSlug(reward.name, reward.urlName);
         const dbEntry =
           resolved?.item || (reward.uniqueName ? lookupItem(reward.uniqueName) : null);
@@ -75,6 +114,7 @@ export function getRelicRewardItems(): RelicRewardItem[] {
           urlName: reward.urlName || null,
           rarity: reward.rarity || "Common",
           ducats: reward.ducats ?? dbEntry?.ducats ?? null,
+          vaulted: group.vaulted,
         });
       }
     }
@@ -103,23 +143,32 @@ function rewardItemUniqueName(
   return lookupItemByNameOrSlug(name, rawSlug)?.uniqueName ?? null;
 }
 
-function buildRelicDatabase(): RelicDatabase {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped @wfcd/items constructor
-  let Items: any;
+// @wfcd/items 1.1276.6 flags the 15 Citrine Prime relics vaulted while listing their mission drops.
+function isRelicVaulted(relic: RelicSourceRow): boolean {
+  const drops = relic.dropCount ?? relic.drops?.length ?? 0;
+  return Boolean(relic.vaulted) && drops === 0;
+}
+
+function readRelicRows(): readonly RelicSourceRow[] | null {
+  if (_downloaded) return _downloaded.relics;
   try {
-    Items = require("@wfcd/items");
+    const relics = readWfcdItems(["Relics"]);
+    if (relics.length === 0) throw new Error("Relics.json is missing or empty");
+    return relics;
   } catch (err) {
     log.error("[RelicDB] @wfcd/items not available:", normalizeErrorMessage(err));
-    return { groups: {}, byUniqueName: {} };
+    return null;
   }
+}
 
-  const all = new Items();
+function buildRelicDatabase(): RelicDatabase {
+  const relics = readRelicRows();
+  if (!relics) return { groups: {}, byUniqueName: {} };
+
   const groupsMap = new Map<string, RelicGroup>();
   const byUniqueNameMap = new Map<string, { groupKey: string; quality: RelicQualityKey }>();
 
-  for (const relic of all) {
-    if (relic.category !== "Relics") continue;
-
+  for (const relic of relics) {
     const parts = (relic.name || "").split(" ");
     if (parts.length < 3) continue;
 
@@ -138,14 +187,14 @@ function buildRelicDatabase(): RelicDatabase {
         name: baseName,
         tier,
         code,
-        vaulted: Boolean(relic.vaulted),
+        vaulted: isRelicVaulted(relic),
         imageUrl: null,
         qualities: {},
       });
     }
 
     const group = groupsMap.get(baseName)!;
-    group.vaulted = Boolean(group.vaulted && relic.vaulted);
+    group.vaulted = group.vaulted && isRelicVaulted(relic);
 
     if (relic.imageName) {
       if (quality === "Intact" || !group.imageUrl) {
@@ -155,8 +204,7 @@ function buildRelicDatabase(): RelicDatabase {
 
     group.qualities[quality.toLowerCase()] = {
       uniqueName: relic.uniqueName || null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped @wfcd/items reward
-      rewards: (relic.rewards || []).map((r: any) => {
+      rewards: (relic.rewards || []).map((r) => {
         const rawSlug = r.item?.warframeMarket?.urlName || r.item?.warframeMarket?.url_name || null;
         const uniqueName = rewardItemUniqueName(r.item, rawSlug);
         return {

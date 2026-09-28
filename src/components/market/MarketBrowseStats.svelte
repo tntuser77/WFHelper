@@ -528,8 +528,8 @@
   function formatHoverStamp(time: number, span: Period, months: string[]): string {
     const date = new Date(time);
     if (span === "48hours") {
-      const day = `${months[date.getMonth()]} ${date.getDate()}`;
-      return `${day}, ${String(date.getHours()).padStart(2, "0")}:00`;
+      const hour = String(date.getHours()).padStart(2, "0");
+      return `${months[date.getMonth()]} ${date.getDate()}, ${hour}:00`;
     }
     return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`;
   }

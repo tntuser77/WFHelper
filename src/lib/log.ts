@@ -1,5 +1,5 @@
-// Development logs to the console. Production forwards warnings and errors to
-// the main-process file logger and suppresses lower levels.
+// Development logs to the console. Production forwards warnings, errors and
+// startup timings to the main-process file logger and suppresses lower levels.
 
 const isDev = import.meta.env.MODE === "development";
 
@@ -37,6 +37,16 @@ export const log = {
   info(message: string, ...args: unknown[]): void {
     if (isDev) {
       console.log(`[${timestamp()}] ${message}`, ...args);
+    }
+  },
+
+  /** Reaches main.log although info does not; production sends it through logWarn,
+   *  so it is written at warn level with the [renderer] prefix. */
+  timing(message: string): void {
+    if (isDev) {
+      console.log(`[${timestamp()}] ${message}`);
+    } else {
+      sendToMain(message);
     }
   },
 

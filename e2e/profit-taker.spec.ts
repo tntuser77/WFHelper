@@ -9,6 +9,7 @@ import {
   type Page,
 } from "@playwright/test";
 
+import { closeElectronApp } from "./electronTestHarness";
 import { mainWindow } from "./mainWindow";
 
 // Same reasoning as arbi.spec: EE.log replay timing is unreliable on CI.
@@ -44,6 +45,7 @@ describePt("Profit-Taker run analysis", () => {
     const env = { ...process.env } as Record<string, string>;
     delete env.ELECTRON_RUN_AS_NODE;
     env.WFHELPER_DISABLE_KEYBOARD_HOOK = "1";
+    env.WFHELPER_DISABLE_DBWIN = "1";
     env.LOCALAPPDATA = localAppData;
     env.APPDATA = path.join(sandboxDir, "roaming");
     env.WFHELPER_USER_DATA = userData;
@@ -61,8 +63,7 @@ describePt("Profit-Taker run analysis", () => {
   });
 
   test.afterAll(async () => {
-    await app?.close();
-    fs.rmSync(sandboxDir, { recursive: true, force: true });
+    await closeElectronApp(app, sandboxDir);
   });
 
   test("captures a replayed run and lists it under the Profit-Taker sub-tab", async () => {

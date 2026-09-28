@@ -20,6 +20,8 @@ export const ARCHIVE_BARO_PREFIX = 'archive:baro:';
 export const ARCHIVE_INDEX_PREFIX = 'archive:index:';
 export const RIVEN_ARCHIVE_WEAPONS_KEY = 'archive:riven-weapons:v1';
 export const RIVEN_ARCHIVE_SWEEP_KEY = 'archive:riven-sweep:v1';
+// Outside the `archive:baro:` prefix, which the Baro reconciliation lists as visit ids.
+export const BARO_WINDOW_KEY = 'archive:baro-window:v1';
 // One-time 90-day price seed; `complete: true` in the state key latches it off forever.
 export const PRICE_SEED_STATE_KEY = 'archive:price-seed:v1';
 export const PRICE_SEED_SLUGS_KEY = 'archive:price-seed:slugs:v1';
@@ -33,6 +35,10 @@ export const PRICE_HISTORY_BUCKETS = 64;
 export const ADVERSARY_VENDORS_DOC_KEY = 'adversary-vendors:doc:v1';
 // Wiki-sourced Nightwave Cred store, tab by tab.
 export const NIGHTWAVE_OFFERINGS_DOC_KEY = 'nightwave-offerings:doc:v1';
+// Trimmed @wfcd/items relic table and its refresh state: the last npm check, plus a newer
+// release whose relics matched, valid only while the doc keeps the version it matched.
+export const WFCD_RELICS_DOC_KEY = 'wfcd-relics:doc:v1';
+export const WFCD_RELICS_STATE_KEY = 'wfcd-relics:state:v1';
 export const SUPPORTERS_KEY = 'supporters:discord:v1';
 export const SUPPORTER_EXCLUSIONS_KEY = 'supporters:exclusions:v1';
 // Retired Patreon pipeline keys (profile names, OAuth tokens); every

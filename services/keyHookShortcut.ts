@@ -1,5 +1,5 @@
 import path from "node:path";
-import { parseAccelerator, type ParsedAccelerator } from "./acceleratorVk";
+import { acceleratorLayoutChar, parseAccelerator, type ParsedAccelerator } from "./acceleratorVk";
 
 interface Logger {
   info: (...args: unknown[]) => void;
@@ -35,13 +35,29 @@ interface HookProcess {
   on: (event: string, listener: (...args: unknown[]) => void) => HookProcess;
 }
 
+let vkKeyScanW: ((char: number) => number) | null = null;
+
+// VkKeyScanW reads the calling thread's layout; Electron's UI thread is the one
+// the settings recorder typed into. The high byte (shift state) is ignored.
+export function activeLayoutVk(char: string): number | null {
+  if (char.length !== 1) return null;
+  if (!vkKeyScanW) {
+    const koffi = require("koffi") as typeof import("koffi");
+    vkKeyScanW = koffi.load("user32.dll").func("VkKeyScanW", "int16", ["uint16"]);
+  }
+  const vk = vkKeyScanW(char.charCodeAt(0)) & 0xff;
+  return vk === 0 || vk === 0xff ? null : vk;
+}
+
 export function createKeyHookShortcut(options: {
   log: Logger;
   loadFallback?: () => FallbackShortcut;
   spawnHookProcess?: (modulePath: string) => HookProcess;
+  layoutVk?: (char: string) => number | null;
 }): KeyHookShortcut {
   const { log } = options;
-  // Lazy: only pull in electron's globalShortcut if the hook actually fails.
+  const layoutVk = options.layoutVk ?? activeLayoutVk;
+  // Lazy: only pull in electron's globalShortcut if the hook fails or lacks a key.
   const loadFallback =
     options.loadFallback ??
     (() => (require("electron") as typeof import("electron")).globalShortcut);
@@ -55,10 +71,13 @@ export function createKeyHookShortcut(options: {
       }) as unknown as HookProcess;
     });
   const bindings = new Map<string, Binding>();
+  const layoutlessAccelerators = new Set<string>();
+  const warnedLayoutless = new Set<string>();
 
   let hookProcess: HookProcess | null = null;
   let hookProcessSpawned = false;
   let fallback: FallbackShortcut | null = null;
+  let fellBack = false;
 
   function getFallback(): FallbackShortcut {
     if (!fallback) fallback = loadFallback();
@@ -81,7 +100,8 @@ export function createKeyHookShortcut(options: {
 
   // Give up on the hook: move existing bindings and route future calls to it.
   function switchToFallback(reason: string): void {
-    if (fallback) return; // already fell back
+    if (fellBack) return;
+    fellBack = true;
     log.warn("[KeyHook] falling back to globalShortcut:", reason);
     stopHookProcess();
     const gs = getFallback();
@@ -95,7 +115,7 @@ export function createKeyHookShortcut(options: {
   }
 
   function ensureHookProcess(): boolean {
-    if (fallback) return false; // committed to fallback for this session
+    if (fellBack) return false; // committed to fallback for this session
     if (hookProcess) return true;
     try {
       const createdProcess = spawnHookProcess(path.join(__dirname, "keyHookWorker.js"));
@@ -129,7 +149,7 @@ export function createKeyHookShortcut(options: {
         if (hookProcess !== createdProcess) return;
         hookProcess = null;
         hookProcessSpawned = false;
-        if (!fallback && bindings.size > 0) {
+        if (!fellBack && bindings.size > 0) {
           switchToFallback(`utility process exited (${Number(args[0])})`);
         }
       });
@@ -150,15 +170,31 @@ export function createKeyHookShortcut(options: {
     child.kill();
   }
 
+  function registerLayoutless(accelerator: string, callback: () => void): boolean {
+    if (!warnedLayoutless.has(accelerator)) {
+      warnedLayoutless.add(accelerator);
+      log.warn(
+        "[KeyHook] no key on the active keyboard layout, using globalShortcut:",
+        accelerator,
+      );
+    }
+    const ok = getFallback().register(accelerator, callback);
+    if (ok) layoutlessAccelerators.add(accelerator);
+    return ok;
+  }
+
   function register(
     accelerator: string,
     callback: () => void,
     options: RegisterOptions = {},
   ): boolean {
-    if (fallback) return getFallback().register(accelerator, callback);
+    if (fellBack) return getFallback().register(accelerator, callback);
 
-    const parsed = parseAccelerator(accelerator);
+    const parsed = parseAccelerator(accelerator, layoutVk);
     if (!parsed) {
+      if (acceleratorLayoutChar(accelerator) !== null) {
+        return registerLayoutless(accelerator, callback);
+      }
       log.warn("[KeyHook] cannot map accelerator, skipping:", accelerator);
       return false;
     }
@@ -169,7 +205,7 @@ export function createKeyHookShortcut(options: {
   }
 
   function unregister(accelerator: string): void {
-    if (fallback) {
+    if (fellBack || layoutlessAccelerators.delete(accelerator)) {
       getFallback().unregister(accelerator);
       return;
     }
@@ -180,7 +216,9 @@ export function createKeyHookShortcut(options: {
   function dispose(): void {
     bindings.clear();
     stopHookProcess();
-    if (fallback) fallback.unregisterAll?.();
+    if (fellBack) fallback?.unregisterAll?.();
+    else for (const accelerator of layoutlessAccelerators) fallback?.unregister(accelerator);
+    layoutlessAccelerators.clear();
   }
 
   return { register, unregister, dispose };

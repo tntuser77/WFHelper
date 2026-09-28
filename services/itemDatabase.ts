@@ -1,18 +1,19 @@
 // Keep WFCD as the offline fallback when live DE exports are unavailable.
 
 import crypto from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
 
 import { isInfestedMechPart } from "../config/shared/componentNames";
 import { fallbackNameFromUniqueName, sanitizeDisplayName } from "../config/shared/displayName";
+import { wfcdDropOrderKey } from "../config/shared/dropOrder";
 import { normalizeErrorMessage } from "../config/shared/errors";
 import { normalizeDucats } from "../config/shared/numeric";
 import { normalizeWfmSlug } from "../config/shared/wfm";
 import type { MarketAcquisition } from "../config/shared/marketAcquisition";
 import { WIKI_ITEM_ART } from "../config/shared/wikiItemArt";
 import { WIKI_MOD_ART, WIKI_MOD_ART_BY_NAME } from "../config/shared/wikiModArt";
-import { isLocalizingNames, localizeName } from "./gameLocale";
+import { readPepDict, readPepExport, readWfcdItems, type WfcdItem } from "./bundledGameData";
+import { getGameLocale, isLocalizingNames, localizeName } from "./gameLocale";
 import * as publicExportSource from "./publicExportSource";
 import { correctedDropRarity } from "./relicRarity";
 import { withScope } from "./logger";
@@ -187,6 +188,7 @@ interface ItemEntry extends MarketAcquisition {
   tradable?: boolean;
   vaulted: boolean;
   exalted?: boolean;
+  incarnon?: true;
   description: string;
   /** `/Lotus/Language/...` key `name` was resolved from, for game-language lookup. */
   nameKey?: string | null;
@@ -216,51 +218,20 @@ let marketCreditsByResultType: Record<string, number | null> = {};
 /** resultTypes whose blueprint is a clan dojo research project. */
 let dojoResearchResultTypes = new Set<string>();
 
-function loadDict(): Record<string, string> {
-  const attempts: string[] = [];
-
+function loadDict(): Readonly<Record<string, string>> {
+  let failure = "file missing";
   try {
-    const d = require("warframe-public-export-plus/dict.en.json");
-    if (d && typeof d === "object" && Object.keys(d).length > 0) {
-      log.info(`[ItemDB] dict.en.json loaded via require (${Object.keys(d).length} strings)`);
-      return d;
+    const dict = readPepDict("en");
+    const count = dict ? Object.keys(dict).length : 0;
+    if (dict && count > 0) {
+      log.info(`[ItemDB] dict.en.json loaded from disk (${count} strings)`);
+      return dict;
     }
   } catch (e) {
-    attempts.push(`require: ${normalizeErrorMessage(e)}`);
+    failure = normalizeErrorMessage(e);
   }
 
-  try {
-    const modPath = require.resolve("warframe-public-export-plus/package.json");
-    const modDir = path.dirname(modPath);
-    const dictPath = path.join(modDir, "dict.en.json");
-    if (fs.existsSync(dictPath)) {
-      const d = JSON.parse(fs.readFileSync(dictPath, "utf-8"));
-      log.info(`[ItemDB] dict.en.json loaded from disk (${Object.keys(d).length} strings)`);
-      return d;
-    } else {
-      attempts.push(`disk: file not found at ${dictPath}`);
-    }
-  } catch (e) {
-    attempts.push(`disk: ${normalizeErrorMessage(e)}`);
-  }
-
-  try {
-    const pep = require("warframe-public-export-plus");
-    if (pep.getString && typeof pep.getString === "function") {
-      log.info("[ItemDB] Using pep.getString() for name resolution");
-      return { __getString: pep.getString };
-    }
-    for (const key of ["dict", "dictEn", "dict_en", "strings"]) {
-      if (pep[key] && typeof pep[key] === "object") {
-        log.info(`[ItemDB] dict found via pep.${key}`);
-        return pep[key];
-      }
-    }
-  } catch (e) {
-    attempts.push(`main export: ${normalizeErrorMessage(e)}`);
-  }
-
-  log.warn("[ItemDB] Could not load dict.en.json. Tried:", attempts.join(" | "));
+  log.warn("[ItemDB] Could not load dict.en.json:", failure);
   log.warn(
     "[ItemDB] Names from public-export-plus will fall back to @wfcd/items or path extraction",
   );
@@ -269,18 +240,11 @@ function loadDict(): Record<string, string> {
 
 function loadPublicExportPlus(): number {
   try {
-    const pep = require("warframe-public-export-plus");
     const dict = loadDict();
 
     function resolveName(nameKey: string | null | undefined): string | null {
       if (!nameKey) return null;
       if (!nameKey.startsWith("/")) return nameKey;
-      if ((dict as Record<string, unknown>).__getString)
-        return (
-          ((dict as Record<string, unknown>).__getString as (k: string) => string | null)(
-            nameKey,
-          ) || null
-        );
       return dict[nameKey] || null;
     }
 
@@ -317,9 +281,12 @@ function loadPublicExportPlus(): number {
     const overlayExports = publicExportSource.getOverlay()?.exports as
       | Record<string, Record<string, PepExportItem>>
       | undefined;
+    const tables = exportMappings.map((mapping) => ({
+      ...mapping,
+      baseData: readPepExport(mapping.exportKey),
+    }));
 
-    for (const { exportKey, category } of exportMappings) {
-      const baseData = pep[exportKey];
+    for (const { exportKey, category, baseData } of tables) {
       const overlayData = overlayExports?.[exportKey];
       const exportData = overlayData ? { ...overlayData, ...(baseData || {}) } : baseData;
       if (!exportData || typeof exportData !== "object") continue;
@@ -407,7 +374,6 @@ function loadPublicExportPlus(): number {
 
 function loadWfcdItems(): number {
   try {
-    const Items = require("@wfcd/items");
     const CATEGORIES = [
       "Warframes",
       "Primary",
@@ -427,7 +393,16 @@ function loadWfcdItems(): number {
       "Arcanes",
     ];
 
-    const items = new Items({ category: CATEGORIES });
+    const items = readWfcdItems(CATEGORIES);
+    // Fix upstream relic rarity labels before any entry copies these arrays
+    // (item entries, component entries, and the merge path all reuse them).
+    for (const item of items) {
+      item.drops = correctDropRarities(item.drops);
+      for (const comp of item.components || []) {
+        comp.drops = correctDropRarities(comp.drops);
+      }
+    }
+    restoreWeaponIngredientDrops(items);
     let wfcdNewCount = 0;
     let wfcdSupplementCount = 0;
     let wfcdComponentNewCount = 0;
@@ -444,13 +419,6 @@ function loadWfcdItems(): number {
     for (const item of items) {
       if (!item.uniqueName) continue;
 
-      // Fix upstream relic rarity labels before any entry copies these arrays
-      // (item entries, component entries, and the merge path all reuse them).
-      item.drops = correctDropRarities(item.drops);
-      for (const comp of item.components || []) {
-        comp.drops = correctDropRarities(comp.drops);
-      }
-
       const wfcdImageUrl = buildWfcdImageUrl(item.imageName);
 
       const wfcdRootDucats = normalizeDucats(item.ducats);
@@ -465,6 +433,7 @@ function loadWfcdItems(): number {
         tradable: normalizeOptionalBoolean(item.tradable),
         vaulted: item.vaulted || false,
         exalted: item.exalted || false,
+        ...(item.tags?.includes("Incarnon") ? { incarnon: true as const } : {}),
         components: item.components || [],
         drops: item.drops || [],
         description: item.description || "",
@@ -653,6 +622,7 @@ function loadWfcdItems(): number {
         existing.drops = item.drops || [];
         existing.wikiaUrl = item.wikiaUrl || null;
         existing.exalted = item.exalted || false;
+        if (wfcdEntry.incarnon) existing.incarnon = true;
         if (typeof item.masterable === "boolean") {
           existing.masterable = item.masterable;
         }
@@ -746,8 +716,7 @@ interface PepRecipeItem {
 
 function buildRecipeIndex(): void {
   try {
-    const pep = require("warframe-public-export-plus");
-    const baseRecipes = pep.ExportRecipes as Record<string, PepRecipeItem> | undefined;
+    const baseRecipes = readPepExport("ExportRecipes") as Record<string, PepRecipeItem> | undefined;
     const overlayRecipes = publicExportSource.getOverlay()?.exports.ExportRecipes as
       | Record<string, PepRecipeItem>
       | undefined;
@@ -792,8 +761,9 @@ function buildRecipeIndex(): void {
 
     // Dojo research is keyed by the recipe uniqueName, so it joins to an item
     // only through that recipe's resultType.
-    const research = (pep.ExportDojoRecipes as { research?: Record<string, unknown> } | undefined)
-      ?.research;
+    const research = (
+      readPepExport("ExportDojoRecipes") as { research?: Record<string, unknown> } | undefined
+    )?.research;
     for (const researchKey of Object.keys(research || {})) {
       const resultType = resultTypeByBlueprint[researchKey];
       if (resultType) dojoResearchResultTypes.add(resultType);
@@ -915,6 +885,7 @@ export function buildDatabase(): void {
   // Reset so a rebuild (e.g. after the DE export refresh) starts clean.
   itemsByUniqueName = {};
   nameSlugIndex = null;
+  rendererLookup = null;
   wfcdItemsByUniqueName = {};
   sentinelWeapons = new Map();
   recipesByResultType = {};
@@ -1043,6 +1014,30 @@ function correctDropRarities(drops?: DropEntry[]): DropEntry[] | undefined {
   }));
 }
 
+// Before 1.1276 @wfcd/items listed the drops of a weapon's own parts on that weapon
+// wherever it is an ingredient (an Akbronco Prime's Bronco Prime); the ref it has
+// now resolves to the weapon, which has none. Which ingredients count is its rule.
+function restoreWeaponIngredientDrops(items: readonly WfcdItem[]): void {
+  const byUniqueName = new Map(items.map((item) => [item.uniqueName, item]));
+  for (const item of items) {
+    for (const comp of item.components || []) {
+      const uniqueName = comp.uniqueName || "";
+      if (comp.drops?.length || comp.name === "Blueprint") continue;
+      if (!uniqueName.includes("/Weapons/") || uniqueName.includes("/WeaponParts/")) continue;
+      const weapon = byUniqueName.get(uniqueName);
+      if (!weapon || weapon.drops?.length) continue;
+      const prefix = `${weapon.name.toLowerCase()} `;
+      const drops = (weapon.components || []).flatMap((part) =>
+        (part.drops || []).filter((drop) => (drop.type || "").toLowerCase().startsWith(prefix)),
+      );
+      if (drops.length === 0) continue;
+      comp.drops = drops.sort((a, b) =>
+        wfcdDropOrderKey(a).localeCompare(wfcdDropOrderKey(b), "en"),
+      );
+    }
+  }
+}
+
 function toRendererDrop(d: DropEntry): DropEntry {
   return {
     location: d.location || "",
@@ -1097,7 +1092,13 @@ function hasCardArt(imageUrl: string | null): boolean {
   return imageUrl != null && (imageUrl.includes("/mod-art/") || imageUrl.includes("/item-art/"));
 }
 
+// Every window pulls the whole projection at boot and on each item-db-updated, so it
+// is built once per database build and game language, then shared read-only.
+let rendererLookup: { locale: string; lookup: Record<string, RendererItemEntry> } | null = null;
+
 export function getRendererLookup(): Record<string, RendererItemEntry> {
+  const locale = getGameLocale();
+  if (rendererLookup?.locale === locale) return rendererLookup.lookup;
   const localizing = isLocalizingNames();
   const lookup: Record<string, RendererItemEntry> = {};
   for (const [key, item] of Object.entries(itemsByUniqueName)) {
@@ -1112,6 +1113,7 @@ export function getRendererLookup(): Record<string, RendererItemEntry> {
       masteryReq: item.masteryReq || 0,
       vaulted: item.vaulted || false,
       exalted: item.exalted || false,
+      ...(item.incarnon ? { incarnon: true as const } : {}),
       masterable: typeof item.masterable === "boolean" ? item.masterable : undefined,
       type: item.type || "",
       isBuildComponent: item.isBuildComponent === true,
@@ -1142,6 +1144,7 @@ export function getRendererLookup(): Record<string, RendererItemEntry> {
         : {}),
     };
   }
+  rendererLookup = { locale, lookup };
   return lookup;
 }
 

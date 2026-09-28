@@ -124,6 +124,7 @@
   let minEndoPerPlat = $state(
     riven?.minEndoPerPlat !== undefined ? String(riven.minEndoPerPlat) : "",
   );
+  let rivenStatuses = $state<MarketAlertSellerStatus[]>([...(riven?.statuses ?? [])]);
 
   let itemSlug = $state(item?.itemUrlName ?? "");
   let itemLabel = $state(item ? titleFromSlug(item.itemUrlName) : "");
@@ -210,10 +211,11 @@
     itemQuery = "";
   }
 
-  function toggleStatus(status: MarketAlertSellerStatus): void {
-    statuses = statuses.includes(status)
-      ? statuses.filter((s) => s !== status)
-      : [...statuses, status];
+  function toggleStatus(
+    list: readonly MarketAlertSellerStatus[],
+    status: MarketAlertSellerStatus,
+  ): MarketAlertSellerStatus[] {
+    return list.includes(status) ? list.filter((s) => s !== status) : [...list, status];
   }
 
   function urlNames(attributes: RivenGoodRollAttribute[]): string[] {
@@ -283,6 +285,7 @@
       excludeAttributes,
       statBounds: bounds,
     };
+    if (rivenStatuses.length > 0) match.statuses = rivenStatuses;
     if (allowedNegatives.length > 0) match.allowedNegatives = allowedNegatives;
     if (excludeNegatives.length > 0) match.excludeNegatives = excludeNegatives;
     if (negativeMode === "required") match.hasNegative = true;
@@ -425,6 +428,42 @@
           {/each}
         </select>
       {/if}
+    </div>
+  </div>
+{/snippet}
+
+{#snippet sellerStatusPicker(
+  list: MarketAlertSellerStatus[],
+  set: (next: MarketAlertSellerStatus[]) => void,
+  scope: string,
+)}
+  <div class="flex flex-col gap-1 text-sm" data-alert-seller-status={scope}>
+    <span class="text-text-secondary">{$tr("marketAlerts.sellerStatus")}</span>
+    <div class="flex flex-wrap gap-x-3 gap-y-1">
+      <label class="flex items-center gap-1">
+        <input
+          type="checkbox"
+          data-status="all"
+          checked={list.length === 0}
+          onchange={(event) => {
+            // A click on a ticked All would untick it, but the empty list still means any seller.
+            event.currentTarget.checked = true;
+            set([]);
+          }}
+        />
+        {$tr("common.all")}
+      </label>
+      {#each MARKET_ALERT_SELLER_STATUSES as status (status)}
+        <label class="flex items-center gap-1">
+          <input
+            type="checkbox"
+            data-status={status}
+            checked={list.includes(status)}
+            onchange={() => set(toggleStatus(list, status))}
+          />
+          {status === "ingame" ? $tr("common.inGame") : $tr("common.online")}
+        </label>
+      {/each}
     </div>
   </div>
 {/snippet}
@@ -690,6 +729,13 @@
           <span class="text-text-secondary">{$tr("marketAlerts.minEndoPerPlat")}</span>
           <ThemedInput type="number" min="0" bind:value={minEndoPerPlat} />
         </label>
+        {@render sellerStatusPicker(
+          rivenStatuses,
+          (next) => {
+            rivenStatuses = next;
+          },
+          "riven",
+        )}
       </div>
       <label class="flex items-center gap-1.5 text-sm">
         <input type="checkbox" bind:checked={includeBidOnly} />
@@ -793,21 +839,13 @@
       </div>
 
       <div class="grid gap-3 md:grid-cols-3">
-        <div class="flex flex-col gap-1 text-sm">
-          <span class="text-text-secondary">{$tr("marketAlerts.sellerStatus")}</span>
-          <div class="flex gap-3">
-            {#each MARKET_ALERT_SELLER_STATUSES as status (status)}
-              <label class="flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  checked={statuses.includes(status)}
-                  onchange={() => toggleStatus(status)}
-                />
-                {status === "ingame" ? $tr("common.inGame") : $tr("common.online")}
-              </label>
-            {/each}
-          </div>
-        </div>
+        {@render sellerStatusPicker(
+          statuses,
+          (next) => {
+            statuses = next;
+          },
+          "item",
+        )}
         <label class="flex flex-col gap-1 text-sm">
           <span class="text-text-secondary">{$tr("marketAlerts.ownedBelow")}</span>
           <ThemedInput type="number" min="0" bind:value={ownedBelow} />

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { DB_GET_RELIC_DATABASE } from "../config/shared/ipcChannels";
 import type { RelicDatabase, RelicQuality } from "../src/types/relics";
@@ -29,23 +29,55 @@ for (const [code, counts] of [
   });
 }
 
-test("relic Owned sort defaults descending and follows the selected refinement", async () => {
+test.describe("relic planner copies and owned sort", () => {
   test.setTimeout(180_000);
+
   let harness: ElectronTestHarness | undefined;
-  try {
+  let page: Page;
+
+  test.beforeAll(async () => {
     harness = await launchElectronTestHarness("wfh-relic-owned-", { inventory });
-    const { app, page } = harness;
     await evaluateInMain(
-      app,
+      harness.app,
       ({ ipcMain }, payload) => {
         ipcMain.removeHandler(payload.channel);
         ipcMain.handle(payload.channel, () => payload.data);
       },
       { channel: DB_GET_RELIC_DATABASE, data: relics },
     );
+    page = harness.page;
     await page.reload();
     await setLayoutViewport(page, 1440, 900);
     await openView(page, "relics");
+  });
+
+  test.afterAll(async () => {
+    await closeElectronTestHarness(harness);
+  });
+
+  test("relic Copies filter hides relics at or below the chosen count", async () => {
+    const copies = page.locator("[data-relic-owned-above]");
+    const quality = page.locator("[data-relic-quality]");
+    const names = page.locator(".relic-row-name");
+    await expect(names).toHaveText(["Lith A1", "Lith B2", "Lith C3"]);
+
+    // Totals are 41, 15 and 10 copies.
+    await copies.selectOption({ label: "More than 10" });
+    await expect(names).toHaveText(["Lith A1", "Lith B2"]);
+    await page.screenshot({
+      animations: "disabled",
+      path: test.info().outputPath("relic-copies-more-than-10.png"),
+    });
+
+    // The quality select must not change which relics the threshold keeps.
+    await quality.selectOption("radiant");
+    await expect(names).toHaveText(["Lith A1", "Lith B2"]);
+
+    await copies.selectOption({ label: "Any" });
+    await expect(names).toHaveText(["Lith A1", "Lith B2", "Lith C3"]);
+  });
+
+  test("relic Owned sort defaults descending and follows the selected refinement", async () => {
     const sort = page.locator('[data-tour="relic-filters"] .sort-control-select');
     const quality = page.locator("[data-relic-quality]");
     const names = page.locator(".relic-row-name");
@@ -69,7 +101,5 @@ test("relic Owned sort defaults descending and follows the selected refinement",
     await expect(names).toHaveText(["Lith B2", "Lith A1", "Lith C3"]);
     await quality.selectOption("owned");
     await expect(names).toHaveText(["Lith A1", "Lith B2", "Lith C3"]);
-  } finally {
-    if (harness) await closeElectronTestHarness(harness);
-  }
+  });
 });
