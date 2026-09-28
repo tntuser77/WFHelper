@@ -3,6 +3,7 @@
 
   import {
     analyticsAutoTitle,
+    analyticsConditionText,
     analyticsKeyLabel,
     HEIGHT_LABEL,
     CHART_LABEL,
@@ -35,6 +36,8 @@
   import ThemedButton from "../ThemedButton.svelte";
   import ThemedSelect from "../ThemedSelect.svelte";
   import AnalyticsChart from "./AnalyticsChart.svelte";
+  import AnalyticsPill from "./AnalyticsPill.svelte";
+  import AnalyticsSection from "./AnalyticsSection.svelte";
 
   type Draft = Omit<AnalyticsChartSpec, "id"> & { id?: string };
 
@@ -162,6 +165,29 @@
       : [...draft.frames, frame];
   }
 
+  // What each folded section is set to, so nothing hides behind a closed one.
+  const filtersSummary = $derived(
+    [
+      draft.range !== "all" ? $tr(RANGE_LABEL[draft.range]) : "",
+      draft.squad !== "all" ? $tr(SQUAD_LABEL[draft.squad]) : "",
+      draft.frames.join(", "),
+    ]
+      .filter(Boolean)
+      .join(" · ") || $tr("analytics.summary.allRuns"),
+  );
+  const conditionsSummary = $derived(
+    spec.squadConditions.map((c) => analyticsConditionText(c, $tr)).join(" · ") ||
+      $tr("common.none"),
+  );
+  const excludeSummary = $derived(
+    draft.exclude
+      .map((key) => analyticsKeyLabel(key, excludeSplit(key), $tr, $locale))
+      .join(", ") || $tr("common.none"),
+  );
+  const layoutSummary = $derived(
+    `${$tr(HEIGHT_LABEL[draft.height])} · ${draft.wide ? $tr("layout.spanFull") : $tr("analytics.halfWidth")}`,
+  );
+
   function save(): void {
     const { id: _id, ...rest } = spec;
     onSave(draft.id ? { ...rest, id: draft.id } : rest);
@@ -179,181 +205,169 @@
       {draft.id ? $tr("analytics.editChart") : $tr("analytics.newChart")}
     </h2>
 
-    <div class="grid gap-5 p-5 md:grid-cols-[minmax(0,19rem)_minmax(0,1fr)]">
+    <div class="grid gap-5 p-5 md:grid-cols-[minmax(0,23rem)_minmax(0,1fr)]">
       <form
-        class="flex flex-col gap-3 text-xs"
+        class="flex flex-col text-xs"
         onsubmit={(e) => {
           e.preventDefault();
           save();
         }}
       >
-        <label class="flex flex-col gap-1">
-          <span class="text-text-secondary">{$tr("analytics.field.title")}</span>
-          <input
-            class="h-7 rounded-[var(--radius-md)] border border-[color:var(--ui-control-border)] bg-bg-surface px-2 text-xs text-text-primary"
-            maxlength="80"
-            placeholder={autoTitle}
-            bind:value={draft.title}
-            data-analytics-title
+        <!-- The whole chart as one sentence; each gold word is a menu. -->
+        <p class="m-0 mb-4 text-base leading-[2.4] text-text-primary" data-analytics-sentence>
+          {$tr("analytics.sentence.show")}
+          <AnalyticsPill
+            label={$tr("analytics.field.measure")}
+            value={draft.measure}
+            options={ANALYTICS_MEASURES.map((value) => ({
+              value,
+              label: $tr(MEASURE_LABEL[value]),
+            }))}
+            onChange={(v) => (draft.measure = v)}
           />
-        </label>
-
-        <label class="flex flex-col gap-1">
-          <span class="text-text-secondary">{$tr("analytics.field.measure")}</span>
-          <ThemedSelect bind:value={draft.measure} className="h-7">
-            {#each ANALYTICS_MEASURES as value (value)}
-              <option {value}>{$tr(MEASURE_LABEL[value])}</option>
-            {/each}
-          </ThemedSelect>
-        </label>
-
-        <div class="flex flex-col gap-1">
-          <span class="text-text-secondary">{$tr("analytics.field.chart")}</span>
-          <SegmentedControl value={draft.chart} options={chartOptions} onChange={setChart} wrap />
-        </div>
-
-        {#if draft.chart !== "stat"}
-          <label class="flex flex-col gap-1">
-            <span class="text-text-secondary">{$tr("analytics.field.splitBy")}</span>
-            <select
-              class="h-7 cursor-pointer rounded-[var(--radius-md)] border border-[color:var(--ui-control-border)] bg-bg-surface px-1.5 text-xs text-text-primary [&_option]:bg-bg-surface"
+          {#if draft.chart !== "stat"}
+            {$tr("analytics.sentence.by")}
+            <AnalyticsPill
+              label={$tr("analytics.field.splitBy")}
               value={draft.splitBy}
-              onchange={(e) => setSplit(e.currentTarget.value as AnalyticsSplit)}
-              data-analytics-split
-            >
-              {#each ANALYTICS_SPLITS as value (value)}
-                <option {value}>{$tr(SPLIT_LABEL[value])}</option>
-              {/each}
-            </select>
-          </label>
-        {:else}
-          <p class="m-0 text-text-muted">{$tr("analytics.seriesStatHint")}</p>
-        {/if}
+              options={ANALYTICS_SPLITS.map((value) => ({ value, label: $tr(SPLIT_LABEL[value]) }))}
+              onChange={setSplit}
+            />
+          {/if}
+          {$tr("analytics.sentence.as")}
+          <AnalyticsPill
+            label={$tr("analytics.field.chart")}
+            value={draft.chart}
+            options={chartOptions}
+            onChange={setChart}
+          />{#if takesSeries},
+            {$tr("analytics.sentence.then")}
+            <AnalyticsPill
+              label={$tr("analytics.field.seriesBy")}
+              value={seriesChoice}
+              options={[
+                { value: NO_SERIES, label: $tr("analytics.noSecondSplit") },
+                ...seriesOptions.map((value) => ({ value, label: $tr(SPLIT_LABEL[value]) })),
+              ]}
+              onChange={(v) => (seriesChoice = v)}
+            />{/if}{#if draft.chart !== "stat" && !timeSplit},
+            {$tr("analytics.sentence.top")}
+            <AnalyticsPill
+              label={$tr("analytics.field.limit")}
+              value={draft.limit}
+              options={ANALYTICS_LIMITS.map((value) => ({
+                value,
+                label: value ? String(value) : $tr("common.all"),
+              }))}
+              onChange={(v) => (draft.limit = v)}
+            />{/if}
+        </p>
 
-        {#if takesSeries}
-          <label class="flex flex-col gap-1">
-            <span class="text-text-secondary">{$tr("analytics.field.seriesBy")}</span>
-            <ThemedSelect bind:value={seriesChoice} className="h-7">
-              <option value={NO_SERIES}>{$tr("analytics.noSecondSplit")}</option>
-              {#each seriesOptions as value (value)}
-                <option {value}>{$tr(SPLIT_LABEL[value])}</option>
-              {/each}
-            </ThemedSelect>
-          </label>
-        {/if}
-
-        {#if draft.chart !== "stat" && !timeSplit}
-          <label class="flex flex-col gap-1">
-            <span class="text-text-secondary">{$tr("analytics.field.limit")}</span>
-            <ThemedSelect bind:value={draft.limit} className="h-7">
-              {#each ANALYTICS_LIMITS as value (value)}
-                <option {value}>{value || $tr("common.all")}</option>
-              {/each}
-            </ThemedSelect>
-          </label>
-        {/if}
-
-        <div class="grid grid-cols-2 gap-2">
-          <label class="flex flex-col gap-1">
-            <span class="text-text-secondary">{$tr("analytics.field.range")}</span>
-            <ThemedSelect bind:value={draft.range} className="h-7">
-              {#each ANALYTICS_RANGES as value (value)}
-                <option {value}>{$tr(RANGE_LABEL[value])}</option>
-              {/each}
-            </ThemedSelect>
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class="text-text-secondary">{$tr("analytics.field.squad")}</span>
-            <ThemedSelect bind:value={draft.squad} className="h-7">
-              {#each ANALYTICS_SQUAD_FILTERS as value (value)}
-                <option {value}>{$tr(SQUAD_LABEL[value])}</option>
-              {/each}
-            </ThemedSelect>
-          </label>
-        </div>
-
-        <div class="flex flex-col gap-1">
-          <span class="text-text-secondary">{$tr("analytics.field.frames")}</span>
-          <div class="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
-            <ThemedButton
-              size="compact"
-              active={draft.frames.length === 0}
-              onClick={() => (draft.frames = [])}>{$tr("analytics.allFrames")}</ThemedButton
-            >
-            {#each frames as frame (frame)}
+        <AnalyticsSection title={$tr("analytics.section.filters")} summary={filtersSummary}>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex flex-col gap-1">
+              <span class="text-text-secondary">{$tr("analytics.field.range")}</span>
+              <ThemedSelect bind:value={draft.range} className="h-7">
+                {#each ANALYTICS_RANGES as value (value)}
+                  <option {value}>{$tr(RANGE_LABEL[value])}</option>
+                {/each}
+              </ThemedSelect>
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-text-secondary">{$tr("analytics.field.squad")}</span>
+              <ThemedSelect bind:value={draft.squad} className="h-7">
+                {#each ANALYTICS_SQUAD_FILTERS as value (value)}
+                  <option {value}>{$tr(SQUAD_LABEL[value])}</option>
+                {/each}
+              </ThemedSelect>
+            </label>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-text-secondary">{$tr("analytics.field.frames")}</span>
+            <div class="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
               <ThemedButton
                 size="compact"
-                active={draft.frames.includes(frame)}
-                onClick={() => toggleFrame(frame)}>{frame}</ThemedButton
+                active={draft.frames.length === 0}
+                onClick={() => (draft.frames = [])}>{$tr("analytics.allFrames")}</ThemedButton
               >
-            {/each}
-          </div>
-        </div>
-
-        <div class="flex flex-col gap-1" data-analytics-condition-editor>
-          <span class="text-text-secondary">{$tr("analytics.field.squadConditions")}</span>
-          {#each conditions as row, i (i)}
-            <div
-              class="flex flex-wrap items-center gap-1 rounded-[var(--radius-md)] border border-border-subtle p-1.5"
-              data-analytics-condition={i}
-            >
-              <select class={SELECT} bind:value={row.has} data-condition-has>
-                <option value={true}>{$tr("analytics.cond.has")}</option>
-                <option value={false}>{$tr("analytics.cond.hasNot")}</option>
-              </select>
-              <select class={SELECT} bind:value={row.frame} data-condition-frame>
-                <option value="">{$tr("analytics.cond.anyFrame")}</option>
-                {#each squadFrames as frame (frame)}
-                  <option value={frame}>{frame}</option>
-                {/each}
-              </select>
-              <select class={SELECT} bind:value={row.mode} data-condition-mode>
-                <option value="any">{$tr("analytics.cond.anyPlayer")}</option>
-                <option value="is">{$tr("analytics.cond.playedBy")}</option>
-                <option value="not">{$tr("analytics.cond.notPlayedBy")}</option>
-              </select>
-              {#if row.mode !== "any"}
-                <input
-                  class="h-7 w-32 rounded-[var(--radius-md)] border border-[color:var(--ui-control-border)] bg-bg-surface px-2 text-xs text-text-primary"
-                  list="analytics-players"
-                  maxlength="64"
-                  placeholder={$tr("analytics.cond.playerName")}
-                  aria-label={$tr("analytics.cond.playerName")}
-                  bind:value={row.player}
-                  data-condition-player
-                />
-              {/if}
-              <button
-                type="button"
-                class="ml-auto rounded px-1.5 text-lg leading-none text-text-muted hover:text-[var(--danger)]"
-                aria-label={$tr("analytics.cond.remove")}
-                title={$tr("analytics.cond.remove")}
-                onclick={() => conditions.splice(i, 1)}>&times;</button
-              >
+              {#each frames as frame (frame)}
+                <ThemedButton
+                  size="compact"
+                  active={draft.frames.includes(frame)}
+                  onClick={() => toggleFrame(frame)}>{frame}</ThemedButton
+                >
+              {/each}
             </div>
-          {/each}
-          {#if conditions.length < MAX_CONDITIONS}
-            <ThemedButton
-              size="compact"
-              className="self-start"
-              onClick={() => conditions.push({ has: true, frame: "", mode: "any", player: "" })}
-              >+ {$tr("analytics.cond.add")}</ThemedButton
-            >
-          {/if}
-          {#if draft.measure === "squadmates"}
-            <p class="m-0 text-text-muted">{$tr("analytics.cond.hint")}</p>
-          {/if}
-          <datalist id="analytics-players">
-            {#each players as name (name)}
-              <option value={name}></option>
+          </div>
+        </AnalyticsSection>
+
+        <AnalyticsSection
+          title={$tr("analytics.field.squadConditions")}
+          summary={conditionsSummary}
+        >
+          <div class="flex flex-col gap-1" data-analytics-condition-editor>
+            {#each conditions as row, i (i)}
+              <div
+                class="flex flex-wrap items-center gap-1 rounded-[var(--radius-md)] border border-border-subtle p-1.5"
+                data-analytics-condition={i}
+              >
+                <select class={SELECT} bind:value={row.has} data-condition-has>
+                  <option value={true}>{$tr("analytics.cond.has")}</option>
+                  <option value={false}>{$tr("analytics.cond.hasNot")}</option>
+                </select>
+                <select class={SELECT} bind:value={row.frame} data-condition-frame>
+                  <option value="">{$tr("analytics.cond.anyFrame")}</option>
+                  {#each squadFrames as frame (frame)}
+                    <option value={frame}>{frame}</option>
+                  {/each}
+                </select>
+                <select class={SELECT} bind:value={row.mode} data-condition-mode>
+                  <option value="any">{$tr("analytics.cond.anyPlayer")}</option>
+                  <option value="is">{$tr("analytics.cond.playedBy")}</option>
+                  <option value="not">{$tr("analytics.cond.notPlayedBy")}</option>
+                </select>
+                {#if row.mode !== "any"}
+                  <input
+                    class="h-7 w-32 rounded-[var(--radius-md)] border border-[color:var(--ui-control-border)] bg-bg-surface px-2 text-xs text-text-primary"
+                    list="analytics-players"
+                    maxlength="64"
+                    placeholder={$tr("analytics.cond.playerName")}
+                    aria-label={$tr("analytics.cond.playerName")}
+                    bind:value={row.player}
+                    data-condition-player
+                  />
+                {/if}
+                <button
+                  type="button"
+                  class="ml-auto rounded px-1.5 text-lg leading-none text-text-muted hover:text-[var(--danger)]"
+                  aria-label={$tr("analytics.cond.remove")}
+                  title={$tr("analytics.cond.remove")}
+                  onclick={() => conditions.splice(i, 1)}>&times;</button
+                >
+              </div>
             {/each}
-          </datalist>
-        </div>
+            {#if conditions.length < MAX_CONDITIONS}
+              <ThemedButton
+                size="compact"
+                className="self-start"
+                onClick={() => conditions.push({ has: true, frame: "", mode: "any", player: "" })}
+                >+ {$tr("analytics.cond.add")}</ThemedButton
+              >
+            {/if}
+            {#if draft.measure === "squadmates"}
+              <p class="m-0 text-text-muted">{$tr("analytics.cond.hint")}</p>
+            {/if}
+            <datalist id="analytics-players">
+              {#each players as name (name)}
+                <option value={name}></option>
+              {/each}
+            </datalist>
+          </div>
+        </AnalyticsSection>
 
         {#if excludeOptions.length}
-          <div class="flex flex-col gap-1" data-analytics-exclude>
-            <span class="text-text-secondary">{$tr("analytics.field.exclude")}</span>
-            <div class="flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+          <AnalyticsSection title={$tr("analytics.field.exclude")} summary={excludeSummary}>
+            <div class="flex max-h-32 flex-wrap gap-1 overflow-y-auto" data-analytics-exclude>
               {#each excludeOptions as key (key)}
                 <ThemedButton
                   size="compact"
@@ -363,44 +377,60 @@
                 >
               {/each}
             </div>
-          </div>
+          </AnalyticsSection>
         {/if}
 
-        <div class="flex flex-col gap-1">
-          <span class="text-text-secondary">{$tr("analytics.field.height")}</span>
-          <SegmentedControl
-            value={draft.height}
-            options={ANALYTICS_HEIGHTS.map((value) => ({ value, label: $tr(HEIGHT_LABEL[value]) }))}
-            onChange={(v) => (draft.height = v)}
-          />
-        </div>
+        <AnalyticsSection title={$tr("analytics.section.layout")} summary={layoutSummary}>
+          <label class="flex flex-col gap-1">
+            <span class="text-text-secondary">{$tr("analytics.field.title")}</span>
+            <input
+              class="h-7 rounded-[var(--radius-md)] border border-[color:var(--ui-control-border)] bg-bg-surface px-2 text-xs text-text-primary"
+              maxlength="80"
+              placeholder={autoTitle}
+              bind:value={draft.title}
+              data-analytics-title
+            />
+          </label>
+          <div class="flex flex-col gap-1">
+            <span class="text-text-secondary">{$tr("analytics.field.height")}</span>
+            <SegmentedControl
+              value={draft.height}
+              options={ANALYTICS_HEIGHTS.map((value) => ({
+                value,
+                label: $tr(HEIGHT_LABEL[value]),
+              }))}
+              onChange={(v) => (draft.height = v)}
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-text-secondary">{$tr("analytics.field.width")}</span>
+            <SegmentedControl
+              value={draft.wide ? "full" : "half"}
+              options={[
+                { value: "half", label: $tr("analytics.halfWidth") },
+                { value: "full", label: $tr("layout.spanFull") },
+              ]}
+              onChange={(v) => (draft.wide = v === "full")}
+            />
+          </div>
+        </AnalyticsSection>
 
-        <div class="flex flex-col gap-1">
-          <span class="text-text-secondary">{$tr("analytics.field.width")}</span>
-          <SegmentedControl
-            value={draft.wide ? "full" : "half"}
-            options={[
-              { value: "half", label: $tr("analytics.halfWidth") },
-              { value: "full", label: $tr("layout.spanFull") },
-            ]}
-            onChange={(v) => (draft.wide = v === "full")}
-          />
-        </div>
-
-        <div class="mt-2 flex justify-end gap-2">
+        <div class="mt-auto flex justify-end gap-2 border-t border-border-subtle pt-4">
           <ThemedButton onClick={onClose}>{$tr("common.cancel")}</ThemedButton>
           <ThemedButton type="submit" active>{$tr("common.save")}</ThemedButton>
         </div>
       </form>
 
       <section class="flex min-w-0 flex-col gap-2" aria-label={$tr("analytics.preview")}>
-        <span class="text-xs text-text-secondary">{$tr("analytics.preview")}</span>
         <div
           class="rounded-[var(--radius-lg)] border border-[color:var(--ui-panel-border)] bg-[var(--ui-panel-bg)] p-4"
         >
-          <h3 class="m-0 mb-3 text-sm font-semibold text-text-heading">
+          <h3 class="m-0 text-sm font-semibold text-text-heading">
             {spec.title || autoTitle}
           </h3>
+          <span class="mb-3 block text-xs text-text-muted"
+            >{$tr("analytics.runCount", { count: String(result.runCount) })}</span
+          >
           <AnalyticsChart {spec} {result} title={spec.title || autoTitle} />
         </div>
         <!-- The numbers behind the chart, to check it while building it. -->

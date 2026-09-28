@@ -2728,7 +2728,6 @@
   "analytics.allFrames": "All frames",
   "analytics.halfWidth": "Half width",
   "analytics.noSecondSplit": "No second split",
-  "analytics.seriesStatHint": "A single number ignores the splits.",
   "analytics.measure.runs": "Run count",
   "analytics.measure.exolizersAvg": "Average Exolizers",
   "analytics.measure.exolizersBest": "Best Exolizers",
@@ -2784,5 +2783,13 @@
   "analytics.field.exclude": "Leave out",
   "analytics.field.height": "Height",
   "analytics.height.short": "Short",
-  "analytics.height.tall": "Tall"
+  "analytics.height.tall": "Tall",
+  "analytics.sentence.show": "Show",
+  "analytics.sentence.by": "by",
+  "analytics.sentence.as": "as",
+  "analytics.sentence.then": "then by",
+  "analytics.sentence.top": "top",
+  "analytics.section.filters": "Filter runs",
+  "analytics.section.layout": "Title & layout",
+  "analytics.summary.allRuns": "All runs"
 }

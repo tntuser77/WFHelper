@@ -2708,7 +2708,6 @@
   "analytics.allFrames": "Alle Warframes",
   "analytics.halfWidth": "Halbe Breite",
   "analytics.noSecondSplit": "Keine zweite Aufteilung",
-  "analytics.seriesStatHint": "Eine einzelne Zahl ignoriert die Aufteilungen.",
   "analytics.measure.runs": "Anzahl Durchläufe",
   "analytics.measure.exolizersAvg": "Exolizer im Schnitt",
   "analytics.measure.exolizersBest": "Meiste Exolizer",
@@ -2764,5 +2763,13 @@
   "analytics.field.exclude": "Weglassen",
   "analytics.field.height": "Höhe",
   "analytics.height.short": "Niedrig",
-  "analytics.height.tall": "Hoch"
+  "analytics.height.tall": "Hoch",
+  "analytics.sentence.show": "Zeige",
+  "analytics.sentence.by": "nach",
+  "analytics.sentence.as": "als",
+  "analytics.sentence.then": "dann nach",
+  "analytics.sentence.top": "Top",
+  "analytics.section.filters": "Durchläufe filtern",
+  "analytics.section.layout": "Titel und Layout",
+  "analytics.summary.allRuns": "Alle Durchläufe"
 }
