@@ -14,6 +14,7 @@
     colors,
     format,
     whole,
+    height = 220,
   }: {
     result: AnalyticsResult;
     kind: "columns" | "line";
@@ -21,6 +22,7 @@
     stacked: boolean;
     /** The measure only takes whole numbers. */
     whole: boolean;
+    height?: number;
     title: string;
     categoryLabels: string[];
     shortLabels: string[];
@@ -29,7 +31,7 @@
     format: (value: number | null) => string;
   } = $props();
 
-  const H = 220;
+  const H = $derived(height);
   const M = { top: 12, right: 8, bottom: 24, left: 40 };
   const GAP = 2;
 
@@ -37,7 +39,7 @@
   let hover = $state<{ index: number; x: number; y: number } | null>(null);
 
   const plotW = $derived(Math.max(40, width - M.left - M.right));
-  const plotH = H - M.top - M.bottom;
+  const plotH = $derived(H - M.top - M.bottom);
   const n = $derived(result.categories.length);
   const band = $derived(plotW / Math.max(1, n));
   const multi = $derived(result.series.length > 1);

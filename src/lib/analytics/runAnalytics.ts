@@ -46,6 +46,9 @@ export const ANALYTICS_RANGES = ["all", "30d", "90d", "365d"] as const;
 export type AnalyticsRange = (typeof ANALYTICS_RANGES)[number];
 
 export const ANALYTICS_SQUAD_FILTERS = ["all", "solo", "squad"] as const;
+
+export const ANALYTICS_HEIGHTS = ["short", "normal", "tall"] as const;
+export type AnalyticsHeight = (typeof ANALYTICS_HEIGHTS)[number];
 export type AnalyticsSquadFilter = (typeof ANALYTICS_SQUAD_FILTERS)[number];
 
 /** A run passes when it has (or, with `has` false, lacks) a squadmate matching
@@ -81,6 +84,8 @@ export interface AnalyticsChartSpec {
    *  time splits never fold. */
   limit: number;
   wide: boolean;
+  /** How much room the card's chart gets; a list longer than that scrolls. */
+  height: AnalyticsHeight;
 }
 
 /** The theme has six chart colours, so five series plus "Other". */

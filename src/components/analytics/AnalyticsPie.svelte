@@ -9,6 +9,7 @@
     donut,
     title,
     format,
+    legendClass = "",
   }: {
     values: Array<number | null>;
     labels: string[];
@@ -16,6 +17,8 @@
     donut: boolean;
     title: string;
     format: (value: number | null) => string;
+    /** Caps the legend's height; a long legend scrolls. */
+    legendClass?: string;
   } = $props();
 
   const SIZE = 180;
@@ -103,7 +106,7 @@
     {/if}
   </svg>
 
-  <ul class="m-0 flex min-w-[12rem] flex-1 list-none flex-col gap-1 p-0 text-xs">
+  <ul class="m-0 flex min-w-[12rem] flex-1 list-none flex-col gap-1 p-0 text-xs {legendClass}">
     {#each labels as label, i (i)}
       <li
         class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-[var(--radius-sm)] px-1 py-0.5 {hover?.index ===

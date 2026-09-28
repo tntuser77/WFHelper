@@ -50,6 +50,7 @@ function spec(overrides: Partial<AnalyticsChartSpec> = {}): AnalyticsChartSpec {
     exclude: [],
     limit: 10,
     wide: false,
+    height: "normal",
     ...overrides,
   };
 }

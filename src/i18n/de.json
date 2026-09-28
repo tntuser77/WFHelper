@@ -2760,5 +2760,10 @@
   "analytics.names.missing": "Truppmitglieder zum Ergänzen",
   "analytics.names.frameHint": "Benennt alle Truppmitglieder mit diesem Porträt, in allen Durchläufen.",
   "analytics.data": "Daten",
-  "analytics.measure.exolizersTotal": "Exolizer gesamt"
+  "analytics.measure.exolizersTotal": "Exolizer gesamt",
+  "analytics.field.exclude": "Weglassen",
+  "analytics.field.height": "Höhe",
+  "analytics.height.short": "Niedrig",
+  "analytics.height.normal": "Normal",
+  "analytics.height.tall": "Hoch"
 }

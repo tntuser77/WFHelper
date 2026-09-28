@@ -2,6 +2,7 @@ import { writable, type Readable } from "svelte/store";
 
 import {
   ANALYTICS_CHARTS,
+  ANALYTICS_HEIGHTS,
   ANALYTICS_MEASURES,
   ANALYTICS_RANGES,
   ANALYTICS_SPLITS,
@@ -38,6 +39,7 @@ const BLANK: ChartDraft = {
   exclude: [],
   limit: 10,
   wide: false,
+  height: "normal",
 };
 
 /** What a fresh dashboard shows; ordinary cards once they are on it. */
@@ -127,6 +129,7 @@ export function normalizeChartSpec(raw: unknown): AnalyticsChartSpec | null {
       : [],
     limit: pick<number>(ANALYTICS_LIMITS, value.limit, BLANK.limit),
     wide: value.wide === true,
+    height: pick(ANALYTICS_HEIGHTS, value.height, BLANK.height),
   };
 }
 

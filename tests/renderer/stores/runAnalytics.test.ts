@@ -60,6 +60,8 @@ describe("run analytics dashboard store", () => {
           limit: 0,
           exclude: ["Operator", 3, "Operator"],
         },
+        { id: "h", height: "tall" },
+        { id: "i", height: "giant" },
       ],
     });
     expect(get(store.analyticsCharts)).toMatchObject([
@@ -73,6 +75,8 @@ describe("run analytics dashboard store", () => {
       { id: "f", chart: "donut" },
       // A total shares out too; "All" is a limit, and junk leaves the exclude list.
       { id: "g", chart: "pie", limit: 0, exclude: ["Operator"] },
+      { id: "h", height: "tall" },
+      { id: "i", height: "normal" },
     ]);
   });
 

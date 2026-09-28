@@ -3,6 +3,8 @@
 
   import {
     analyticsAutoTitle,
+    analyticsKeyLabel,
+    HEIGHT_LABEL,
     CHART_LABEL,
     MEASURE_LABEL,
     RANGE_LABEL,
@@ -11,6 +13,8 @@
   } from "../../lib/analytics/analyticsLabels.js";
   import {
     ANALYTICS_CHARTS,
+    ANALYTICS_HEIGHTS,
+    ANALYTICS_OTHER,
     ANALYTICS_MEASURES,
     ANALYTICS_RANGES,
     ANALYTICS_SPLITS,
@@ -23,7 +27,7 @@
     type AnalyticsContext,
     type AnalyticsSplit,
   } from "../../lib/analytics/runAnalytics.js";
-  import { tr } from "../../lib/i18n.js";
+  import { locale, tr } from "../../lib/i18n.js";
   import { ANALYTICS_LIMITS, normalizeChartSpec } from "../../stores/runAnalytics.js";
   import type { LevelCapRun } from "../../types/ipc.js";
   import ModalShell from "../ModalShell.svelte";
@@ -131,6 +135,27 @@
     if (seriesChoice === split) seriesChoice = NO_SERIES;
   }
 
+  // What can be left out: every value the splits produce, unlimited and unfiltered.
+  const listed = (split: AnalyticsSplit | null) =>
+    split && !isAnalyticsTimeSplit(split)
+      ? analyticsResult(
+          runs,
+          { ...spec, splitBy: split, seriesBy: null, chart: "ranked", limit: 0, exclude: [] },
+          ctx,
+        ).categories.filter((key) => key !== ANALYTICS_OTHER)
+      : [];
+  const splitKeys = $derived(spec.chart === "stat" ? [] : listed(spec.splitBy));
+  const seriesKeys = $derived(listed(spec.seriesBy));
+  const excludeOptions = $derived([...new Set([...splitKeys, ...seriesKeys, ...draft.exclude])]);
+  const excludeSplit = (key: string): AnalyticsSplit | null =>
+    splitKeys.includes(key) ? spec.splitBy : spec.seriesBy;
+
+  function toggleExclude(key: string): void {
+    draft.exclude = draft.exclude.includes(key)
+      ? draft.exclude.filter((k) => k !== key)
+      : [...draft.exclude, key];
+  }
+
   function toggleFrame(frame: string): void {
     draft.frames = draft.frames.includes(frame)
       ? draft.frames.filter((f) => f !== frame)
@@ -222,7 +247,7 @@
             <span class="text-text-secondary">{$tr("analytics.field.limit")}</span>
             <ThemedSelect bind:value={draft.limit} className="h-7">
               {#each ANALYTICS_LIMITS as value (value)}
-                <option {value}>{value}</option>
+                <option {value}>{value || $tr("common.all")}</option>
               {/each}
             </ThemedSelect>
           </label>
@@ -323,6 +348,31 @@
               <option value={name}></option>
             {/each}
           </datalist>
+        </div>
+
+        {#if excludeOptions.length}
+          <div class="flex flex-col gap-1" data-analytics-exclude>
+            <span class="text-text-secondary">{$tr("analytics.field.exclude")}</span>
+            <div class="flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+              {#each excludeOptions as key (key)}
+                <ThemedButton
+                  size="compact"
+                  active={draft.exclude.includes(key)}
+                  onClick={() => toggleExclude(key)}
+                  >{analyticsKeyLabel(key, excludeSplit(key), $tr, $locale)}</ThemedButton
+                >
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <div class="flex flex-col gap-1">
+          <span class="text-text-secondary">{$tr("analytics.field.height")}</span>
+          <SegmentedControl
+            value={draft.height}
+            options={ANALYTICS_HEIGHTS.map((value) => ({ value, label: $tr(HEIGHT_LABEL[value]) }))}
+            onChange={(v) => (draft.height = v)}
+          />
         </div>
 
         <div class="flex flex-col gap-1">

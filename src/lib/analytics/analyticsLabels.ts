@@ -7,6 +7,7 @@ import {
   ANALYTICS_UNKNOWN,
   type AnalyticsChartKind,
   type AnalyticsChartSpec,
+  type AnalyticsHeight,
   type AnalyticsMeasure,
   type AnalyticsRange,
   type AnalyticsSplit,
@@ -46,6 +47,12 @@ export const CHART_LABEL: Record<AnalyticsChartKind, MessageKey> = {
   donut: "analytics.chart.donut",
   stat: "analytics.chart.stat",
   table: "analytics.chart.table",
+};
+
+export const HEIGHT_LABEL: Record<AnalyticsHeight, MessageKey> = {
+  short: "analytics.height.short",
+  normal: "analytics.height.normal",
+  tall: "analytics.height.tall",
 };
 
 export const RANGE_LABEL: Record<AnalyticsRange, MessageKey> = {
