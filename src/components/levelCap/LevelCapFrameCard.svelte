@@ -69,7 +69,7 @@
   let showAllTags = $state(false);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
-  // The panel sits above the chip, so closing waits a beat for the pointer to
+  // The panel sits below the chip, so closing waits a beat for the pointer to
   // cross into it.
   function openTags(): void {
     clearTimeout(hideTimer);
@@ -237,11 +237,10 @@
       >
     {/if}
     {#if showAllTags}
-      <!-- Opens upward over the header, so a pointer heading down to the gear
-           row never lands on it. The bottom padding bridges the gap to the chip. -->
+      <!-- Drops over the top of the gear row; the top padding bridges the gap to the chip. -->
       <div
         role="presentation"
-        class="absolute inset-x-0 bottom-full z-30 pb-1.5"
+        class="absolute inset-x-0 top-full z-30 pt-1.5"
         onmouseenter={openTags}
         onmouseleave={closeTagsSoon}
         data-level-cap-more-tags-panel
