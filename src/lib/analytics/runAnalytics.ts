@@ -92,6 +92,9 @@ export interface AnalyticsChartSpec {
   cols: AnalyticsCols;
   /** How much room the card's chart gets; a list longer than that scrolls. */
   height: AnalyticsHeight;
+  /** Where it sits on the dashboard: its row, and its first of four columns. */
+  row: number;
+  col: number;
 }
 
 /** The theme has six chart colours, so five series plus "Other". */

@@ -4,6 +4,13 @@
 
   import { analyticsTitle } from "../../lib/analytics/analyticsLabels.js";
   import {
+    DASHBOARD_COLS,
+    layoutRowCount,
+    placeInLayout,
+    sortLayout,
+    type LayoutBox,
+  } from "../../lib/analytics/dashboardLayout.js";
+  import {
     analyticsResult,
     analyticsSquadChoices,
     analyticsTagChoices,
@@ -18,11 +25,11 @@
   import {
     addAnalyticsChart,
     analyticsCharts,
-    moveAnalyticsChart,
     newChartDraft,
+    nudgeAnalyticsChart,
+    placeAnalyticsChart,
     removeAnalyticsChart,
     resetAnalyticsCharts,
-    setAnalyticsOrder,
     updateAnalyticsChart,
   } from "../../stores/runAnalytics.js";
   import ThemedButton from "../ThemedButton.svelte";
@@ -58,24 +65,14 @@
 
   let editing = $state<Draft | null>(null);
 
-  // Static class names, so the stylesheet keeps all four spans.
-  const SPAN = {
-    1: "md:col-span-1",
-    2: "md:col-span-2",
-    3: "md:col-span-3",
-    4: "md:col-span-4",
-  } as const;
-  // Cards slide into place for this long; no reorder is tried until they settle.
+  // Cards slide into place for this long; no new spot is tried until they settle.
   const REFLOW_MS = 200;
-  // How far ahead of the held card's centre a sideways swap is checked: a share
-  // of its width, capped so a wide card does not swap from far off.
-  const SWAP_LEAD = 0.2;
-  const SWAP_LEAD_MAX_PX = 96;
-  const SWAP_TURN_PX = 24;
+  // How far below the held card's top edge decides which row it is over:
+  // about its title, so a row is picked by where the card's header is.
+  const ROW_PROBE_PX = 32;
 
   let grid = $state<HTMLDivElement | null>(null);
-  // A card being moved: where the pointer is, where it grabbed the card, and the
-  // order the grid shows while it is held. Nothing is saved until it is dropped.
+  // A card being moved: where the pointer is, and where it grabbed the card.
   let moving = $state<{
     id: string;
     x: number;
@@ -83,16 +80,59 @@
     offX: number;
     offY: number;
     width: number;
-    height: number;
   } | null>(null);
-  let order = $state<string[] | null>(null);
-  const shownCards = $derived(
-    order ? order.flatMap((id) => cards.find((c) => c.spec.id === id) ?? []) : cards,
-  );
+  // Where every card would sit if the held one dropped now. Nothing is saved
+  // until it does.
+  let preview = $state<LayoutBox[] | null>(null);
+  const shownCards = $derived.by(() => {
+    if (!preview) return cards;
+    const order = new Map(sortLayout(preview).map((b, i) => [b.id, i]));
+    return [...cards].sort((a, b) => order.get(a.spec.id)! - order.get(b.spec.id)!);
+  });
   const movingCard = $derived(moving ? cards.find((c) => c.spec.id === moving!.id) : undefined);
 
+  const boxOf = (spec: AnalyticsChartSpec): LayoutBox => ({
+    id: spec.id,
+    row: spec.row,
+    col: spec.col,
+    cols: spec.cols,
+  });
+
+  /**
+   * The saved row under screen height `y`, or null over a gap between rows.
+   * The grid on screen shows the preview, whose rows can differ from the saved
+   * ones (a row pushed in, one closed up), so a row is known by the other
+   * cards in it; a row holding only the held card keeps the current target.
+   */
+  function rowAt(
+    y: number,
+    start: readonly LayoutBox[],
+    shown: readonly LayoutBox[],
+    id: string,
+    current: number,
+  ): number | null {
+    if (!grid) return null;
+    const style = getComputedStyle(grid);
+    const gap = parseFloat(style.rowGap) || 0;
+    const tracks = style.gridTemplateRows.split(" ").map((t) => parseFloat(t) || 0);
+    let top = grid.getBoundingClientRect().top;
+    for (let row = 0; row < tracks.length; row++) {
+      const bottom = top + tracks[row];
+      if (y < bottom + gap / 2) {
+        const other = shown.find((b) => b.row === row && b.id !== id);
+        return other ? start.find((b) => b.id === other.id)!.row : current;
+      }
+      top = bottom + gap;
+    }
+    // Below the last row: a row of its own at the bottom.
+    return layoutRowCount(start);
+  }
+
   function startMove(id: string, event: PointerEvent): void {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || !grid) return;
+    // A narrow window stacks every card in one column; the arrow keys still move
+    // cards, but there is no grid on screen to drop one into.
+    if (getComputedStyle(grid).gridTemplateColumns.split(" ").length !== DASHBOARD_COLS) return;
     const slot = (event.currentTarget as HTMLElement).closest<HTMLElement>("[data-analytics-slot]");
     if (!slot) return;
     event.preventDefault();
@@ -104,87 +144,57 @@
       offX: event.clientX - box.left,
       offY: event.clientY - box.top,
       width: box.width,
-      height: box.height,
     };
-    const start = cards.map((c) => c.spec.id);
-    order = start;
+    const start = cards.map((c) => boxOf(c.spec));
+    const self = start.find((b) => b.id === id)!;
+    let target = { row: self.row, col: self.col };
+    preview = start;
     let settledAt = 0;
-    let swappedWith: string | null = null;
-    let swappedHeading = 0;
-    // Which way the card is heading sideways. It only turns once the card comes
-    // back SWAP_TURN_PX from the furthest point, so a wobble does not swing the
-    // look-ahead from one side of the card to the other.
-    let turnX = event.clientX;
-    let headingX = 0;
 
     const move = (e: PointerEvent) => {
-      if (!moving || !order) return;
+      if (!moving || !preview || !grid) return;
       moving = { ...moving, x: e.clientX, y: e.clientY };
-      const pastTurn = (e.clientX - turnX) * headingX;
-      if (headingX === 0 ? Math.abs(e.clientX - turnX) >= 3 : pastTurn < -SWAP_TURN_PX) {
-        headingX = Math.sign(e.clientX - turnX);
-        turnX = e.clientX;
-      } else if (pastTurn > 0) {
-        turnX = e.clientX;
-      }
       if (performance.now() < settledAt) return;
-      // The held card's centre decides, not the pointer, so where it was grabbed
-      // does not change how far it has to travel. It looks a little ahead of the
-      // centre the way the card is going, so a swap comes when the hand expects it.
-      const lead = headingX * Math.min(moving.width * SWAP_LEAD, SWAP_LEAD_MAX_PX);
-      const cx = e.clientX - moving.offX + moving.width / 2 + lead;
-      const cy = e.clientY - moving.offY + moving.height / 2;
-      const over = document.elementFromPoint(cx, cy)?.closest<HTMLElement>("[data-analytics-slot]");
-      const target = over?.dataset.analyticsSlot;
-      // A card that just traded places may still sit under the centre. It only
-      // trades back once the card turns around, reaches its own slot, or meets
-      // another card; the gap between cards does not count, or the two would
-      // swap back and forth on the way across it.
-      if (!over || !target) return;
-      if (target === moving.id) {
-        swappedWith = null;
-        return;
-      }
-      if (target === swappedWith && headingX === swappedHeading) return;
-      // A card spanning most of a row splits top and bottom at its middle. A card
-      // beside it trades places as soon as the centre reaches it.
-      const box = over.getBoundingClientRect();
-      const rowWide = box.width > (grid?.clientWidth ?? 0) * 0.6;
-      const after = rowWide
-        ? cy > box.top + box.height / 2
-        : order.indexOf(target) > order.indexOf(moving.id);
-      const rest = order.filter((cardId) => cardId !== moving!.id);
-      const at = rest.indexOf(target) + (after ? 1 : 0);
-      const next = [...rest.slice(0, at), moving.id, ...rest.slice(at)];
-      if (next.join() === order.join()) return;
-      order = next;
-      swappedWith = rowWide ? null : target;
-      swappedHeading = headingX;
+      // The card's own left edge picks the column, rounded to the nearest one.
+      const g = grid.getBoundingClientRect();
+      const colGap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+      const pitch = (g.width + colGap) / DASHBOARD_COLS;
+      const col = Math.min(
+        DASHBOARD_COLS - self.cols,
+        Math.max(0, Math.round((e.clientX - moving.offX - g.left) / pitch)),
+      );
+      const row = rowAt(e.clientY - moving.offY + ROW_PROBE_PX, start, preview, id, target.row);
+      if (row === null || (row === target.row && col === target.col)) return;
+      target = { row, col };
+      preview = row === self.row && col === self.col ? start : placeInLayout(start, id, row, col);
       settledAt = performance.now() + REFLOW_MS;
     };
     const end = () => {
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerup", end, true);
       window.removeEventListener("pointercancel", end, true);
-      if (order && order.join() !== start.join()) setAnalyticsOrder(order);
+      if (target.row !== self.row || target.col !== self.col) {
+        placeAnalyticsChart(id, target.row, target.col);
+      }
       moving = null;
-      order = null;
+      preview = null;
     };
     window.addEventListener("pointermove", move, true);
     window.addEventListener("pointerup", end, true);
     window.addEventListener("pointercancel", end, true);
   }
 
-  function keyMove(index: number, event: KeyboardEvent): void {
-    const step =
-      event.key === "ArrowUp" || event.key === "ArrowLeft"
-        ? -1
-        : event.key === "ArrowDown" || event.key === "ArrowRight"
-          ? 1
-          : 0;
-    if (!step) return;
+  function keyMove(id: string, event: KeyboardEvent): void {
+    const step: Record<string, [number, number]> = {
+      ArrowUp: [-1, 0],
+      ArrowDown: [1, 0],
+      ArrowLeft: [0, -1],
+      ArrowRight: [0, 1],
+    };
+    const by = step[event.key];
+    if (!by) return;
     event.preventDefault();
-    moveAnalyticsChart(index, index + step);
+    nudgeAnalyticsChart(id, by[0], by[1]);
   }
 
   // The lifted card floats above everything, clear of any containing panel.
@@ -232,14 +242,18 @@
     data-analytics-grid
     data-analytics-moving={moving ? "true" : undefined}
   >
-    {#each shownCards as card, index (card.spec.id)}
+    {#each shownCards as card (card.spec.id)}
       {@const lifted = moving?.id === card.spec.id}
+      {@const at = preview?.find((b) => b.id === card.spec.id) ?? card.spec}
       <!-- self-start: a card is as tall as its own chart, not its row's tallest. -->
       <div
-        class="{SPAN[card.spec.cols]} self-start {lifted
+        class="analytics-slot self-start {lifted
           ? 'rounded-[var(--radius-lg)] outline-dashed outline-2 outline-accent'
           : ''}"
+        style="--row:{at.row + 1}; --col:{at.col + 1}; --span:{card.spec.cols}"
         data-analytics-slot={card.spec.id}
+        data-analytics-row={at.row}
+        data-analytics-col={at.col}
         animate:flip={{ duration: REFLOW_MS }}
       >
         <!-- The moved card's own slot stays as a faint gap where it will land. -->
@@ -249,7 +263,7 @@
             result={card.result}
             title={card.title}
             onGrab={(e) => startMove(card.spec.id, e)}
-            onGrabKey={(e) => keyMove(index, e)}
+            onGrabKey={(e) => keyMove(card.spec.id, e)}
             onEdit={() => (editing = structuredClone(card.spec))}
             onRemove={() => removeAnalyticsChart(card.spec.id)}
             onResize={(cols, height) => updateAnalyticsChart({ ...card.spec, cols, height })}
@@ -302,3 +316,14 @@
     onClose={() => (reviewingNames = false)}
   />
 {/if}
+
+<style>
+  /* Four columns and up: every card at its own row and column, gaps allowed.
+     Narrower, the grid is one column and the cards stack in reading order. */
+  @media (min-width: 768px) {
+    .analytics-slot {
+      grid-row: var(--row);
+      grid-column: var(--col) / span var(--span);
+    }
+  }
+</style>

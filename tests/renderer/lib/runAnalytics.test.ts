@@ -52,6 +52,8 @@ function spec(overrides: Partial<AnalyticsChartSpec> = {}): AnalyticsChartSpec {
     limit: 10,
     cols: 2,
     height: "normal",
+    row: 0,
+    col: 0,
     ...overrides,
   };
 }

@@ -15,6 +15,13 @@ import {
   type AnalyticsCols,
   type AnalyticsSquadCondition,
 } from "../lib/analytics/runAnalytics.js";
+import {
+  compactLayout,
+  flowLayout,
+  layoutRowCount,
+  placeInLayout,
+  tidyLayout,
+} from "../lib/analytics/dashboardLayout.js";
 import { readStoredJson, writeStorage } from "../lib/persistence.js";
 
 const RUN_ANALYTICS_STORAGE_KEY = "wf_run_analytics_v1";
@@ -43,6 +50,8 @@ const BLANK: ChartDraft = {
   limit: 10,
   cols: 2,
   height: "normal",
+  row: 0,
+  col: 0,
 };
 
 /** What a fresh dashboard shows; ordinary cards once they are on it. */
@@ -64,7 +73,7 @@ function newId(): string {
 }
 
 function starterCharts(): AnalyticsChartSpec[] {
-  return STARTER.map((draft) => ({ ...structuredClone(draft), id: newId() }));
+  return flowLayout(STARTER.map((draft) => ({ ...structuredClone(draft), id: newId() })));
 }
 
 function pick<T extends string | number | null>(
@@ -139,6 +148,9 @@ export function normalizeChartSpec(raw: unknown): AnalyticsChartSpec | null {
     // Cards saved before the four-column grid were half or full width.
     cols: pick<number>(ANALYTICS_COLS, value.cols, value.wide === true ? 4 : 2) as AnalyticsCols,
     height: pick(ANALYTICS_HEIGHTS, value.height, BLANK.height),
+    // -1 until laid out: cards saved before positions existed have none.
+    row: Number.isInteger(value.row) && (value.row as number) >= 0 ? (value.row as number) : -1,
+    col: Number.isInteger(value.col) && (value.col as number) >= 0 ? (value.col as number) : -1,
   };
 }
 
@@ -146,7 +158,7 @@ function normalizeCharts(parsed: unknown): AnalyticsChartSpec[] {
   const list = (parsed as { charts?: unknown })?.charts;
   if (!Array.isArray(list)) return starterCharts();
   const seen = new Set<string>();
-  return list
+  const charts = list
     .flatMap((raw) => {
       const spec = normalizeChartSpec(raw);
       if (!spec || seen.has(spec.id)) return [];
@@ -154,6 +166,8 @@ function normalizeCharts(parsed: unknown): AnalyticsChartSpec[] {
       return [spec];
     })
     .slice(0, MAX_CHARTS);
+  // A dashboard from before positions keeps the order it had, laid out as it looked.
+  return charts.some((c) => c.row < 0 || c.col < 0) ? flowLayout(charts) : tidyLayout(charts);
 }
 
 const store = writable<AnalyticsChartSpec[]>(
@@ -170,38 +184,44 @@ function save(update: (charts: AnalyticsChartSpec[]) => AnalyticsChartSpec[]): v
 
 export const analyticsCharts: Readable<AnalyticsChartSpec[]> = { subscribe: store.subscribe };
 
+/** A new card starts a row of its own at the bottom. */
 export function addAnalyticsChart(draft: ChartDraft): void {
-  const spec = normalizeChartSpec({ ...draft, id: newId() });
-  if (spec) save((charts) => [...charts, spec].slice(0, MAX_CHARTS));
-}
-
-export function updateAnalyticsChart(spec: AnalyticsChartSpec): void {
-  const clean = normalizeChartSpec(spec);
-  if (clean) save((charts) => charts.map((c) => (c.id === clean.id ? clean : c)));
-}
-
-export function removeAnalyticsChart(id: string): void {
-  save((charts) => charts.filter((c) => c.id !== id));
-}
-
-export function moveAnalyticsChart(from: number, to: number): void {
   save((charts) => {
-    if (to < 0 || to >= charts.length || from === to) return charts;
-    const next = [...charts];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    return next;
+    if (charts.length >= MAX_CHARTS) return charts;
+    const spec = normalizeChartSpec({ ...draft, id: newId(), row: layoutRowCount(charts), col: 0 });
+    return spec ? [...charts, spec] : charts;
   });
 }
 
-/** Puts the cards in the order a drag ended with; ids it does not know are skipped
- *  and cards it leaves out keep their place at the end. */
-export function setAnalyticsOrder(ids: readonly string[]): void {
+/** Edits keep the card where it is; a wider card pushes what it now covers down a row. */
+export function updateAnalyticsChart(spec: AnalyticsChartSpec): void {
+  const clean = normalizeChartSpec(spec);
+  if (!clean) return;
   save((charts) => {
-    const byId = new Map(charts.map((c) => [c.id, c]));
-    const ordered = ids.flatMap((id) => byId.get(id) ?? []);
-    const placed = new Set(ordered.map((c) => c.id));
-    return [...ordered, ...charts.filter((c) => !placed.has(c.id))];
+    const old = charts.find((c) => c.id === clean.id);
+    if (!old) return charts;
+    const next = charts.map((c) =>
+      c.id === clean.id ? { ...clean, row: old.row, col: old.col } : c,
+    );
+    return clean.cols === old.cols ? next : placeInLayout(next, clean.id, old.row, old.col);
+  });
+}
+
+export function removeAnalyticsChart(id: string): void {
+  save((charts) => compactLayout(charts.filter((c) => c.id !== id)));
+}
+
+/** Drops a card at a row and column; see placeInLayout for what it pushes aside. */
+export function placeAnalyticsChart(id: string, row: number, col: number): void {
+  save((charts) => placeInLayout(charts, id, row, col));
+}
+
+/** Moves a card one step with the arrow keys: a column sideways, or a row up or down. */
+export function nudgeAnalyticsChart(id: string, rows: number, cols: number): void {
+  save((charts) => {
+    const card = charts.find((c) => c.id === id);
+    if (!card || card.row + rows < 0) return charts;
+    return placeInLayout(charts, id, card.row + rows, card.col + cols);
   });
 }
 

@@ -50,6 +50,8 @@
     snapped: AnalyticsHeight;
     snapWidth: number;
     snapHeight: number;
+    /** Past the right edge the card moves left to fit, and so does its outline. */
+    snapLeft: number;
   } | null>(null);
   const shown = $derived(resizing ? { ...spec, height: resizing.snapped } : spec);
 
@@ -91,6 +93,7 @@
         snapped,
         snapWidth: spanWidth(cols),
         snapHeight: heightFor(snapped),
+        snapLeft: fourColumns ? -Math.max(0, spec.col + cols - 4) * (colWidth + gap) : 0,
       };
     };
     const end = () => {
@@ -136,8 +139,8 @@
   {#if resizing}
     <!-- Where the card lands on release, drawn over it so a shrink shows too. -->
     <div
-      class="pointer-events-none absolute left-0 top-0 z-30 rounded-[var(--radius-lg)] border-2 border-dashed border-accent bg-accent/5 transition-[width,height] duration-150"
-      style="width:{resizing.snapWidth}px; height:{resizing.snapHeight}px"
+      class="pointer-events-none absolute left-0 top-0 z-30 rounded-[var(--radius-lg)] border-2 border-dashed border-accent bg-accent/5 transition-[left,width,height] duration-150"
+      style="left:{resizing.snapLeft}px; width:{resizing.snapWidth}px; height:{resizing.snapHeight}px"
       data-analytics-snap
     ></div>
   {/if}
