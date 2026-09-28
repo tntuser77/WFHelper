@@ -245,8 +245,15 @@
     onChange(next);
   }
 
-  /** Augments fit only this frame's own abilities or the one the Helminth grafted. */
+  /** Augments fit only this frame's own abilities or the one the Helminth grafted;
+   *  weapon-exclusive and class mods only the weapons that take them. */
   function fitsItem(mod: LevelCapCatalog["mods"][number]): boolean {
+    if (mod.target) {
+      const targets = item ? catalog.weaponTargets[item.type] : undefined;
+      // Zaws and kitguns are not in the export: keep class mods, drop another gun's.
+      if (!targets) return !mod.target.weapon;
+      return targets.includes(mod.target.type);
+    }
     if (!mod.augment) return true;
     if (kind !== "suit" || !item) return false;
     return (

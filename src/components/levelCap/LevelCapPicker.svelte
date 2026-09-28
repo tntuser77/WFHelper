@@ -6,6 +6,8 @@
     name: string;
     /** Card text, e.g. "+55% Ability Duration"; searched after the name. */
     stats?: string;
+    /** Mod capacity at max rank; mods list heaviest first and show it. */
+    drain?: number;
   }
 
   let {
@@ -47,7 +49,11 @@
     // "prim" finds Primed mods before Reaper Prime.
     const lead = words[0] ?? "";
     const rank = (o: Option) => (inName(o) ? Number(!o.name.toLowerCase().startsWith(lead)) : 2);
-    return hits.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+    // Then by drain, heaviest first; auras by how much they give back.
+    const drain = (o: Option) => Math.abs(o.drain ?? 0);
+    return hits.sort(
+      (a, b) => rank(a) - rank(b) || drain(b) - drain(a) || a.name.localeCompare(b.name),
+    );
   }
 
   const results = $derived.by(() => {
@@ -110,7 +116,14 @@
           onmouseenter={() => (active = i)}
           onclick={() => onPick(option.type)}
         >
-          <span class="truncate">{option.name}</span>
+          <span class="flex items-baseline gap-2">
+            <span class="min-w-0 flex-1 truncate">{option.name}</span>
+            {#if option.drain}
+              <span class="shrink-0 font-mono text-[11px] text-text-muted"
+                >{option.drain > 0 ? option.drain : `+${-option.drain}`}</span
+              >
+            {/if}
+          </span>
           {#if option.stats}
             <span class="truncate text-[11px] text-text-muted">{option.stats}</span>
           {/if}

@@ -56,6 +56,40 @@ describe("levelCapCatalog", () => {
     expect(mod("Continuity")?.augment).toBeUndefined();
   });
 
+  it("marks mods only some weapons take, and which weapons take them", () => {
+    const mod = (name: string) => catalog.mods.find((m) => m.name === name);
+    const weapon = (name: string) =>
+      [...catalog.primary, ...catalog.secondary].find((w) => w.name === name)?.type ?? "";
+    const takes = (gun: string, name: string) => {
+      const target = mod(name)?.target;
+      return !target || (catalog.weaponTargets[weapon(gun)] ?? []).includes(target.type);
+    };
+    expect(mod("Thundermiter")?.target?.weapon).toBe(true);
+    expect(mod("Point Blank")?.target?.weapon).toBe(false);
+    expect(mod("Vigilante Armaments")?.target).toBeUndefined();
+
+    expect(takes("Miter", "Thundermiter")).toBe(true);
+    expect(takes("Soma Prime", "Thundermiter")).toBe(false);
+    expect(takes("Kuva Sobek", "Shattering Justice")).toBe(true);
+    expect(takes("Soma Prime", "Serration")).toBe(true);
+    expect(takes("Soma Prime", "Point Blank")).toBe(false);
+    expect(takes("Hek", "Point Blank")).toBe(true);
+    expect(takes("Hek", "Serration")).toBe(false);
+    // The export's holster calls Phage a wide rifle; WFCD knows it is a shotgun.
+    expect(takes("Phage", "Point Blank")).toBe(true);
+    expect(takes("Paris Prime", "Split Flights")).toBe(true);
+    expect(takes("Paris Prime", "Serration")).toBe(true);
+    expect(takes("Rubico Prime", "Split Flights")).toBe(false);
+    expect(takes("Lex Prime", "Stinging Truth")).toBe(false);
+    expect(takes("Lex Prime", "Hornet Strike")).toBe(true);
+  });
+
+  it("carries each mod's max-rank drain, negative for auras", () => {
+    const mod = (name: string) => catalog.mods.find((m) => m.name === name);
+    expect(mod("Serration")?.drain).toBe(14);
+    expect(mod("Corrosive Projection")?.drain).toBeLessThan(0);
+  });
+
   it("offers only what the Helminth can graft, once each", () => {
     expect(has(catalog.abilities, "Roar")).toBe(true);
     expect(has(catalog.abilities, "Radial Blind")).toBe(true);

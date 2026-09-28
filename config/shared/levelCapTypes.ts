@@ -170,8 +170,13 @@ export interface LevelCapCatalog {
       rarity: string;
       family: string;
       stats: string;
+      /** Capacity at max rank; auras give it back, so theirs is negative. */
+      drain: number;
       /** Set on augments: the base suit they fit and the ability they change. */
       augment?: { suit: string; ability: string | null };
+      /** Set on weapon mods only some weapons take: a single weapon's (Thundermiter)
+       *  or a class's (shotgun, sniper, bow). Weapons list theirs in `weaponTargets`. */
+      target?: { type: string; weapon: boolean };
     }
   >;
   arcanes: Array<LevelCapCatalogEntry & { maxRank: number; rarity: string; stats: string }>;
@@ -179,6 +184,8 @@ export interface LevelCapCatalog {
   abilities: LevelCapCatalogEntry[];
   /** Frame type -> the base suit its augments name, e.g. HydroidPrime -> PirateBaseSuit. */
   suitParents: Record<string, string>;
+  /** Weapon type -> the mod `target` types it takes, e.g. Sobek -> itself and shotguns. */
+  weaponTargets: Record<string, string[]>;
 }
 
 export interface LevelCapSquadmate {
