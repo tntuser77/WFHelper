@@ -46,6 +46,7 @@ function spec(overrides: Partial<AnalyticsChartSpec> = {}): AnalyticsChartSpec {
     range: "all",
     squad: "all",
     frames: [],
+    tags: [],
     squadConditions: [],
     exclude: [],
     limit: 10,
@@ -155,6 +156,32 @@ describe("analyticsResult", () => {
     );
     expect(result.categories).toEqual(["Kemani", "Alaric"]);
     expect(result.totals).toEqual([230, 110]);
+  });
+
+  it("keeps only runs with every picked tag, from the build or the run", () => {
+    const builds = [
+      { id: "b1", frame: "Dante", name: "WP", tags: ["weapons platform"] },
+    ] as unknown as AnalyticsContext["builds"];
+    const runs = [
+      run({ buildId: "b1", tags: ["melee"] }),
+      run({ buildId: "b1", tags: ["primary"] }),
+      run({ buildId: "b1", tags: ["melee"] }),
+      run({ tags: ["melee"] }),
+      run({ tags: ["weapons platform", "secondary"] }),
+    ];
+    const result = analyticsResult(
+      runs,
+      spec({
+        splitBy: "tag",
+        chart: "pie",
+        tags: ["weapons platform"],
+        exclude: ["weapons platform"],
+      }),
+      { ...ctx, builds },
+    );
+    expect(result.categories).toEqual(["melee", "primary", "secondary"]);
+    expect(result.totals).toEqual([2, 1, 1]);
+    expect(result.runCount).toBe(4);
   });
 
   it("names squadmates' frames and keeps unlabelled ones as unknown", () => {

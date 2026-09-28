@@ -2870,6 +2870,8 @@
   "analytics.field.limit": "显示前",
   "analytics.field.width": "宽度",
   "analytics.allFrames": "所有战甲",
+  "analytics.anyTags": "任意标签",
+  "analytics.field.tags": "标签（需全部包含）",
   "analytics.halfWidth": "半行宽度",
   "analytics.noSecondSplit": "不再划分",
   "analytics.measure.runs": "局数",

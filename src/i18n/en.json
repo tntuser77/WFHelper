@@ -2890,6 +2890,8 @@
   "analytics.field.limit": "Show top",
   "analytics.field.width": "Width",
   "analytics.allFrames": "All frames",
+  "analytics.anyTags": "Any tags",
+  "analytics.field.tags": "Tags (run has all)",
   "analytics.halfWidth": "Half width",
   "analytics.noSecondSplit": "No second split",
   "analytics.measure.runs": "Run count",

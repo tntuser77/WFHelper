@@ -50,6 +50,7 @@
     frames,
     squadFrames,
     players,
+    tags,
     onSave,
     onClose,
   }: {
@@ -61,6 +62,8 @@
     /** Frames squadmates were seen on, and squadmates' names, most seen first. */
     squadFrames: string[];
     players: string[];
+    /** Tags on runs or their builds, most used first. */
+    tags: string[];
     onSave: (draft: Draft) => void;
     onClose: () => void;
   } = $props();
@@ -167,12 +170,19 @@
       : [...draft.frames, frame];
   }
 
+  function toggleTag(tag: string): void {
+    draft.tags = draft.tags.includes(tag)
+      ? draft.tags.filter((t) => t !== tag)
+      : [...draft.tags, tag];
+  }
+
   // What each folded section is set to, so nothing hides behind a closed one.
   const filtersSummary = $derived(
     [
       draft.range !== "all" ? $tr(RANGE_LABEL[draft.range]) : "",
       draft.squad !== "all" ? $tr(SQUAD_LABEL[draft.squad]) : "",
       draft.frames.join(", "),
+      draft.tags.join(" + "),
     ]
       .filter(Boolean)
       .join(" · ") || $tr("analytics.summary.allRuns"),
@@ -301,6 +311,25 @@
               {/each}
             </div>
           </div>
+          {#if tags.length}
+            <div class="flex flex-col gap-1">
+              <span class="text-text-secondary">{$tr("analytics.field.tags")}</span>
+              <div class="flex max-h-28 flex-wrap gap-1 overflow-y-auto" data-analytics-tags>
+                <ThemedButton
+                  size="compact"
+                  active={draft.tags.length === 0}
+                  onClick={() => (draft.tags = [])}>{$tr("analytics.anyTags")}</ThemedButton
+                >
+                {#each tags as tag (tag)}
+                  <ThemedButton
+                    size="compact"
+                    active={draft.tags.includes(tag)}
+                    onClick={() => toggleTag(tag)}>{tag}</ThemedButton
+                  >
+                {/each}
+              </div>
+            </div>
+          {/if}
         </AnalyticsSection>
 
         <AnalyticsSection

@@ -79,6 +79,8 @@ export interface AnalyticsChartSpec {
   squad: AnalyticsSquadFilter;
   /** Frames you played to keep; empty keeps every frame. */
   frames: string[];
+  /** Tags a run needs every one of, off its build or the run itself; empty keeps all. */
+  tags: string[];
   /** Every one has to hold. The first `has` condition also picks which
    *  squadmates the "squadmates" measure counts. */
   squadConditions: AnalyticsSquadCondition[];
@@ -263,6 +265,12 @@ function squadKey(run: LevelCapRun): string {
 
 type ValuesOf = (unit: Unit) => string[];
 
+/** A run's tags: its build's, then its own. */
+function runTags(run: LevelCapRun, builds: ReadonlyMap<string, LevelCapNamedBuild>): string[] {
+  const build = run.buildId ? builds.get(run.buildId) : undefined;
+  return [...(build?.tags ?? []), ...(run.tags ?? [])];
+}
+
 function valuesFor(
   split: AnalyticsSplit,
   ctx: AnalyticsContext,
@@ -284,10 +292,7 @@ function valuesFor(
         return build ? [`${build.frame} · ${build.name}`] : [];
       };
     case "tag":
-      return ({ run }) => {
-        const build = run.buildId ? builds.get(run.buildId) : undefined;
-        return [...(build?.tags ?? []), ...(run.tags ?? [])];
-      };
+      return ({ run }) => runTags(run, builds);
     case "primary":
     case "secondary":
     case "melee":
@@ -309,6 +314,7 @@ function keepRun(
   run: LevelCapRun,
   spec: AnalyticsChartSpec,
   now: number,
+  builds: ReadonlyMap<string, LevelCapNamedBuild>,
   mates: (run: LevelCapRun) => Mate[],
 ): boolean {
   if (spec.range !== "all") {
@@ -318,6 +324,10 @@ function keepRun(
   if (spec.squad === "solo" && run.squadSize !== 1) return false;
   if (spec.squad === "squad" && !(run.squadSize !== null && run.squadSize > 1)) return false;
   if (spec.frames.length && !spec.frames.includes(run.frame)) return false;
+  if (spec.tags.length) {
+    const tags = runTags(run, builds);
+    if (!spec.tags.every((tag) => tags.includes(tag))) return false;
+  }
   return spec.squadConditions.every(
     (condition) => mates(run).some((mate) => mateMatches(mate, condition)) === condition.has,
   );
@@ -379,6 +389,15 @@ export function analyticsSquadChoices(runs: readonly LevelCapRun[]): {
   };
 }
 
+/** Tags runs can be filtered on, most used first. */
+export function analyticsTagChoices(
+  runs: readonly LevelCapRun[],
+  builds: readonly LevelCapNamedBuild[],
+): string[] {
+  const byId = new Map(builds.map((b) => [b.id, b]));
+  return mostSeenFirst(runs.flatMap((run) => [...new Set(runTags(run, byId))]));
+}
+
 /** Filters the runs, splits them and works out the measure for every cell. */
 export function analyticsResult(
   runs: readonly LevelCapRun[],
@@ -392,7 +411,8 @@ export function analyticsResult(
     if (!list) mateCache.set(run, (list = matesOf(run, self)));
     return list;
   };
-  const kept = runs.filter((run) => keepRun(run, spec, ctx.now, mates));
+  const builds = new Map(ctx.builds.map((b) => [b.id, b]));
+  const kept = runs.filter((run) => keepRun(run, spec, ctx.now, builds, mates));
   const focus = spec.squadConditions.find((condition) => condition.has);
   const units: Unit[] =
     spec.measure === "squadmates"

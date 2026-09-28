@@ -6,6 +6,7 @@
   import {
     analyticsResult,
     analyticsSquadChoices,
+    analyticsTagChoices,
     type AnalyticsChartSpec,
     type AnalyticsContext,
   } from "../../lib/analytics/runAnalytics.js";
@@ -44,6 +45,7 @@
   });
   const frames = $derived(levelCapFrames(runs).map((row) => row.frame));
   const squadChoices = $derived(analyticsSquadChoices(runs));
+  const tagChoices = $derived(analyticsTagChoices(runs, $levelCap?.builds ?? []));
   const namesToReview = $derived(squadReviewCount(runs));
   let reviewingNames = $state(false);
   const cards = $derived(
@@ -249,6 +251,7 @@
     {frames}
     squadFrames={squadChoices.frames}
     players={squadChoices.players}
+    tags={tagChoices}
     onSave={save}
     onClose={() => (editing = null)}
   />

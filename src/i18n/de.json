@@ -2870,6 +2870,8 @@
   "analytics.field.limit": "Top anzeigen",
   "analytics.field.width": "Breite",
   "analytics.allFrames": "Alle Warframes",
+  "analytics.anyTags": "Beliebige Tags",
+  "analytics.field.tags": "Tags (Durchlauf hat alle)",
   "analytics.halfWidth": "Halbe Breite",
   "analytics.noSecondSplit": "Keine zweite Aufteilung",
   "analytics.measure.runs": "Anzahl Durchläufe",

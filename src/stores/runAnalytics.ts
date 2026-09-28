@@ -37,6 +37,7 @@ const BLANK: ChartDraft = {
   range: "all",
   squad: "all",
   frames: [],
+  tags: [],
   squadConditions: [],
   exclude: [],
   limit: 10,
@@ -120,6 +121,11 @@ export function normalizeChartSpec(raw: unknown): AnalyticsChartSpec | null {
     squad: pick(ANALYTICS_SQUAD_FILTERS, value.squad, BLANK.squad),
     frames: Array.isArray(value.frames)
       ? value.frames.filter((f): f is string => typeof f === "string").slice(0, 100)
+      : [],
+    tags: Array.isArray(value.tags)
+      ? [...new Set(value.tags.filter((t): t is string => typeof t === "string" && !!t))]
+          .map((t) => t.slice(0, 64))
+          .slice(0, 20)
       : [],
     squadConditions: Array.isArray(value.squadConditions)
       ? value.squadConditions.flatMap((c) => normalizeCondition(c) ?? []).slice(0, MAX_CONDITIONS)
