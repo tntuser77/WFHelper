@@ -71,6 +71,7 @@
   // of its width, capped so a wide card does not swap from far off.
   const SWAP_LEAD = 0.2;
   const SWAP_LEAD_MAX_PX = 96;
+  const SWAP_TURN_PX = 24;
 
   let grid = $state<HTMLDivElement | null>(null);
   // A card being moved: where the pointer is, where it grabbed the card, and the
@@ -109,16 +110,21 @@
     order = start;
     let settledAt = 0;
     let swappedWith: string | null = null;
-    // Which way the card is heading sideways, from the last few pixels of movement.
-    let lastX = event.clientX;
+    // Which way the card is heading sideways. It only turns once the card comes
+    // back SWAP_TURN_PX from the furthest point, so a wobble does not swing the
+    // look-ahead from one side of the card to the other.
+    let turnX = event.clientX;
     let headingX = 0;
 
     const move = (e: PointerEvent) => {
       if (!moving || !order) return;
       moving = { ...moving, x: e.clientX, y: e.clientY };
-      if (Math.abs(e.clientX - lastX) >= 3) {
-        headingX = Math.sign(e.clientX - lastX);
-        lastX = e.clientX;
+      const pastTurn = (e.clientX - turnX) * headingX;
+      if (headingX === 0 ? Math.abs(e.clientX - turnX) >= 3 : pastTurn < -SWAP_TURN_PX) {
+        headingX = Math.sign(e.clientX - turnX);
+        turnX = e.clientX;
+      } else if (pastTurn > 0) {
+        turnX = e.clientX;
       }
       if (performance.now() < settledAt) return;
       // The held card's centre decides, not the pointer, so where it was grabbed
@@ -129,12 +135,15 @@
       const cy = e.clientY - moving.offY + moving.height / 2;
       const over = document.elementFromPoint(cx, cy)?.closest<HTMLElement>("[data-analytics-slot]");
       const target = over?.dataset.analyticsSlot;
-      if (!over || !target || target === moving.id) {
+      // A card that just traded places may still sit under the centre; it waits
+      // until the centre is over another card or back on the held card's own
+      // slot. The gap between cards does not count, or the two would swap back
+      // and forth on the way across it.
+      if (!over || !target) return;
+      if (target === moving.id) {
         swappedWith = null;
         return;
       }
-      // A card that just traded places may still sit under the centre; it waits
-      // until the centre has left it, or the two would swap back and forth.
       if (target === swappedWith) return;
       // A card spanning most of a row splits top and bottom at its middle. A card
       // beside it trades places as soon as the centre reaches it.
