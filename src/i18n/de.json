@@ -2751,14 +2751,14 @@
   "analytics.cond.anyone": "irgendwem",
   "analytics.chart.pie": "Kreis",
   "analytics.chart.donut": "Ring",
-  "analytics.names.open": "Truppnamen prüfen ({count})",
-  "analytics.names.title": "Truppnamen prüfen",
-  "analytics.names.intro": "Namen, die der Screenshot-Leser abgeschnitten oder nicht erkannt hat. Lies sie vom Bild ab und tippe sie ein.",
+  "analytics.names.open": "Trupp prüfen ({count})",
+  "analytics.names.title": "Trupp prüfen",
+  "analytics.names.intro": "Namen, die der Screenshot-Leser abgeschnitten oder nicht erkannt hat, und Warframes, die er nicht zuordnen konnte. Die umrandete Zeile im Bild ist die, die du gerade ergänzt.",
   "analytics.names.cutOff": "Abgeschnittene Namen",
   "analytics.names.cutOffRuns": "{name} in {count} Durchläufen",
   "analytics.names.fullName": "Vollständiger Name",
-  "analytics.names.unnamed": "Unbenannte Truppmitglieder",
-  "analytics.names.row": "Zeile {row}",
   "analytics.names.notPlayer": "Kein Spieler",
-  "analytics.names.done": "Alle Truppmitglieder haben einen vollständigen Namen."
+  "analytics.names.done": "Alle Truppmitglieder haben einen vollständigen Namen.",
+  "analytics.names.missing": "Truppmitglieder zum Ergänzen",
+  "analytics.names.frameHint": "Benennt alle Truppmitglieder mit diesem Porträt, in allen Durchläufen."
 }

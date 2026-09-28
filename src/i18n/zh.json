@@ -2751,14 +2751,14 @@
   "analytics.cond.anyone": "任何人",
   "analytics.chart.pie": "饼图",
   "analytics.chart.donut": "环形图",
-  "analytics.names.open": "检查队友名字（{count}）",
-  "analytics.names.title": "检查队友名字",
-  "analytics.names.intro": "截图识别截断或未能确定的名字。请对照图片输入。",
+  "analytics.names.open": "检查小队（{count}）",
+  "analytics.names.title": "检查小队",
+  "analytics.names.intro": "截图识别截断或未能确定的名字，以及未能匹配的战甲。图片上框出的行就是你正在填写的那一行。",
   "analytics.names.cutOff": "被截断的名字",
   "analytics.names.cutOffRuns": "{name}，共 {count} 局",
   "analytics.names.fullName": "完整名字",
-  "analytics.names.unnamed": "未命名的队友",
-  "analytics.names.row": "第 {row} 行",
   "analytics.names.notPlayer": "不是玩家",
-  "analytics.names.done": "所有队友都有完整名字了。"
+  "analytics.names.done": "所有队友都有完整名字了。",
+  "analytics.names.missing": "待补全的队友",
+  "analytics.names.frameHint": "为所有局中带有此头像的队友命名。"
 }

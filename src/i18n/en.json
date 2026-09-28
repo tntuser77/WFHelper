@@ -2771,14 +2771,14 @@
   "analytics.cond.anyone": "anyone",
   "analytics.chart.pie": "Pie",
   "analytics.chart.donut": "Donut",
-  "analytics.names.open": "Review squad names ({count})",
-  "analytics.names.title": "Review squad names",
-  "analytics.names.intro": "Names the screenshot reader cut short or could not pin down. Read them off the picture and type them in.",
+  "analytics.names.open": "Review squad ({count})",
+  "analytics.names.title": "Review squad",
+  "analytics.names.intro": "Names the screenshot reader cut short or could not pin down, and frames it could not match. The outlined row on each picture is the one you are filling in.",
   "analytics.names.cutOff": "Cut-off names",
   "analytics.names.cutOffRuns": "{name} in {count} runs",
   "analytics.names.fullName": "Full name",
-  "analytics.names.unnamed": "Unnamed squadmates",
-  "analytics.names.row": "Row {row}",
   "analytics.names.notPlayer": "Not a player",
-  "analytics.names.done": "Every squadmate has a full name."
+  "analytics.names.done": "Every squadmate has a full name.",
+  "analytics.names.missing": "Squadmates to fill in",
+  "analytics.names.frameHint": "Names every squadmate with this portrait look, in every run."
 }

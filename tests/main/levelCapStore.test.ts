@@ -148,6 +148,10 @@ describe("levelCapStore", () => {
       fs.existsSync(path.join(tmpDir, "userData", "level-cap-portraits", `${a.id}-0.png`)),
     ).toBe(true);
 
+    expect(store.portraitThumb(a.id, 0)).toEqual(Buffer.from("png"));
+    expect(store.portraitThumb(a.id, 1)).toBeNull();
+    expect(store.portraitThumb("../escape", 0)).toBeNull();
+
     const mates = () => new Map(store.getRuns().map((r) => [r.id, r.squadmates]));
     const [first, second] = [mates().get(a.id)!, mates().get(b.id)!];
     expect(first[0].portrait).toBe(second[0].portrait);

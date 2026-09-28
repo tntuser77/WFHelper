@@ -27,7 +27,7 @@
   import AnalyticsChartBuilder from "./AnalyticsChartBuilder.svelte";
   import AnalyticsChartCard from "./AnalyticsChartCard.svelte";
   import AnalyticsNameReview from "./AnalyticsNameReview.svelte";
-  import { squadNameReview } from "../../lib/analytics/squadNameReview.js";
+  import { squadReviewCount } from "../../lib/analytics/squadNameReview.js";
 
   type Draft = Omit<AnalyticsChartSpec, "id"> & { id?: string };
 
@@ -43,13 +43,7 @@
   });
   const frames = $derived(levelCapFrames(runs).map((row) => row.frame));
   const squadChoices = $derived(analyticsSquadChoices(runs));
-  const namesToReview = $derived.by(() => {
-    const review = squadNameReview(runs);
-    return (
-      review.cutOff.reduce((n, entry) => n + entry.rows.length, 0) +
-      review.unnamed.reduce((n, entry) => n + entry.rows.length, 0)
-    );
-  });
+  const namesToReview = $derived(squadReviewCount(runs));
   let reviewingNames = $state(false);
   const cards = $derived(
     $analyticsCharts.map((spec) => ({
@@ -133,6 +127,7 @@
   <AnalyticsNameReview
     {runs}
     settings={$levelCap?.settings ?? null}
+    frames={[...new Set([...squadChoices.frames, ...frames])]}
     onClose={() => (reviewingNames = false)}
   />
 {/if}
