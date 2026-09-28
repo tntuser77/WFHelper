@@ -2764,6 +2764,7 @@
   "levelCap.unverifiedCount": "{count} ungeprüft",
   "levelCap.col.duration": "Laufzeit",
   "levelCap.col.exolizers": "Exolizer",
+  "levelCap.stat.runs": "Läufe",
   "levelCap.squad": "Trupp mit {count}",
   "levelCap.unverified": "Build ungeprüft",
   "levelCap.noScreenshot": "Kein Screenshot",

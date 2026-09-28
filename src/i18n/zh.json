@@ -2764,6 +2764,7 @@
   "levelCap.unverifiedCount": "{count} 条未核对",
   "levelCap.col.duration": "单局用时",
   "levelCap.col.exolizers": "无垢装置",
+  "levelCap.stat.runs": "局数",
   "levelCap.squad": "{count} 人小队",
   "levelCap.unverified": "配置未核对",
   "levelCap.noScreenshot": "无截图",

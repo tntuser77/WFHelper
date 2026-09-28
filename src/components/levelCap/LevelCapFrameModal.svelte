@@ -66,6 +66,15 @@
     for (const run of runs) if (run.buildId) counts[run.buildId] = (counts[run.buildId] ?? 0) + 1;
     return counts;
   });
+  /** Exolizers summed per build; squad-client runs with only a round count add nothing. */
+  const exoTotals = $derived.by(() => {
+    const totals: Record<string, number> = {};
+    for (const run of runs)
+      if (run.buildId) totals[run.buildId] = (totals[run.buildId] ?? 0) + (run.exolizers ?? 0);
+    return totals;
+  });
+  const exoTotal = $derived(runs.reduce((sum, run) => sum + (run.exolizers ?? 0), 0));
+  const formatCount = (n: number) => n.toLocaleString($locale);
   const unverified = $derived(runs.filter((run) => run.buildUnverified || !run.buildId));
   const playerTerms = $derived(levelCapPlayerTerms(runs, searchTerms));
   const shownRuns = $derived(
@@ -165,7 +174,20 @@
           >
         {/if}
       </div>
-      <span class="font-mono text-3xl font-bold text-accent">{runs.length}</span>
+      <div class="flex items-end gap-5" data-level-cap-frame-stats>
+        <div class="flex flex-col items-end leading-none">
+          <span class="font-mono text-3xl font-bold text-accent">{runs.length}</span>
+          <span class="mt-1 text-[10px] uppercase tracking-wide text-text-muted"
+            >{$t("levelCap.stat.runs")}</span
+          >
+        </div>
+        <div class="flex flex-col items-end leading-none">
+          <span class="font-mono text-3xl font-bold text-accent">{formatCount(exoTotal)}</span>
+          <span class="mt-1 text-[10px] uppercase tracking-wide text-text-muted"
+            >{$t("levelCap.col.exolizers")}</span
+          >
+        </div>
+      </div>
     </div>
 
     <div class="flex flex-col gap-3 p-4">
@@ -202,6 +224,11 @@
               >
                 <span class="min-w-0 flex-1 truncate text-sm font-bold text-text-primary"
                   >{build.name}</span
+                >
+                <span
+                  class="font-mono text-xs text-text-secondary"
+                  title={$t("levelCap.col.exolizers")}
+                  >{formatCount(exoTotals[build.id] ?? 0)} {$t("levelCap.exo")}</span
                 >
                 <span class="font-mono text-lg font-bold text-accent"
                   >{runCounts[build.id] ?? 0}</span

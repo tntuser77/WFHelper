@@ -19,7 +19,7 @@
 - [x] When searching, the run count on each frame card should show how many runs match the search, not the frame's total (searching "slam" should show 3 on Follie, not 10).
 - [x] Even on my Caliban builds, where I kept the archgun, its not showing up in a box that makes it obvious that I was using the archgun heavily
 - [x] Right click on the search box to clear it
-- [ ] Show the amount of exolizers reached when opening the frames, not just the amount of runs
+- [x] Show the amount of exolizers reached when opening the frames, not just the amount of runs
 
 
 ## Analytics work

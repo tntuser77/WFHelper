@@ -2784,6 +2784,7 @@
   "levelCap.unverifiedCount": "{count} unverified",
   "levelCap.col.duration": "Run time",
   "levelCap.col.exolizers": "Exolizers",
+  "levelCap.stat.runs": "Runs",
   "levelCap.squad": "Squad of {count}",
   "levelCap.unverified": "Unverified build",
   "levelCap.noScreenshot": "No screenshot",
