@@ -110,6 +110,7 @@
     order = start;
     let settledAt = 0;
     let swappedWith: string | null = null;
+    let swappedHeading = 0;
     // Which way the card is heading sideways. It only turns once the card comes
     // back SWAP_TURN_PX from the furthest point, so a wobble does not swing the
     // look-ahead from one side of the card to the other.
@@ -135,16 +136,16 @@
       const cy = e.clientY - moving.offY + moving.height / 2;
       const over = document.elementFromPoint(cx, cy)?.closest<HTMLElement>("[data-analytics-slot]");
       const target = over?.dataset.analyticsSlot;
-      // A card that just traded places may still sit under the centre; it waits
-      // until the centre is over another card or back on the held card's own
-      // slot. The gap between cards does not count, or the two would swap back
-      // and forth on the way across it.
+      // A card that just traded places may still sit under the centre. It only
+      // trades back once the card turns around, reaches its own slot, or meets
+      // another card; the gap between cards does not count, or the two would
+      // swap back and forth on the way across it.
       if (!over || !target) return;
       if (target === moving.id) {
         swappedWith = null;
         return;
       }
-      if (target === swappedWith) return;
+      if (target === swappedWith && headingX === swappedHeading) return;
       // A card spanning most of a row splits top and bottom at its middle. A card
       // beside it trades places as soon as the centre reaches it.
       const box = over.getBoundingClientRect();
@@ -158,6 +159,7 @@
       if (next.join() === order.join()) return;
       order = next;
       swappedWith = rowWide ? null : target;
+      swappedHeading = headingX;
       settledAt = performance.now() + REFLOW_MS;
     };
     const end = () => {
