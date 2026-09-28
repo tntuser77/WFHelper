@@ -102,6 +102,15 @@
     bind:value={query}
     oninput={() => (active = 0)}
     onkeydown={onKeydown}
+    oncontextmenu={(e) => {
+      // Right-click clears the search; on an empty one it closes the picker.
+      e.preventDefault();
+      e.stopPropagation();
+      if (!query) return onCancel();
+      query = "";
+      active = 0;
+      input?.focus();
+    }}
   />
   <ul class="m-0 max-h-64 list-none overflow-y-auto p-0">
     {#each results as option, i (option.type)}
