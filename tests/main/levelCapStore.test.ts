@@ -352,7 +352,8 @@ describe("levelCapStore", () => {
     const store = await freshStore();
     const builds = store.getBuilds();
     expect(builds.map((b) => [b.name, b.tags])).toEqual([
-      ["Build A", ["caster", "comfy"]],
+      // Vazarin focus guesses Vaz Dash when the build is made; run tags follow.
+      ["Build A", ["Vaz Dash", "caster", "comfy"]],
       // A guessed loadout gets a build but keeps its tags until it is confirmed.
       ["Build B", undefined],
     ]);
@@ -360,9 +361,46 @@ describe("levelCapStore", () => {
     expect(byId.get("a")?.tags).toBeUndefined();
     expect(byId.get("c")).toMatchObject({ buildId: builds[1].id, buildUnverified: true });
     expect(byId.get("c")?.tags).toEqual(["?"]);
-    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(2);
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(3);
     const legacy = JSON.parse(fs.readFileSync(file.replace(".json", ".v1.json"), "utf8"));
     expect(legacy.schemaVersion).toBe(1);
+  });
+
+  it("guesses tags on version 2 builds once, keeping the player's own", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const build = (id: string, tags?: string[]) => ({
+      id,
+      frame: "Dante",
+      name: id,
+      tags,
+      build: BUILD,
+    });
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ schemaVersion: 2, builds: [build("a", ["vaz dash", "Slam"]), build("b")] }),
+    );
+    const store = await freshStore();
+    expect(store.getBuilds().map((b) => b.tags)).toEqual([["vaz dash", "Slam"], ["Vaz Dash"]]);
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(3);
+    expect(fs.existsSync(file.replace(".json", ".v2.json"))).toBe(true);
+  });
+
+  it("a loadout change adds only the tags it newly implies", async () => {
+    const store = await freshStore();
+    const record = store.createBuild("Dante", BUILD, "Caster");
+    expect(record.tags).toEqual(["Vaz Dash"]);
+    // Removed by hand: a later loadout that is still Vazarin leaves it off.
+    store.updateBuild(record.id, { tags: [] });
+    const huras: LevelCapBuild = {
+      ...BUILD,
+      companion: {
+        kind: "companion",
+        type: "/Lotus/Types/Game/KubrowPet/FurtiveKubrowPetPowerSuit",
+        config: 0,
+        upgrades: [],
+      },
+    };
+    expect(store.updateBuild(record.id, { build: huras })?.tags).toEqual(["Invisible"]);
   });
 
   it("fills in riven stats on builds saved before rivens were captured", async () => {
@@ -439,7 +477,7 @@ describe("levelCapStore", () => {
     expect(byId.get(a.id)).toMatchObject({ buildId: target.id, frameType: BUILD.suit!.type });
     expect(byId.get(a.id)?.buildUnverified).toBeUndefined();
     expect(byId.get(a.id)?.tags).toBeUndefined();
-    expect(store.getBuilds()[0].tags).toEqual(["caster"]);
+    expect(store.getBuilds()[0].tags).toEqual(["Vaz Dash", "caster"]);
     expect(byId.get(b.id)?.buildUnverified).toBe(true);
   });
 

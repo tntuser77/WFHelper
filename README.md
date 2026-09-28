@@ -8,7 +8,7 @@
 - [x] Collect which Warframe each squadmate was running: portraits next to each name are fingerprinted and grouped across runs.
 - [ ] Read squadmates' frames from EE.log once a squad mission log sample is saved (the app now keeps them in level-cap-logs).
 - [x] See if there is anyway to get exolizer values off of the screenshot rather then the more generic round reached.
-- [ ] Add guessing based tags? If my warframe has arcane persistance, add persistance tag. If running vazarin, add vaz dash tag etc
+- [x] Add guessing based tags? If my warframe has arcane persistance, add persistance tag. If running vazarin, add vaz dash tag etc
 - [ ] Allow me to edit the icon for each warframe to change the skin?
 - [ ] See if I can find a better UI for the tags, it still looks awkard
 - [ ] Showing Primary/Secondary/Melee/Pet for slots where it isn't relevant is odd. Most pets are boring, and with 80% of my runs not using primary the UI looks a bit weird

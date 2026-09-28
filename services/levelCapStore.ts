@@ -6,6 +6,7 @@ import { app } from "electron";
 import { resolveSquadNames } from "./levelCapSquadNames";
 import type { SquadScreenshotRead } from "./levelCapSquadOcr";
 import { groupPortraits, isPortrait } from "./levelCapSquadPortraits";
+import { guessLevelCapTags, newlyGuessedLevelCapTags } from "./levelCapTagGuess";
 import { userDataPath } from "./userDataPath";
 import { writeFileAtomicSync } from "./atomicFile";
 import { normalizeRunNotes, normalizeRunTags } from "./runAnnotations";
@@ -35,7 +36,7 @@ const log = withScope("levelCapStore");
 
 const INDEX_FILE = "level-cap-runs.json";
 // 2: builds are named records runs point at; 1 kept a loose copy per run.
-const INDEX_SCHEMA_VERSION = 2;
+const INDEX_SCHEMA_VERSION = 3;
 const MAX_BUILD_NAME = 48;
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp"]);
 /** Folders the old sorter script left beside the frame folders. */
@@ -248,8 +249,16 @@ function newBuild(frame: string, build: LevelCapBuild, name?: string): LevelCapN
     name: buildName(name) ?? nextLevelCapBuildName(taken),
     build: structuredClone(build),
   };
+  addBuildTags(record, guessLevelCapTags(build));
   _builds.push(record);
   return record;
+}
+
+/** Adds tags after the build's own; a tag it already has keeps the player's casing. */
+function addBuildTags(record: LevelCapNamedBuild, tags: string[]): void {
+  if (!tags.length) return;
+  const merged = normalizeRunTags([...(record.tags ?? []), ...tags]);
+  if (merged.length) record.tags = merged;
 }
 
 function stamp(run: LevelCapRun, record: LevelCapNamedBuild): void {
@@ -308,13 +317,17 @@ function ensureLoaded(): void {
     _frameNotes = normalizeFrameNotes(parsed.frameNotes);
     _portraitLabels = normalizePortraitLabels(parsed.portraitLabels);
     const version = typeof parsed.schemaVersion === "number" ? parsed.schemaVersion : 1;
-    if (version < 2) {
-      // Keep the pre-migration index untouched in case the grouping is ever wrong.
+    if (version < INDEX_SCHEMA_VERSION) {
+      // Keep the pre-migration index untouched in case a migration is ever wrong.
       const legacy = userDataPath(`level-cap-runs.v${version}.json`);
       if (!fs.existsSync(legacy)) fs.copyFileSync(userDataPath(INDEX_FILE), legacy);
-      migrateLooseBuilds();
+      if (version < 2) {
+        migrateLooseBuilds();
+        log.info(`[LevelCap] grouped ${_runs.length} runs into ${_builds.length} named builds`);
+      }
+      // Version 3: builds from before tag guessing get the tags their loadout implies.
+      for (const record of _builds) addBuildTags(record, guessLevelCapTags(record.build));
       save();
-      log.info(`[LevelCap] grouped ${_runs.length} runs into ${_builds.length} named builds`);
     }
     // A build deleted by hand leaves its runs unassigned, never pointing nowhere.
     const known = new Set(_builds.map((b) => b.id));
@@ -755,6 +768,7 @@ export function updateBuild(id: string, patch: LevelCapBuildPatch): LevelCapName
   }
   const build = patch.build === undefined ? null : normalizeLevelCapBuild(patch.build);
   if (build) {
+    addBuildTags(record, newlyGuessedLevelCapTags(record.build, build));
     record.build = build;
     for (const run of _runs) if (run.buildId === id) stamp(run, record);
   }
