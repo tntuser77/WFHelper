@@ -198,8 +198,9 @@
   >
     {#each shownCards as card, index (card.spec.id)}
       {@const lifted = moving?.id === card.spec.id}
+      <!-- self-start: a card is as tall as its own chart, not its row's tallest. -->
       <div
-        class="{SPAN[card.spec.cols]} {lifted
+        class="{SPAN[card.spec.cols]} self-start {lifted
           ? 'rounded-[var(--radius-lg)] outline-dashed outline-2 outline-accent'
           : ''}"
         data-analytics-slot={card.spec.id}
