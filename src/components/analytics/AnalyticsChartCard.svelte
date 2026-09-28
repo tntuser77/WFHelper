@@ -24,9 +24,6 @@
     onEdit: () => void;
     onRemove: () => void;
   } = $props();
-
-  let asTable = $state(false);
-  const canTable = $derived(spec.chart !== "table" && spec.chart !== "stat");
 </script>
 
 <div
@@ -67,15 +64,6 @@
         {/if}
       </div>
       <div class="flex shrink-0 items-center gap-1 text-xs">
-        {#if canTable}
-          <button
-            type="button"
-            class="rounded px-1.5 py-0.5 text-text-secondary hover:text-accent"
-            aria-pressed={asTable}
-            onclick={() => (asTable = !asTable)}
-            >{asTable ? $tr("analytics.showChart") : $tr("analytics.showTable")}</button
-          >
-        {/if}
         <button
           type="button"
           class="rounded px-1.5 py-0.5 text-text-secondary hover:text-accent"
@@ -90,6 +78,6 @@
         >
       </div>
     </header>
-    <AnalyticsChart {spec} {result} {title} {asTable} />
+    <AnalyticsChart {spec} {result} {title} />
   </ThemedPanel>
 </div>

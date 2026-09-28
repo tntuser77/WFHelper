@@ -353,6 +353,16 @@
           </h3>
           <AnalyticsChart {spec} {result} title={spec.title || autoTitle} />
         </div>
+        <!-- The numbers behind the chart, to check it while building it. -->
+        {#if spec.chart !== "table" && spec.chart !== "stat" && result.runCount}
+          <span class="mt-2 text-xs text-text-secondary">{$tr("analytics.data")}</span>
+          <div
+            class="rounded-[var(--radius-lg)] border border-[color:var(--ui-panel-border)] bg-[var(--ui-panel-bg)] p-4"
+            data-analytics-builder-table
+          >
+            <AnalyticsChart {spec} {result} title={spec.title || autoTitle} asTable />
+          </div>
+        {/if}
       </section>
     </div>
   </div>

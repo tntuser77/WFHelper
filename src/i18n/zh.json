@@ -2689,8 +2689,6 @@
   "analytics.newChart": "新图表",
   "analytics.editChart": "编辑图表",
   "analytics.removeChart": "移除图表",
-  "analytics.showTable": "以表格显示",
-  "analytics.showChart": "以图表显示",
   "analytics.dragToMove": "拖动或使用方向键移动",
   "analytics.preview": "预览",
   "analytics.runCount": "{count} 局",
@@ -2760,5 +2758,6 @@
   "analytics.names.notPlayer": "不是玩家",
   "analytics.names.done": "所有队友都有完整名字了。",
   "analytics.names.missing": "待补全的队友",
-  "analytics.names.frameHint": "为所有局中带有此头像的队友命名。"
+  "analytics.names.frameHint": "为所有局中带有此头像的队友命名。",
+  "analytics.data": "数据"
 }

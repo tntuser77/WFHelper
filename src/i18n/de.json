@@ -2689,8 +2689,6 @@
   "analytics.newChart": "Neues Diagramm",
   "analytics.editChart": "Diagramm bearbeiten",
   "analytics.removeChart": "Diagramm entfernen",
-  "analytics.showTable": "Als Tabelle zeigen",
-  "analytics.showChart": "Als Diagramm zeigen",
   "analytics.dragToMove": "Ziehen zum Verschieben oder Pfeiltasten nutzen",
   "analytics.preview": "Vorschau",
   "analytics.runCount": "{count} Durchläufe",
@@ -2760,5 +2758,6 @@
   "analytics.names.notPlayer": "Kein Spieler",
   "analytics.names.done": "Alle Truppmitglieder haben einen vollständigen Namen.",
   "analytics.names.missing": "Truppmitglieder zum Ergänzen",
-  "analytics.names.frameHint": "Benennt alle Truppmitglieder mit diesem Porträt, in allen Durchläufen."
+  "analytics.names.frameHint": "Benennt alle Truppmitglieder mit diesem Porträt, in allen Durchläufen.",
+  "analytics.data": "Daten"
 }

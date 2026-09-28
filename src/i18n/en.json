@@ -2709,8 +2709,6 @@
   "analytics.newChart": "New chart",
   "analytics.editChart": "Edit chart",
   "analytics.removeChart": "Remove chart",
-  "analytics.showTable": "Show as table",
-  "analytics.showChart": "Show as chart",
   "analytics.dragToMove": "Drag to move, or use the arrow keys",
   "analytics.preview": "Preview",
   "analytics.runCount": "{count} runs",
@@ -2780,5 +2778,6 @@
   "analytics.names.notPlayer": "Not a player",
   "analytics.names.done": "Every squadmate has a full name.",
   "analytics.names.missing": "Squadmates to fill in",
-  "analytics.names.frameHint": "Names every squadmate with this portrait look, in every run."
+  "analytics.names.frameHint": "Names every squadmate with this portrait look, in every run.",
+  "analytics.data": "Data"
 }
