@@ -26,11 +26,23 @@
   const GAP = 20;
   const LEGEND_MIN_W = 192;
   const LEGEND_MIN_H = 68;
+  const PIE_MIN = 96;
   let width = $state(0);
-  // Legend beside the pie when there is room, else under a pie shrunk to leave it some.
+  let legend = $state<HTMLUListElement | null>(null);
+  // The legend's full height, uncapped, so a pie above it can make room for every row.
+  let legendNeed = $state(0);
+  $effect(() => {
+    void labels;
+    void width;
+    legendNeed = legend?.scrollHeight ?? 0;
+  });
+  // Legend beside the pie when there is room; else under it, the pie shrinking
+  // (down to PIE_MIN) so the whole legend shows before anything has to scroll.
   const beside = $derived(width >= SIZE + GAP + LEGEND_MIN_W);
   const shown = $derived(
-    Math.max(80, Math.min(SIZE, beside ? height : height - GAP - LEGEND_MIN_H)),
+    beside
+      ? Math.max(PIE_MIN, Math.min(SIZE, height))
+      : Math.max(PIE_MIN, Math.min(SIZE, height - GAP - Math.max(legendNeed, LEGEND_MIN_H))),
   );
   const R = SIZE / 2 - 2;
   const INNER = $derived(donut ? R * 0.6 : 0);
@@ -38,7 +50,6 @@
 
   let hover = $state<{ index: number; x: number; y: number } | null>(null);
   let legendRoom = $state(0);
-  let legend = $state<HTMLUListElement | null>(null);
   const legendFit = $derived.by(() => {
     void labels;
     return wholeRowsPx(legend, legendRoom);
