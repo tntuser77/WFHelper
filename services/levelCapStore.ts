@@ -36,7 +36,7 @@ const log = withScope("levelCapStore");
 
 const INDEX_FILE = "level-cap-runs.json";
 // 2: builds are named records runs point at; 1 kept a loose copy per run.
-const INDEX_SCHEMA_VERSION = 3;
+const INDEX_SCHEMA_VERSION = 4;
 const MAX_BUILD_NAME = 48;
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp"]);
 /** Folders the old sorter script left beside the frame folders. */
@@ -325,8 +325,8 @@ function ensureLoaded(): void {
         migrateLooseBuilds();
         log.info(`[LevelCap] grouped ${_runs.length} runs into ${_builds.length} named builds`);
       }
-      // Version 3: builds from before tag guessing get the tags their loadout implies.
-      for (const record of _builds) addBuildTags(record, guessLevelCapTags(record.build));
+      // Versions 3+: builds get the tags that guessing rules newer than the index imply.
+      for (const record of _builds) addBuildTags(record, guessLevelCapTags(record.build, version));
       save();
     }
     // A build deleted by hand leaves its runs unassigned, never pointing nowhere.

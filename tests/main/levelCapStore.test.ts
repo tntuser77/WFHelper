@@ -361,7 +361,7 @@ describe("levelCapStore", () => {
     expect(byId.get("a")?.tags).toBeUndefined();
     expect(byId.get("c")).toMatchObject({ buildId: builds[1].id, buildUnverified: true });
     expect(byId.get("c")?.tags).toEqual(["?"]);
-    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(3);
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(4);
     const legacy = JSON.parse(fs.readFileSync(file.replace(".json", ".v1.json"), "utf8"));
     expect(legacy.schemaVersion).toBe(1);
   });
@@ -381,8 +381,26 @@ describe("levelCapStore", () => {
     );
     const store = await freshStore();
     expect(store.getBuilds().map((b) => b.tags)).toEqual([["vaz dash", "Slam"], ["Vaz Dash"]]);
-    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(3);
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(4);
     expect(fs.existsSync(file.replace(".json", ".v2.json"))).toBe(true);
+  });
+
+  it("a version 3 index only gets the tags of rules added since", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const magistar: LevelCapBuild = {
+      ...BUILD,
+      melee: {
+        kind: "melee",
+        type: "/Lotus/Weapons/Tenno/Melee/Maces/PaladinMace/PaladinMaceWeapon",
+        config: 0,
+        upgrades: [],
+      },
+    };
+    // Vaz Dash was guessed at version 3 and removed by hand; it stays off.
+    const builds = [{ id: "a", frame: "Dante", name: "a", build: magistar }];
+    fs.writeFileSync(file, JSON.stringify({ schemaVersion: 3, builds }));
+    const store = await freshStore();
+    expect(store.getBuilds()[0].tags).toEqual(["Slam"]);
   });
 
   it("a loadout change adds only the tags it newly implies", async () => {

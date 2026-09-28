@@ -61,4 +61,30 @@ describe("guessLevelCapTags", () => {
       guessLevelCapTags(build({ suit: suit(PRIMED_FAST_DEFLECTION, VIGILANTE_VIGOR) })),
     ).toEqual(["Lazy Gate"]);
   });
+
+  it("reads slam melees and Falcor", () => {
+    const melee = (type: string): LevelCapItem => ({
+      kind: "melee",
+      type,
+      config: 0,
+      upgrades: [],
+    });
+    for (const type of [
+      "/Lotus/Weapons/Tenno/Melee/Maces/PaladinMace/PaladinMaceWeapon",
+      "/Lotus/Weapons/Syndicates/NewLoka/Melee/NLMagistar",
+      "/Lotus/Weapons/Corpus/Melee/Hammer/CorpusHammerWeapon",
+      "/Lotus/Weapons/Infested/InfestedLich/Melee/CodaMire",
+    ]) {
+      expect(guessLevelCapTags(build({ melee: melee(type) }))).toEqual(["Slam"]);
+    }
+    expect(
+      guessLevelCapTags(
+        build({ melee: melee("/Lotus/Weapons/Corpus/Melee/Glaive/CrpGlaive/CrpGlaive") }),
+      ),
+    ).toEqual(["Influence"]);
+  });
+
+  it("skips rules an index version already had", () => {
+    expect(guessLevelCapTags(build({ focus: "vazarin" }), 3)).toEqual([]);
+  });
 });
