@@ -10,8 +10,10 @@ const EMPTY_GIT_CONFIG = path.join(os.tmpdir(), "wfh-policy-empty.gitconfig");
 const EMPTY_XDG_CONFIG = path.join(os.tmpdir(), "wfh-policy-xdg");
 fs.writeFileSync(EMPTY_GIT_CONFIG, "");
 fs.mkdirSync(EMPTY_XDG_CONFIG, { recursive: true });
+// A hook run from a worktree exports GIT_DIR; inherited, it points these temp
+// repos at the real one.
 const CLEAN_GIT_ENV = {
-  ...process.env,
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
   GIT_CONFIG_GLOBAL: EMPTY_GIT_CONFIG,
   GIT_CONFIG_NOSYSTEM: "1",
   XDG_CONFIG_HOME: EMPTY_XDG_CONFIG,
