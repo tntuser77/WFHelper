@@ -12,7 +12,10 @@ import { levelCapUpgradeRole } from "./levelCap.js";
 // their v4 token: `v4u.` + base64url(JSON {v: 1, b: build}). Every field falls
 // back to a plain English name when it is not one of their hashed indexes.
 
-const BUILD_TYPE: Partial<Record<LevelCapSlotKind, UnderframeBuildType>> = {
+// Companions only ride along as partner builds; see underframeCompanionBuild.
+type LoadoutBuildType = Exclude<UnderframeBuildType, "Sentinel" | "Beast">;
+
+const BUILD_TYPE: Partial<Record<LevelCapSlotKind, LoadoutBuildType>> = {
   suit: "Warframe",
   primary: "Primary",
   secondary: "Secondary",
@@ -23,7 +26,7 @@ const BUILD_TYPE: Partial<Record<LevelCapSlotKind, UnderframeBuildType>> = {
 // Their mod array per build type: which index holds each special slot, and how
 // many slots there are. Regular mods fill whatever is left in order.
 const LAYOUT: Record<
-  UnderframeBuildType,
+  LoadoutBuildType,
   { count: number; aura?: number; stance?: number; exilus?: number }
 > = {
   Warframe: { count: 10, aura: 0, exilus: 1 },
@@ -121,6 +124,29 @@ export function underframeBuild(
   build.helminth =
     item.helminth && helminthName ? { name: helminthName, slot: item.helminth.index + 1 } : null;
   return build;
+}
+
+/** A companion as a partner build, which is how Underframe hands its bond mods
+ *  buffs to a weapon. Only the mod list matters there, so slot order does not. */
+export function underframeCompanionBuild(
+  item: LevelCapItem,
+  name: (type: string) => string | null,
+): UnderframeBuild | null {
+  const itemName = item.customName ?? name(item.type);
+  if (item.kind !== "companion" || !itemName) return null;
+  const mods = item.upgrades.flatMap((upgrade) => {
+    const modName = upgrade.type ? name(upgrade.type) : null;
+    return modName
+      ? [upgrade.rank !== null ? { name: modName, rank: upgrade.rank } : { name: modName }]
+      : [];
+  });
+  return {
+    name: `${itemName} (Level Cap)`,
+    type: item.type.includes("/Sentinels/") ? "Sentinel" : "Beast",
+    itemName,
+    mods,
+    arcanes: [],
+  };
 }
 
 function base64Url(text: string): string {

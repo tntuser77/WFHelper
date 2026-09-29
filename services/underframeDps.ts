@@ -8,12 +8,12 @@ import {
 
 const log = withScope("underframeDps");
 
-// Underframe works a frame's buffs into a weapon only when the frame is linked
-// to it as a partner build, with its own maths in its own page. So this loads
-// the site in a hidden window, adds both builds, links them the way its partner
-// dialog does, and takes the link its share button makes. The weapon's link
-// then carries the frame's buffs as plain numbers, and the user's browser opens
-// it. Nothing is saved on their server: the share link holds the whole build.
+// Underframe works a frame's buffs, and a companion's bond mods, into a weapon
+// only when they are linked to it as partner builds, with its own maths in its
+// own page. So this loads the site in a hidden window, adds the builds, links
+// them the way its partner dialog does, and takes the link its share button
+// makes. The weapon's link then carries those buffs as plain numbers, and the
+// user's browser opens it. Nothing is saved on their server: the share link holds the whole build.
 //
 // This leans on the page's internals (window.AppState, element ids, confirm
 // wording), so any failure falls back to the weapon's own link.
@@ -22,7 +22,7 @@ const PARTITION = "underframe-dps";
 const TIMEOUT_MS = 45_000;
 
 const PAGE_SCRIPT = String.raw`
-(async (frame, weapon) => {
+(async (frame, companion, weapon) => {
   const A = window.AppState;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const until = async (test, what, ms = 15000) => {
@@ -33,9 +33,16 @@ const PAGE_SCRIPT = String.raw`
     }
     throw new Error("timed out waiting for " + what);
   };
-  // Import the partner's buffs and overwrite, but never ask their server for
-  // short partner links when sharing.
-  window.confirm = (m) => !String(m).startsWith("Would you like to include partnered");
+  // Import each partner's buffs. The first overwrites what the weapon had; the
+  // rest add to it, or the companion's bond buffs would wipe the frame's. Never
+  // ask their server for short partner links when sharing.
+  let overwrites = 0;
+  window.confirm = (m) => {
+    const text = String(m);
+    if (text.startsWith("Would you like to include partnered")) return false;
+    if (text.startsWith("Overwrite existing external buffs")) return overwrites++ === 0;
+    return true;
+  };
   window.alert = () => {};
   window.prompt = () => null;
 
@@ -79,16 +86,22 @@ const PAGE_SCRIPT = String.raw`
     arcanes: [], archon_shards: [], helminth: null, partnerBuilds: [],
     externalBuffs: [], externalWeaponBuffs: [], ...b,
   });
+  const partners = [];
   if (frame) {
     frame = withDefaults(frame);
     frame.archon_shards = frame.archon_shards.map((s) => ({ ...s, effect: shardEffect(s) }));
     frame.slug = "wfhelper-frame";
+    partners.push(frame);
+  }
+  if (companion) {
+    companion = withDefaults(companion);
+    companion.slug = "wfhelper-companion";
+    partners.push(companion);
   }
   weapon = withDefaults(weapon);
   weapon.slug = "wfhelper-weapon";
-  A.builds = (A.builds || []).filter((b) => b.slug !== "wfhelper-frame" && b.slug !== "wfhelper-weapon");
-  if (frame) A.builds.push(frame);
-  A.builds.push(weapon);
+  A.builds = (A.builds || []).filter((b) => !String(b.slug || "").startsWith("wfhelper-"));
+  A.builds.push(...partners, weapon);
   A.buildSlugMap = new Map();
   history.pushState({}, "", "/" + weapon.slug);
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -100,15 +113,16 @@ const PAGE_SCRIPT = String.raw`
     el.click();
   };
   let buffs = 0;
-  if (frame) {
+  if (partners.length) {
     click("edit-partners-btn");
-    let box = null;
-    await until(() => (box = [...document.querySelectorAll("#partner-build-selection-list input")]
-      .find((i) => i.value === frame.name)), "the partner list");
-    box.checked = true;
+    const boxes = () => [...document.querySelectorAll("#partner-build-selection-list input")];
+    await until(() => partners.every((p) => boxes().some((i) => i.value === p.name)),
+      "the partner list");
+    for (const box of boxes()) box.checked = partners.some((p) => p.name === box.value);
     click("save-partner-selection-btn");
     const built = () => A.builds.find((b) => b.name === weapon.name);
-    await until(() => (built()?.partnerBuilds || []).includes(frame.name), "the partner link");
+    await until(() => partners.every((p) => (built()?.partnerBuilds || []).includes(p.name)),
+      "the partner links");
     await sleep(300);
     buffs = (built()?.externalBuffs || []).length;
   }
@@ -124,6 +138,7 @@ const PAGE_SCRIPT = String.raw`
 
 async function runInHiddenPage(
   frame: UnderframeBuild | null,
+  companion: UnderframeBuild | null,
   weapon: UnderframeBuild,
 ): Promise<{ link: string; buffs: number }> {
   const { BrowserWindow } = require("electron") as typeof import("electron");
@@ -168,7 +183,7 @@ async function runInHiddenPage(
           await new Promise((r) => setTimeout(r, 250));
         }
         return exec<{ link: string; buffs: number }>(
-          `${PAGE_SCRIPT}(${JSON.stringify(frame)}, ${JSON.stringify(weapon)})`,
+          `${PAGE_SCRIPT}(${[frame, companion, weapon].map((b) => JSON.stringify(b)).join(", ")})`,
         );
       })(),
       timeout,
@@ -181,20 +196,22 @@ async function runInHiddenPage(
 
 let running: Promise<string | null> | null = null;
 
-/** A share link for `weapon` with `frame`'s buffs worked in, or null when the
- *  page could not make one. One run at a time; a second click joins the first. */
+/** A share link for `weapon` with the buffs of `frame` and `companion` (its bond
+ *  mods) worked in, or null when the page could not make one. One run at a time;
+ *  a second click joins the first. */
 export function underframeDpsLink(
   frame: UnderframeBuild | null,
+  companion: UnderframeBuild | null,
   weapon: UnderframeBuild,
 ): Promise<string | null> {
   if (running) return running;
   running = (async () => {
     const started = Date.now();
     try {
-      const { link, buffs } = await runInHiddenPage(frame, weapon);
+      const { link, buffs } = await runInHiddenPage(frame, companion, weapon);
       if (!link.startsWith(UNDERFRAME_SHARE_BASE)) throw new Error("unexpected share link");
       log.info(
-        `[Underframe] ${weapon.itemName} linked in ${Date.now() - started}ms, ${buffs} frame buffs`,
+        `[Underframe] ${weapon.itemName} linked in ${Date.now() - started}ms, ${buffs} partner buffs`,
       );
       return link;
     } catch (err) {

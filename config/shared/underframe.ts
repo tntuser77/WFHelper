@@ -10,7 +10,16 @@ export const UNDERFRAME_BUILD_TYPES = [
   "Secondary",
   "Melee",
   "Archgun",
+  "Sentinel",
+  "Beast",
 ] as const;
+/** Builds a DPS check runs on; the others only lend buffs. */
+export const UNDERFRAME_WEAPON_TYPES: readonly UnderframeBuildType[] = [
+  "Primary",
+  "Secondary",
+  "Melee",
+  "Archgun",
+];
 export type UnderframeBuildType = (typeof UNDERFRAME_BUILD_TYPES)[number];
 
 export const UNDERFRAME_SHARD_TYPES = [
@@ -63,7 +72,7 @@ function incarnon(value: unknown): UnderframeIncarnon | null {
 }
 
 const MAX_TEXT = 200;
-const MAX_MODS = 12;
+const MAX_MODS = 16;
 
 const text = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 && value.length <= MAX_TEXT ? value : null;

@@ -22,12 +22,15 @@
     label,
     abilityNames = {},
     frame = null,
+    companion = null,
   }: {
     item: LevelCapItem;
     label: MessageKey;
     abilityNames?: Record<string, string>;
     /** The run's warframe, whose buffs a weapon takes to Underframe. */
     frame?: LevelCapItem | null;
+    /** The run's companion, whose bond mods a weapon takes to Underframe. */
+    companion?: LevelCapItem | null;
   } = $props();
 
   let catalog = $state<LevelCapCatalog | null>(null);
@@ -65,7 +68,7 @@
       {item.configName ||
         $t("levelCap.build.config", { letter: String.fromCharCode(65 + item.config) })}
     </span>
-    <LevelCapUnderframeButton {item} {frame} {abilityNames} />
+    <LevelCapUnderframeButton {item} {frame} {companion} {abilityNames} />
   </div>
 
   {#if helminth || item.shards?.length}

@@ -39,6 +39,7 @@
     removable = true,
     open = false,
     frame = null,
+    companion = null,
     onChange,
   }: {
     kind: LevelCapSlotKind;
@@ -52,6 +53,8 @@
     open?: boolean;
     /** The build's warframe, whose buffs a weapon takes to Underframe. */
     frame?: LevelCapItem | null;
+    /** The build's companion, whose bond mods a weapon takes to Underframe. */
+    companion?: LevelCapItem | null;
     onChange: (item: LevelCapItem | null) => void;
   } = $props();
 
@@ -333,7 +336,7 @@
       </div>
     {/if}
     {#if item}
-      <LevelCapUnderframeButton {item} {frame} {abilityNames} />
+      <LevelCapUnderframeButton {item} {frame} {companion} {abilityNames} />
     {/if}
     <button
       type="button"

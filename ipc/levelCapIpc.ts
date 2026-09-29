@@ -14,7 +14,11 @@ import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
 import { levelCapCatalog } from "../services/levelCapCatalog";
 import { underframeDpsLink } from "../services/underframeDps";
-import { sanitizeUnderframeBuild, UNDERFRAME_SHARE_BASE } from "../config/shared/underframe";
+import {
+  sanitizeUnderframeBuild,
+  UNDERFRAME_SHARE_BASE,
+  UNDERFRAME_WEAPON_TYPES,
+} from "../config/shared/underframe";
 import {
   findModularIdentity,
   ownedModularItems,
@@ -578,20 +582,28 @@ function register(): void {
   handleAuthorized(
     LEVEL_CAP_UNDERFRAME_DPS,
     assertMainRendererSender,
-    async (_e, frame: unknown, weapon: unknown, fallbackUrl: unknown) => {
+    async (_e, frame: unknown, companion: unknown, weapon: unknown, fallbackUrl: unknown) => {
       const weaponBuild = sanitizeUnderframeBuild(weapon);
       const frameBuild = sanitizeUnderframeBuild(frame);
+      const companionBuild = sanitizeUnderframeBuild(companion);
       if (
         !weaponBuild ||
-        weaponBuild.type === "Warframe" ||
+        !UNDERFRAME_WEAPON_TYPES.includes(weaponBuild.type) ||
         typeof fallbackUrl !== "string" ||
         !fallbackUrl.startsWith(UNDERFRAME_SHARE_BASE) ||
         fallbackUrl.length > 16_000
       ) {
         return { ok: false, withFrame: false };
       }
+      const partnerFrame = frameBuild?.type === "Warframe" ? frameBuild : null;
+      const partnerCompanion =
+        companionBuild?.type === "Sentinel" || companionBuild?.type === "Beast"
+          ? companionBuild
+          : null;
       const link =
-        frameBuild?.type === "Warframe" ? await underframeDpsLink(frameBuild, weaponBuild) : null;
+        partnerFrame || partnerCompanion
+          ? await underframeDpsLink(partnerFrame, partnerCompanion, weaponBuild)
+          : null;
       void shell.openExternal(link ?? fallbackUrl);
       return { ok: true, withFrame: link !== null };
     },

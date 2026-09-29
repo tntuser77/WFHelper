@@ -5,16 +5,23 @@
   import { invoke } from "../../lib/ipc.js";
   import { tr as t } from "../../lib/i18n.js";
   import { log } from "../../lib/log.js";
-  import { underframeBuild, underframeShareUrl } from "../../lib/underframe.js";
+  import {
+    underframeBuild,
+    underframeCompanionBuild,
+    underframeShareUrl,
+  } from "../../lib/underframe.js";
 
   let {
     item,
     frame = null,
+    companion = null,
     abilityNames = {},
   }: {
     item: LevelCapItem;
     /** The build's warframe; a weapon opens with its buffs worked in. */
     frame?: LevelCapItem | null;
+    /** The build's companion, whose bond mods buff the weapon too. */
+    companion?: LevelCapItem | null;
     abilityNames?: Record<string, string>;
   } = $props();
 
@@ -29,6 +36,10 @@
   const frameBuild = $derived(
     item.kind !== "suit" && frame ? underframeBuild(frame, nameOf, helminthOf(frame)) : null,
   );
+  const companionBuild = $derived(
+    item.kind !== "suit" && companion ? underframeCompanionBuild(companion, nameOf) : null,
+  );
+  const partnered = $derived(!!frameBuild || !!companionBuild);
 
   let busy = $state(false);
   let noFrame = $state(false);
@@ -37,13 +48,13 @@
     event.stopPropagation();
     if (!build || busy) return;
     const url = underframeShareUrl(build);
-    if (!frameBuild) {
+    if (!partnered) {
       window.api?.openExternal?.(url);
       return;
     }
     busy = true;
     try {
-      const result = await invoke("openUnderframeDps", frameBuild, build, url);
+      const result = await invoke("openUnderframeDps", frameBuild, companionBuild, build, url);
       noFrame = !result.withFrame;
     } catch (err) {
       log.warn("[LevelCap] underframe failed", String(err));
@@ -63,7 +74,7 @@
       : 'border-border text-info'}"
     title={noFrame
       ? $t("levelCap.underframeNoFrame")
-      : $t(frameBuild ? "levelCap.underframeDpsTitle" : "levelCap.underframeTitle")}
+      : $t(partnered ? "levelCap.underframeDpsTitle" : "levelCap.underframeTitle")}
     disabled={busy}
     onclick={open}
     data-level-cap-underframe>{busy ? $t("levelCap.underframeOpening") : "Underframe"}</button

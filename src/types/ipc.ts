@@ -850,10 +850,16 @@ export interface IpcInvokeMap {
     args: [id: string];
     return: { ok: boolean };
   };
-  /** Opens the weapon on underframe.site with the frame's buffs worked in, or on
-   *  its own (`withFrame` false) when that fails and `fallbackUrl` opens instead. */
+  /** Opens the weapon on underframe.site with the frame's and companion's buffs
+   *  worked in, or on its own (`withFrame` false) when that fails and
+   *  `fallbackUrl` opens instead. */
   openUnderframeDps: {
-    args: [frame: UnderframeBuild | null, weapon: UnderframeBuild, fallbackUrl: string];
+    args: [
+      frame: UnderframeBuild | null,
+      companion: UnderframeBuild | null,
+      weapon: UnderframeBuild,
+      fallbackUrl: string,
+    ];
     return: { ok: boolean; withFrame: boolean };
   };
   workbenchGetState: {

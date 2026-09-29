@@ -27,7 +27,11 @@ import {
   orderLevelCapTags,
   toggleLevelCapSearchTag,
 } from "../../../src/lib/levelCap.js";
-import { underframeBuild, underframeUrl } from "../../../src/lib/underframe.js";
+import {
+  underframeBuild,
+  underframeCompanionBuild,
+  underframeUrl,
+} from "../../../src/lib/underframe.js";
 import { sanitizeUnderframeBuild } from "../../../config/shared/underframe.js";
 
 const SUIT: LevelCapItem = {
@@ -328,6 +332,33 @@ describe("underframeUrl", () => {
     expect(decode(underframeUrl(gun, name)!).b.ic).toEqual([1, 2, 3, null, null]);
   });
 
+  it("lends a companion's bond mods as a partner build", () => {
+    const pet = (type: string): LevelCapItem => ({
+      kind: "companion",
+      type,
+      config: 0,
+      upgrades: [
+        { slot: 0, type: "/Mods/TenaciousBond", rank: 10 },
+        { slot: 3, type: "/Mods/Unknown", rank: 1 },
+      ],
+    });
+    const name = (type: string) => (type === "/Mods/Unknown" ? null : type.split("/").pop()!);
+    expect(
+      underframeCompanionBuild(pet("/Lotus/Types/Friendly/Pets/Catbrow/Smeeta"), name),
+    ).toEqual({
+      name: "Smeeta (Level Cap)",
+      type: "Beast",
+      itemName: "Smeeta",
+      mods: [{ name: "TenaciousBond", rank: 10 }],
+      arcanes: [],
+    });
+    expect(
+      underframeCompanionBuild(pet("/Lotus/Types/Sentinels/SentinelPowersuits/Carrier"), name)
+        ?.type,
+    ).toBe("Sentinel");
+    expect(underframeCompanionBuild({ ...pet("/X"), kind: "primary" }, name)).toBeNull();
+  });
+
   it("returns null for companions and unknown items", () => {
     expect(underframeUrl({ ...SUIT, kind: "companion" }, () => "x")).toBeNull();
     expect(underframeUrl(SUIT, () => null)).toBeNull();
@@ -357,6 +388,24 @@ describe("sanitizeUnderframeBuild", () => {
       arcanes: ["Arcane Avenger", "Arcane Fury"],
       archon_shards: [{ type: "crimson", effect: "+10% Ability Strength", isTaufurged: false }],
       helminth: { name: "Roar", slot: 3 },
+    });
+  });
+
+  it("takes a companion partner with its mods", () => {
+    expect(
+      sanitizeUnderframeBuild({
+        name: "Smeeta (Level Cap)",
+        type: "Beast",
+        itemName: "Smeeta Kavat",
+        mods: [{ name: "Tenacious Bond", rank: 10 }],
+        arcanes: [],
+      }),
+    ).toEqual({
+      name: "Smeeta (Level Cap)",
+      type: "Beast",
+      itemName: "Smeeta Kavat",
+      mods: [{ name: "Tenacious Bond", rank: 10 }],
+      arcanes: [],
     });
   });
 
