@@ -35,8 +35,14 @@ for (const [tier, code, slug] of [
     relics.groups[key].qualities[quality] = {
       uniqueName,
       rewards: [
-        { name: "Forma Blueprint", urlName: "forma_blueprint", rarity: "Common", chance: 25.33 },
-        { name: `${code} Gold Part`, urlName: slug, rarity: "Rare", chance: 2 },
+        {
+          name: "Forma Blueprint",
+          urlName: "forma_blueprint",
+          rarity: "Common",
+          chance: 25.33,
+          ducats: 0,
+        },
+        { name: `${code} Gold Part`, urlName: slug, rarity: "Rare", chance: 2, ducats: 100 },
       ],
     };
     relics.byUniqueName[uniqueName] = { groupKey: key, quality };
@@ -121,6 +127,10 @@ test.describe("relic planner gold filter", () => {
     const names = page.locator(".relic-row-name");
     await sort.selectOption("gold");
     await expect(names).toHaveText(["Neo C3", "Meso B2", "Lith A1", "Axi H5"]);
+    // The card leads with the gold part and its price, not the relic's EV.
+    const first = page.locator(".relic-compact-card").first();
+    await expect(first.locator("[data-relic-gold-name]")).toHaveText("C3 Gold Part");
+    await expect(first.locator(".relic-compact-head")).toContainText("95");
     await page.screenshot({
       animations: "disabled",
       path: test.info().outputPath("relic-gold-sort.png"),

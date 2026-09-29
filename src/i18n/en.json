@@ -1422,6 +1422,8 @@
   "settings.masteryDesc": "Choose which items Inventory and Mastery show.",
   "settings.showMasteredBadges": "Mastered badges (M)",
   "settings.showOwnedParentBadges": "Owned parent badges (C)",
+  "settings.relicCardsTitle": "Relic cards",
+  "settings.showRelicCardEv": "Show expected value (plat, ducats, ducats/plat)",
   "settings.showVaultedBadges": "Vaulted badges (V)",
   "settings.notifyOnlyWhileGameRunning": "Only while Warframe is running",
   "settings.notifyOnlyWhileGameRunningHint": "Webhooks are not affected.",

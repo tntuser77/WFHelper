@@ -23,6 +23,8 @@ if (readStorage("wf_show_foundry_ready_badges") == null) {
 }
 export const showFoundryReadyBadges = persistedBoolean("wf_show_foundry_ready_badges", true);
 export const showVaultedBadges = persistedBoolean("wf_show_vaulted_badges", true);
+// Off by default: the card leads with the gold part, and the sort still reads EV.
+export const showRelicCardEv = persistedBoolean("wf_show_relic_card_ev", false);
 export const inventoryValueAllTradables = persistedBoolean(
   "wf_inventory_value_all_tradables",
   false,

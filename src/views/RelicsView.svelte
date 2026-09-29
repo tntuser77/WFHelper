@@ -286,15 +286,19 @@
     }
   }
 
-  function goldPrice(group: RelicGroup): number | null {
+  // Every refinement shares the gold part, so intact's list is enough.
+  function goldReward(group: RelicGroup): RelicReward | null {
     const rewards =
       group.qualities.intact?.rewards ??
       RELIC_QUALITY_COLUMNS.map((quality) => group.qualities[quality]?.rewards).find(
         (list) => list?.length,
       ) ??
       [];
-    const gold = relicGoldReward(rewards);
-    const slug = gold ? rewardSlug(gold) : "";
+    return relicGoldReward(rewards);
+  }
+
+  function goldPrice(reward: RelicReward | null): number | null {
+    const slug = reward ? rewardSlug(reward) : "";
     const cached = slug ? getCachedPriceState(slug) : null;
     return cached?.status === "ok" ? cached.median : null;
   }
@@ -399,7 +403,7 @@
         ownedCount: relicOwnedCountForMode(ownedCounts[group.key], viewState.qualityMode),
         ownedTotal: relicOwnedCountForMode(ownedCounts[group.key], "owned"),
         plat: ev.plat,
-        gold: goldPrice(group),
+        gold: goldPrice(goldReward(group)),
         ducat: ev.ducat,
         ratio: ev.ratio,
       };
@@ -849,6 +853,7 @@
               selectedOwned,
             )}
             {@const rewardIcons = previewRewards(group)}
+            {@const gold = goldReward(group)}
             <RelicCompactCard
               {group}
               qualityMode={$relicViewState.qualityMode}
@@ -856,6 +861,8 @@
               {selectedOwned}
               {selected}
               {rewardIcons}
+              goldName={gold?.name ?? null}
+              goldPlat={goldPrice(gold)}
               {ownedCount}
               {isOwnedReward}
               {rewardIconSrc}

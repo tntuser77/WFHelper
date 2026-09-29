@@ -4,6 +4,8 @@
   "common.parentReadyToClaim": "所属装备已在锻造厂制造完成，可以领取",
   "settings.showMasteredBadges": "精通标记（M）",
   "settings.showOwnedParentBadges": "所属装备拥有标记（C）",
+  "settings.relicCardsTitle": "遗物卡片",
+  "settings.showRelicCardEv": "显示期望值（白金、杜卡德、杜卡德/白金）",
   "settings.showVaultedBadges": "已绝版标记（V）",
   "settings.notificationCustomSound": "自定义通知声音",
   "settings.notificationSoundChoose": "选择声音",

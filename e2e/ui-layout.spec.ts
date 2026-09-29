@@ -57,7 +57,7 @@ async function measureRelicCards(page: Page) {
     let worstSpill = 0;
     let narrowestCard: number | null = null;
     let narrowestName: number | null = null;
-    let unvaultedTags = 0;
+    let tags = 0;
     const collisions: string[] = [];
     for (const card of cards) {
       const head = card.querySelector<HTMLElement>(".relic-compact-head");
@@ -66,9 +66,8 @@ async function measureRelicCards(page: Page) {
       const evColumn = head.children[head.children.length - 1] as HTMLElement;
       const strip = evColumn.querySelector<HTMLElement>("div");
       if (!strip) continue;
-      // The tag text is translated and the vaulted modifier class is not, so
-      // the class counts the wider unvaulted tag, the worst case for the price.
-      if (!tag.classList.contains("vaulted")) unvaultedTags += 1;
+      // Unvaulted relics keep an invisible tag for alignment; it still takes the space.
+      tags += 1;
       const tagRect = tag.getBoundingClientRect();
       const columnRect = evColumn.getBoundingClientRect();
       const stripRect = strip.getBoundingClientRect();
@@ -86,7 +85,7 @@ async function measureRelicCards(page: Page) {
     }
     return {
       cards: cards.length,
-      unvaultedTags,
+      tags,
       narrowestCard: narrowestCard === null ? null : Math.round(narrowestCard),
       narrowestName: narrowestName === null ? null : Math.round(narrowestName),
       worstSpill: Math.round(worstSpill),
@@ -101,7 +100,7 @@ function expectRelicHeadsIntact(
   where: string,
 ): void {
   expect(layout.cards, `no relic cards rendered at ${where}`).toBeGreaterThan(5);
-  expect(layout.unvaultedTags, `no unvaulted relic tag at ${where}`).toBeGreaterThan(0);
+  expect(layout.tags, `no relic status tag at ${where}`).toBeGreaterThan(0);
   expect(layout.narrowestCard, `no relic card measured at ${where}`).not.toBeNull();
   expect(layout.collisions, `status tag hits the price row at ${where}`).toEqual([]);
   expect(layout.collisionCount).toBe(0);
