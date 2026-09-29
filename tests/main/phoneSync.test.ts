@@ -64,16 +64,18 @@ const fetchMock = vi.fn();
 
 /** Answers like the mailbox Worker for a correct key. */
 function workerAnswers(): void {
-  fetchMock.mockImplementation(async (url: URL, init: { method: string; headers: Record<string, string> }) => {
-    const auth = init.headers.authorization;
-    if (auth !== `Bearer ${WRITE_KEY}`) return response(401);
-    const route = `${init.method} ${url.pathname}`;
-    if (route === "GET /v1/pair") return response(405);
-    if (route === "POST /v1/pair") return response(200, JSON.stringify({ key: "phone-key" }));
-    if (route === "DELETE /v1/pair") return response(204);
-    if (init.method === "PUT") return response(200, JSON.stringify({ etag: '"x"' }));
-    return response(404);
-  });
+  fetchMock.mockImplementation(
+    async (url: URL, init: { method: string; headers: Record<string, string> }) => {
+      const auth = init.headers.authorization;
+      if (auth !== `Bearer ${WRITE_KEY}`) return response(401);
+      const route = `${init.method} ${url.pathname}`;
+      if (route === "GET /v1/pair") return response(405);
+      if (route === "POST /v1/pair") return response(200, JSON.stringify({ key: "phone-key" }));
+      if (route === "DELETE /v1/pair") return response(204);
+      if (init.method === "PUT") return response(200, JSON.stringify({ etag: '"x"' }));
+      return response(404);
+    },
+  );
 }
 
 beforeEach(() => {
