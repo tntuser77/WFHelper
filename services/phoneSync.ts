@@ -241,18 +241,26 @@ async function upload(kind: PhoneSnapshotKind, force: boolean): Promise<void> {
   lastSent[kind] = Date.now();
 }
 
-async function run(kinds: PhoneSnapshotKind[], force: boolean): Promise<void> {
-  if (syncing) return;
+// Runs wait their turn: dropping one that arrives mid-upload would lose that change.
+let queue: Promise<void> = Promise.resolve();
+let queued = 0;
+
+function run(kinds: PhoneSnapshotKind[], force: boolean): Promise<void> {
+  queued += 1;
   syncing = true;
-  try {
-    for (const kind of kinds) await upload(kind, force);
-    lastError = null;
-  } catch (err) {
-    lastError = normalizeErrorMessage(err);
-    log.warn(`[PhoneSync] ${lastError}`);
-  } finally {
-    syncing = false;
-  }
+  queue = queue.then(async () => {
+    try {
+      for (const kind of kinds) await upload(kind, force);
+      lastError = null;
+    } catch (err) {
+      lastError = normalizeErrorMessage(err);
+      log.warn(`[PhoneSync] ${lastError}`);
+    } finally {
+      queued -= 1;
+      syncing = queued > 0;
+    }
+  });
+  return queue;
 }
 
 /** Uploads both snapshots now, even when nothing changed. */
@@ -303,4 +311,6 @@ export function __resetPhoneSyncForTest(): void {
   lastHash.levelcap = undefined;
   lastError = null;
   syncing = false;
+  queue = Promise.resolve();
+  queued = 0;
 }

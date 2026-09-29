@@ -198,6 +198,32 @@ describe("uploads", () => {
     sync.stop();
   });
 
+  it("queues a change that arrives while another upload is running", async () => {
+    const sync = await importPhoneSync();
+    await sync.setConfig(URL_OK, WRITE_KEY);
+    sync.stop();
+    sync.start({
+      buildSnapshot: (kind) =>
+        kind === "relics"
+          ? { v: 1, kind, generatedAt: 1, pricesAt: null, relics: [] }
+          : { v: 1, kind, generatedAt: 1, frameNotes: {}, runs: [] },
+    });
+    // Both kinds come due together, as they do right after start-up.
+    sync.stop();
+    vi.useFakeTimers({ toFake: ["setTimeout", "setInterval"] });
+    sync.markDirty("relics");
+    sync.markDirty("levelcap");
+    await vi.advanceTimersByTimeAsync(31_000);
+    vi.useRealTimers();
+    await vi.waitFor(() => expect(sync.getState().syncing).toBe(false));
+    const puts = fetchMock.mock.calls.filter(([, init]) => init.method === "PUT");
+    expect(puts.map(([url]) => (url as URL).pathname).sort()).toEqual([
+      "/v1/data/levelcap",
+      "/v1/data/relics",
+    ]);
+    sync.stop();
+  });
+
   it("reports a failed upload in the state", async () => {
     const sync = await importPhoneSync();
     await sync.setConfig(URL_OK, WRITE_KEY);
