@@ -42,6 +42,9 @@ export interface LevelCapItem {
   helminth?: { ability: string; index: number };
   /** Archon shard upgrade paths, suits only. */
   shards?: Array<{ color: string; type: string }>;
+  /** Incarnon perk picked at each unlocked evolution, 0-based, evolution I first
+   *  (its one perk, the Incarnon form). Weapons with an Incarnon only. */
+  incarnon?: number[];
   /** Companion weapon riding with a companion. */
   weapon?: LevelCapItem;
   /** Fitted parts of a zaw, kitgun or MOA, whose `type` every build of its kind shares. */

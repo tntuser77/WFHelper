@@ -323,6 +323,21 @@ describe("levelCapStore", () => {
     expect(store.getBuilds().map((b) => b.name)).toEqual(["Build A", "Build B"]);
   });
 
+  it("fills Incarnon perks into a build saved before they were read", async () => {
+    const store = await freshStore();
+    const gun = { kind: "secondary" as const, type: "/Laetum", config: 0, upgrades: [] };
+    const first = store.addRun(run({ build: { ...BUILD, secondary: gun } }));
+    const second = store.addRun(
+      run({ build: { ...BUILD, secondary: { ...gun, incarnon: [0, 1, 2, 0, 1] } } }),
+    );
+    expect(second.buildId).toBe(first.buildId);
+    const saved = store.getBuilds().find((b) => b.id === first.buildId);
+    expect(saved?.build.secondary?.incarnon).toEqual([0, 1, 2, 0, 1]);
+    // Perks already on the build are the player's and stay.
+    store.addRun(run({ build: { ...BUILD, secondary: { ...gun, incarnon: [0, 0, 0] } } }));
+    expect(store.getBuilds()[0].build.secondary?.incarnon).toEqual([0, 1, 2, 0, 1]);
+  });
+
   it("editing a build rewrites every run that uses it", async () => {
     const store = await freshStore();
     const a = store.addRun(run({ build: BUILD }));

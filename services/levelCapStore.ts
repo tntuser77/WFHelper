@@ -273,10 +273,21 @@ function stamp(run: LevelCapRun, record: LevelCapNamedBuild): void {
 function linkByLoadout(run: LevelCapRun): void {
   if (!run.build) return;
   const key = levelCapBuildKey(run.build);
-  const record =
-    _builds.find((b) => b.frame === run.frame && levelCapBuildKey(b.build) === key) ??
-    newBuild(run.frame, run.build);
-  stamp(run, record);
+  const found = _builds.find((b) => b.frame === run.frame && levelCapBuildKey(b.build) === key);
+  if (found) fillIncarnon(found.build, run.build);
+  stamp(run, found ?? newBuild(run.frame, run.build));
+}
+
+/** Builds saved before Incarnon perks were read pick them up from the next run
+ *  on that loadout; perks the player set stay. */
+function fillIncarnon(target: LevelCapBuild, source: LevelCapBuild): void {
+  for (const kind of ["primary", "secondary", "melee"] as const) {
+    const item = target[kind];
+    const perks = source[kind]?.incarnon;
+    if (item && perks?.length && !item.incarnon && source[kind]?.type === item.type) {
+      item.incarnon = [...perks];
+    }
+  }
 }
 
 /** Run tags move to the build a checked run belongs to. */

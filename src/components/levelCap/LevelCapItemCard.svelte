@@ -12,6 +12,7 @@
     archonShardUpgradeLabel,
     parseArchonShardSlot,
   } from "../../lib/inventory/archonShards.js";
+  import LevelCapIncarnon from "./LevelCapIncarnon.svelte";
   import LevelCapModGrid from "./LevelCapModGrid.svelte";
   import LevelCapUnderframeButton from "./LevelCapUnderframeButton.svelte";
   import Self from "./LevelCapItemCard.svelte";
@@ -86,6 +87,10 @@
         </span>
       {/each}
     </div>
+  {/if}
+
+  {#if item.incarnon?.length}
+    <LevelCapIncarnon perks={item.incarnon} />
   {/if}
 
   {#if item.upgrades.length}

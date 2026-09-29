@@ -93,7 +93,23 @@ export function underframeBuild(
     mods,
     arcanes,
   };
-  if (type !== "Warframe") return build;
+  if (type !== "Warframe") {
+    if (item.incarnon?.length) {
+      // Their perks count from 1, and an evolution not reached yet is null.
+      const perk = (tier: number) => {
+        const pick = item.incarnon?.[tier - 1];
+        return pick === undefined ? null : pick + 1;
+      };
+      build.incarnon = {
+        evolution_1_active: true,
+        evolution_2_perk: perk(2),
+        evolution_3_perk: perk(3),
+        evolution_4_perk: perk(4),
+        evolution_5_perk: perk(5),
+      };
+    }
+    return build;
+  }
   build.archon_shards = (item.shards ?? []).flatMap((shard) => {
     const effect = ARCHON_SHARD_EFFECTS.find((e) => e.type === shard.type)?.effect;
     const color = SHARD_COLORS[shard.color.replace(/^ACC_/, "").replace(/_MYTHIC$/, "")];
@@ -127,6 +143,16 @@ export function underframeShareUrl(build: UnderframeBuild): string {
     short.as = build.archon_shards.map((s) => [s.type, s.effect, ...(s.isTaufurged ? [1] : [])]);
   }
   if (build.helminth) short.h = [build.helminth.name, build.helminth.slot];
+  if (build.incarnon) {
+    const i = build.incarnon;
+    short.ic = [
+      i.evolution_1_active ? 1 : 0,
+      i.evolution_2_perk,
+      i.evolution_3_perk,
+      i.evolution_4_perk,
+      i.evolution_5_perk,
+    ];
+  }
   return `${UNDERFRAME_SHARE_BASE}v4u.${base64Url(JSON.stringify({ v: 1, b: short }))}`;
 }
 

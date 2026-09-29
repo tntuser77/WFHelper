@@ -24,6 +24,7 @@
   } from "../../lib/inventory/archonShards.js";
   import { log } from "../../lib/log.js";
   import { loadLevelCapItemConfigs, loadLevelCapModularItems } from "../../stores/levelCap.js";
+  import LevelCapIncarnon from "./LevelCapIncarnon.svelte";
   import LevelCapModGrid from "./LevelCapModGrid.svelte";
   import LevelCapPicker from "./LevelCapPicker.svelte";
   import LevelCapUnderframeButton from "./LevelCapUnderframeButton.svelte";
@@ -424,6 +425,19 @@
             onCancel={() => (picking = null)}
           />
         </div>
+      {/if}
+
+      {#if kind !== "suit" && (item.incarnon || $itemDb[item.type]?.incarnon)}
+        <LevelCapIncarnon
+          perks={item.incarnon ?? []}
+          onChange={(perks) => {
+            if (!item) return;
+            const next = { ...item };
+            if (perks?.length) next.incarnon = perks;
+            else delete next.incarnon;
+            onChange(next);
+          }}
+        />
       {/if}
 
       {#if kind === "suit"}

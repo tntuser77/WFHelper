@@ -183,3 +183,45 @@ describe("levelCapBuild", () => {
     expect(ownedSuitTypes(undefined)).toEqual([]);
   });
 });
+
+describe("levelCapBuild incarnon evolutions", () => {
+  const LAETUM = "/Lotus/Weapons/Tenno/Zariman/Pistols/HeavyPistol/ZarimanHeavyPistol";
+  const LEX_PRIME = "/Lotus/Weapons/Tenno/Pistols/PrimeLex/PrimeLex";
+  // The export names Lex Prime's parent, which is where its progress row sits.
+  const LEX = "/Lotus/Weapons/Tenno/Pistol/HeavyPistol";
+  const inventory = (evolutions: unknown[], weapons: Array<[string, string]>) => ({
+    Suits: [],
+    EvolutionProgress: evolutions,
+    Pistols: weapons.map(([type, tree], n) => ({
+      ItemType: type,
+      ItemId: { $oid: `pistol${n}` },
+      // The editor only offers copies carrying mods.
+      Configs: [{ Upgrades: ["/Lotus/Upgrades/Mods/Pistol/WeaponDamageAmountMod"] }],
+      SkillTree: tree,
+    })),
+  });
+  const perks = (inv: unknown, type: string) =>
+    snapshotItemConfigs(inv, "secondary", type)[0]?.incarnon;
+
+  it("reads the perk picked at each evolution", () => {
+    const inv = inventory(
+      [{ ItemType: LAETUM, Rank: 5 }],
+      [
+        [LAETUM, "00022"],
+        [LEX_PRIME, "0102"],
+      ],
+    );
+    expect(perks(inv, LAETUM)).toEqual([0, 0, 0, 2, 2]);
+    // Genesis trees skip evolution I, and no progress row means it is complete.
+    expect(perks(inv, LEX_PRIME)).toEqual([0, 0, 1, 0, 2]);
+  });
+
+  it("stops at the evolutions unlocked so far, looking at the parent for a Genesis weapon", () => {
+    const inv = inventory([{ ItemType: LEX, Rank: 2 }], [[LEX_PRIME, "0102"]]);
+    expect(perks(inv, LEX_PRIME)).toEqual([0, 0, 1]);
+  });
+
+  it("ignores weapons without an Incarnon", () => {
+    expect(perks(inventory([], [[LAETUM, ""]]), LAETUM)).toBeUndefined();
+  });
+});

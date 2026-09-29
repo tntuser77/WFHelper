@@ -306,6 +306,26 @@ describe("underframeUrl", () => {
     expect(built?.mods[0]).toEqual({ name: "Serration", rank: 10 });
     expect(built?.mods[8]).toEqual({ name: "Vigilante", rank: 5 });
     expect(built?.helminth).toBeUndefined();
+    expect(built?.incarnon).toBeUndefined();
+  });
+
+  it("sends Incarnon perks counted from 1, null past the last unlocked", () => {
+    const gun: LevelCapItem = {
+      kind: "secondary",
+      type: "/Laetum",
+      config: 0,
+      upgrades: [],
+      incarnon: [0, 1, 2],
+    };
+    const name = (type: string) => type.slice(1);
+    expect(underframeBuild(gun, name)?.incarnon).toEqual({
+      evolution_1_active: true,
+      evolution_2_perk: 2,
+      evolution_3_perk: 3,
+      evolution_4_perk: null,
+      evolution_5_perk: null,
+    });
+    expect(decode(underframeUrl(gun, name)!).b.ic).toEqual([1, 2, 3, null, null]);
   });
 
   it("returns null for companions and unknown items", () => {

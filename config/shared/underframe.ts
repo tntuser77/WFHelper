@@ -33,6 +33,33 @@ export interface UnderframeBuild {
   archon_shards?: Array<{ type: string; effect: string; isTaufurged: boolean }>;
   /** `slot` counts abilities from 1. */
   helminth?: { name: string; slot: number } | null;
+  /** Perks count from 1; null where that evolution is not unlocked. */
+  incarnon?: UnderframeIncarnon | null;
+}
+
+export interface UnderframeIncarnon {
+  evolution_1_active: boolean;
+  evolution_2_perk: number | null;
+  evolution_3_perk: number | null;
+  evolution_4_perk: number | null;
+  evolution_5_perk: number | null;
+}
+
+function incarnon(value: unknown): UnderframeIncarnon | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const perk = (key: string) => {
+    const n = raw[key];
+    return Number.isInteger(n) && (n as number) >= 1 && (n as number) <= 3 ? (n as number) : null;
+  };
+  const out: UnderframeIncarnon = {
+    evolution_1_active: raw.evolution_1_active === true,
+    evolution_2_perk: perk("evolution_2_perk"),
+    evolution_3_perk: perk("evolution_3_perk"),
+    evolution_4_perk: perk("evolution_4_perk"),
+    evolution_5_perk: perk("evolution_5_perk"),
+  };
+  return out.evolution_1_active ? out : null;
 }
 
 const MAX_TEXT = 200;
@@ -64,7 +91,11 @@ export function sanitizeUnderframeBuild(value: unknown): UnderframeBuild | null 
     .filter((a): a is string => a !== null)
     .slice(0, 2);
   const build: UnderframeBuild = { name, type, itemName, mods, arcanes };
-  if (type !== "Warframe") return build;
+  if (type !== "Warframe") {
+    const evolutions = incarnon(raw.incarnon);
+    if (evolutions) build.incarnon = evolutions;
+    return build;
+  }
 
   const shards = (Array.isArray(raw.archon_shards) ? raw.archon_shards : []).slice(0, 5);
   build.archon_shards = shards.flatMap((shard) => {
