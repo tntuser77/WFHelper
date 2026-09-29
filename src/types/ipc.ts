@@ -862,6 +862,11 @@ export interface IpcInvokeMap {
     ];
     return: { ok: boolean; withFrame: boolean };
   };
+  /** Loads the Underframe page in the background so `openUnderframeDps` is quick. */
+  prewarmUnderframe: {
+    args: [];
+    return: { ok: boolean };
+  };
   workbenchGetState: {
     args: [];
     return: WorkbenchState;

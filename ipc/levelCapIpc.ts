@@ -13,7 +13,7 @@ import * as itemDb from "../services/itemDatabase";
 import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
 import { levelCapCatalog } from "../services/levelCapCatalog";
-import { underframeDpsLink } from "../services/underframeDps";
+import { prewarmUnderframe, underframeDpsLink } from "../services/underframeDps";
 import {
   sanitizeUnderframeBuild,
   UNDERFRAME_SHARE_BASE,
@@ -51,6 +51,7 @@ import {
   LEVEL_CAP_IMPORT_FOLDERS,
   LEVEL_CAP_OPEN_SCREENSHOT,
   LEVEL_CAP_UNDERFRAME_DPS,
+  LEVEL_CAP_UNDERFRAME_PREWARM,
   LEVEL_CAP_PICK_FOLDER,
   LEVEL_CAP_PORTRAIT_THUMB,
   LEVEL_CAP_SET_NOTES,
@@ -576,6 +577,11 @@ function register(): void {
     const file = store.getRuns().find((run) => run.id === runId)?.screenshot;
     if (!file) return { ok: false };
     void shell.openPath(path.resolve(file));
+    return { ok: true };
+  });
+
+  handleAuthorized(LEVEL_CAP_UNDERFRAME_PREWARM, assertMainRendererSender, () => {
+    prewarmUnderframe();
     return { ok: true };
   });
 

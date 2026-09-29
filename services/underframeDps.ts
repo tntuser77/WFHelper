@@ -8,18 +8,14 @@ import {
 
 const log = withScope("underframeDps");
 
-// Underframe works a frame's buffs, and a companion's bond mods, into a weapon
-// only when they are linked to it as partner builds, with its own maths in its
-// own page. So this loads the site in a hidden window, adds the builds, links
-// them the way its partner dialog does, and takes the link its share button
-// makes. The weapon's link then carries those buffs as plain numbers, and the
-// user's browser opens it. Nothing is saved on their server: the share link holds the whole build.
-//
-// This leans on the page's internals (window.AppState, element ids, confirm
-// wording), so any failure falls back to the weapon's own link.
+// Underframe only works a frame's or companion's buffs into a weapon when they
+// are linked as partner builds. So a hidden window loads the site, links them
+// as its partner dialog does, and takes the share link. Any failure falls back
+// to the weapon's own link. Nothing is saved on their server.
 
 const PARTITION = "underframe-dps";
 const TIMEOUT_MS = 45_000;
+const IDLE_MS = 3 * 60_000;
 
 const PAGE_SCRIPT = String.raw`
 (async (frame, companion, weapon) => {
@@ -136,11 +132,24 @@ const PAGE_SCRIPT = String.raw`
 })
 `;
 
-async function runInHiddenPage(
-  frame: UnderframeBuild | null,
-  companion: UnderframeBuild | null,
-  weapon: UnderframeBuild,
-): Promise<{ link: string; buffs: number }> {
+interface WarmPage {
+  win: import("electron").BrowserWindow;
+  /** Settles once the page has loaded its data; rejects if it never does. */
+  ready: Promise<void>;
+  idle: ReturnType<typeof setTimeout>;
+}
+
+// The page takes seconds to boot, so one is loaded ahead of the click. A run
+// dirties the page (its builds, its route), so each is used once and thrown away.
+let warm: WarmPage | null = null;
+
+function discard(page: WarmPage): void {
+  clearTimeout(page.idle);
+  if (!page.win.isDestroyed()) page.win.destroy();
+  if (warm === page) warm = null;
+}
+
+function loadPage(): WarmPage {
   const { BrowserWindow } = require("electron") as typeof import("electron");
   const win = new BrowserWindow({
     width: 1280,
@@ -157,40 +166,66 @@ async function runInHiddenPage(
   win.webContents.on("will-navigate", (e, target) => {
     if (!target.startsWith(`${UNDERFRAME_ORIGIN}/`)) e.preventDefault();
   });
-  // Keep the throwaway page's saved builds from piling up between runs.
-  await win.webContents.session.clearStorageData({ storages: ["localstorage", "indexdb"] });
+  const page: WarmPage = {
+    win,
+    idle: setTimeout(() => discard(page), IDLE_MS),
+    ready: (async () => {
+      // Keep the throwaway page's saved builds from piling up between runs.
+      await win.webContents.session.clearStorageData({ storages: ["localstorage", "indexdb"] });
+      await win.loadURL(`${UNDERFRAME_ORIGIN}/`);
+      const started = Date.now();
+      while (
+        !(await win.webContents.executeJavaScript(
+          `!!(window.AppState && (AppState.mods || []).length > 100 &&
+             (AppState.warframes || []).length && document.getElementById("share-build-btn"))`,
+          true,
+        ))
+      ) {
+        if (win.isDestroyed() || Date.now() - started > TIMEOUT_MS) {
+          throw new Error("page never finished loading its data");
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    })(),
+  };
+  page.ready.catch(() => discard(page));
+  return page;
+}
 
-  const exec = <T>(code: string): Promise<T> =>
-    win.webContents.executeJavaScript(code, true) as Promise<T>;
+/** Starts loading the Underframe page in the background so the next
+ *  `underframeDpsLink` finds it ready. Cheap to call again: it does nothing
+ *  while a page is already loading or waiting, and the page is dropped when
+ *  unused for a few minutes. */
+export function prewarmUnderframe(): void {
+  if (warm && !warm.win.isDestroyed()) return;
+  warm = loadPage();
+}
+
+async function runInHiddenPage(
+  frame: UnderframeBuild | null,
+  companion: UnderframeBuild | null,
+  weapon: UnderframeBuild,
+): Promise<{ link: string; buffs: number }> {
+  const page = warm && !warm.win.isDestroyed() ? warm : loadPage();
+  warm = null;
+  clearTimeout(page.idle);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error("timed out")), TIMEOUT_MS);
   });
   try {
     return await Promise.race([
-      (async () => {
-        await win.loadURL(`${UNDERFRAME_ORIGIN}/`);
-        const started = Date.now();
-        while (
-          !(await exec<boolean>(
-            `!!(window.AppState && (AppState.mods || []).length > 100 &&
-               (AppState.warframes || []).length && document.getElementById("share-build-btn"))`,
-          ))
-        ) {
-          if (win.isDestroyed() || Date.now() - started > TIMEOUT_MS) {
-            throw new Error("page never finished loading its data");
-          }
-          await new Promise((r) => setTimeout(r, 250));
-        }
-        return exec<{ link: string; buffs: number }>(
+      page.ready.then(() =>
+        page.win.webContents.executeJavaScript(
           `${PAGE_SCRIPT}(${[frame, companion, weapon].map((b) => JSON.stringify(b)).join(", ")})`,
-        );
-      })(),
+          true,
+        ) as Promise<{ link: string; buffs: number }>,
+      ),
       timeout,
     ]);
   } finally {
     clearTimeout(timer);
-    if (!win.isDestroyed()) win.destroy();
+    discard(page);
   }
 }
 

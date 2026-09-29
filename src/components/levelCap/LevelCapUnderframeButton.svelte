@@ -41,6 +41,12 @@
   );
   const partnered = $derived(!!frameBuild || !!companionBuild);
 
+  // Their page takes seconds to load, so start it before the click.
+  const prewarm = () => {
+    if (partnered) void invoke("prewarmUnderframe").catch(() => {});
+  };
+  $effect(prewarm);
+
   let busy = $state(false);
   let noFrame = $state(false);
 
@@ -77,6 +83,7 @@
       : $t(partnered ? "levelCap.underframeDpsTitle" : "levelCap.underframeTitle")}
     disabled={busy}
     onclick={open}
+    onpointerenter={prewarm}
     data-level-cap-underframe>{busy ? $t("levelCap.underframeOpening") : "Underframe"}</button
   >
 {/if}

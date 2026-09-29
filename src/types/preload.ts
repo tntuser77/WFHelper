@@ -374,6 +374,7 @@ export interface PreloadAPI {
   openUnderframeDps: (
     ...args: IpcInvokeMap["openUnderframeDps"]["args"]
   ) => Promise<IpcInvokeMap["openUnderframeDps"]["return"]>;
+  prewarmUnderframe: () => Promise<IpcInvokeMap["prewarmUnderframe"]["return"]>;
   onLevelCapUpdated: (callback: (payload: IpcEventMap["level-cap-updated"]) => void) => () => void;
   onLevelCapHotkey: (callback: (payload: IpcEventMap["level-cap-hotkey"]) => void) => () => void;
   workbenchGetState: () => Promise<IpcInvokeMap["workbenchGetState"]["return"]>;

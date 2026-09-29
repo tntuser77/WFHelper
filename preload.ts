@@ -161,6 +161,7 @@ import {
   LEVEL_CAP_THUMBNAIL,
   LEVEL_CAP_OPEN_SCREENSHOT,
   LEVEL_CAP_UNDERFRAME_DPS,
+  LEVEL_CAP_UNDERFRAME_PREWARM,
   LEVEL_CAP_SQUAD_CROP,
   LEVEL_CAP_SCREENSHOT,
   LEVEL_CAP_FIX_SQUADMATE,
@@ -457,6 +458,7 @@ try {
     labelLevelCapPortrait: inv<"labelLevelCapPortrait">(LEVEL_CAP_LABEL_PORTRAIT),
     openLevelCapScreenshot: inv<"openLevelCapScreenshot">(LEVEL_CAP_OPEN_SCREENSHOT),
     openUnderframeDps: inv<"openUnderframeDps">(LEVEL_CAP_UNDERFRAME_DPS),
+    prewarmUnderframe: inv<"prewarmUnderframe">(LEVEL_CAP_UNDERFRAME_PREWARM),
     onLevelCapUpdated: ipcDataBridge<IpcEventMap["level-cap-updated"]>(
       ipcRenderer,
       LEVEL_CAP_UPDATED,
