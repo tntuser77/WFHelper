@@ -2,6 +2,7 @@
 // WFHelper-mobile repo. The phone keeps a copy of these types; bump `v` when a
 // field changes meaning so an older phone can say it needs an update.
 
+import { ARCHON_SHARD_EFFECTS } from "./archonShardCatalog";
 import type { LevelCapBuild, LevelCapItem, LevelCapNamedBuild, LevelCapRun } from "./levelCapTypes";
 
 const PHONE_SNAPSHOT_VERSION = 1;
@@ -43,7 +44,7 @@ interface PhoneBuildSlot {
   mods: string[];
   /** Suits only: the ability the Helminth grafted in. */
   helminth?: string;
-  /** Suits only: archon shard colours. */
+  /** Suits only: archon shards as "Tauforged Amber: +37.5% Casting Speed". */
   shards?: string[];
 }
 
@@ -104,8 +105,6 @@ export interface PhonePairing {
   code: string;
   state: PhoneSyncState;
 }
-
-// --- relics -----------------------------------------------------------------
 
 type OwnedRow = { intact: number; exceptional: number; flawless: number; radiant: number };
 
@@ -173,8 +172,6 @@ export function buildRelicSnapshot(input: RelicSnapshotInput): PhoneRelicSnapsho
   };
 }
 
-// --- level cap --------------------------------------------------------------
-
 interface LevelCapSnapshotInput {
   runs: readonly LevelCapRun[];
   builds: readonly LevelCapNamedBuild[];
@@ -187,6 +184,26 @@ interface LevelCapSnapshotInput {
 /** The last path segment reads well enough when the catalogue has no name. */
 function fallbackName(type: string): string {
   return type.split("/").pop() || type;
+}
+
+// The inventory names a shard's hue ACC_<hue>; the _MYTHIC suffix is tauforged.
+const SHARD_COLORS: Record<string, string> = {
+  ACC_RED: "Crimson",
+  ACC_YELLOW: "Amber",
+  ACC_BLUE: "Azure",
+  ACC_GREEN: "Emerald",
+  ACC_ORANGE: "Topaz",
+  ACC_PURPLE: "Violet",
+};
+
+function shardLabel(shard: { color: string; type: string }): string {
+  const tauforged = shard.color.endsWith("_MYTHIC");
+  const hue = SHARD_COLORS[shard.color.replace(/_MYTHIC$/, "")] ?? shard.color;
+  const name = tauforged ? `Tauforged ${hue}` : hue;
+  const effect = ARCHON_SHARD_EFFECTS.find(
+    (entry) => entry.color === shard.color && entry.type === shard.type,
+  )?.effect;
+  return effect ? `${name}: ${effect}` : name;
 }
 
 function phoneSlot(item: LevelCapItem, nameOf: (type: string) => string | null): PhoneBuildSlot {
@@ -202,7 +219,7 @@ function phoneSlot(item: LevelCapItem, nameOf: (type: string) => string | null):
   if (item.helminth) {
     slot.helminth = nameOf(item.helminth.ability) ?? fallbackName(item.helminth.ability);
   }
-  if (item.shards?.length) slot.shards = item.shards.map((shard) => shard.color);
+  if (item.shards?.length) slot.shards = item.shards.map(shardLabel);
   return slot;
 }
 

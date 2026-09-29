@@ -65,7 +65,13 @@ describe("buildLevelCapSnapshot", () => {
         { slot: 2, type: null, rank: null },
       ],
       helminth: { ability: "/Lotus/Abilities/Roar", index: 3 },
-      shards: [{ color: "Violet", type: "/Lotus/Shards/Violet" }],
+      shards: [
+        {
+          color: "ACC_YELLOW_MYTHIC",
+          type: "/Lotus/Upgrades/Invigorations/ArchonCrystalUpgrades/ArchonCrystalUpgradeWarframeCastingSpeedMythic",
+        },
+        { color: "ACC_PURPLE", type: "/Lotus/Unknown" },
+      ],
     },
     primary: {
       kind: "primary",
@@ -152,7 +158,7 @@ describe("buildLevelCapSnapshot", () => {
           name: "Dante",
           mods: ["Adaptation"],
           helminth: "Roar",
-          shards: ["Violet"],
+          shards: ["Tauforged Amber: +37.5% Casting Speed", "Violet"],
         },
         { slot: "primary", name: "Torid", mods: ["Torid Critacan"] },
       ],
