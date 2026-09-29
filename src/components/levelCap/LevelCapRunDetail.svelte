@@ -75,7 +75,7 @@
   {#if items.length}
     <div class="flex flex-col gap-2">
       {#each items as { item, label } (label)}
-        <LevelCapItemCard {item} {label} {abilityNames} />
+        <LevelCapItemCard {item} {label} {abilityNames} frame={run.build?.suit ?? null} />
       {/each}
     </div>
   {:else}

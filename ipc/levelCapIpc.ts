@@ -13,6 +13,8 @@ import * as itemDb from "../services/itemDatabase";
 import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
 import { levelCapCatalog } from "../services/levelCapCatalog";
+import { underframeDpsLink } from "../services/underframeDps";
+import { sanitizeUnderframeBuild, UNDERFRAME_SHARE_BASE } from "../config/shared/underframe";
 import {
   findModularIdentity,
   ownedModularItems,
@@ -44,6 +46,7 @@ import {
   LEVEL_CAP_MODULAR_ITEMS,
   LEVEL_CAP_IMPORT_FOLDERS,
   LEVEL_CAP_OPEN_SCREENSHOT,
+  LEVEL_CAP_UNDERFRAME_DPS,
   LEVEL_CAP_PICK_FOLDER,
   LEVEL_CAP_PORTRAIT_THUMB,
   LEVEL_CAP_SET_NOTES,
@@ -571,6 +574,28 @@ function register(): void {
     void shell.openPath(path.resolve(file));
     return { ok: true };
   });
+
+  handleAuthorized(
+    LEVEL_CAP_UNDERFRAME_DPS,
+    assertMainRendererSender,
+    async (_e, frame: unknown, weapon: unknown, fallbackUrl: unknown) => {
+      const weaponBuild = sanitizeUnderframeBuild(weapon);
+      const frameBuild = sanitizeUnderframeBuild(frame);
+      if (
+        !weaponBuild ||
+        weaponBuild.type === "Warframe" ||
+        typeof fallbackUrl !== "string" ||
+        !fallbackUrl.startsWith(UNDERFRAME_SHARE_BASE) ||
+        fallbackUrl.length > 16_000
+      ) {
+        return { ok: false, withFrame: false };
+      }
+      const link =
+        frameBuild?.type === "Warframe" ? await underframeDpsLink(frameBuild, weaponBuild) : null;
+      void shell.openExternal(link ?? fallbackUrl);
+      return { ok: true, withFrame: link !== null };
+    },
+  );
 }
 
 export { register };

@@ -27,7 +27,8 @@ import {
   orderLevelCapTags,
   toggleLevelCapSearchTag,
 } from "../../../src/lib/levelCap.js";
-import { underframeUrl } from "../../../src/lib/underframe.js";
+import { underframeBuild, underframeUrl } from "../../../src/lib/underframe.js";
+import { sanitizeUnderframeBuild } from "../../../config/shared/underframe.js";
 
 const SUIT: LevelCapItem = {
   kind: "suit",
@@ -227,6 +228,11 @@ describe("levelCap helpers", () => {
   });
 });
 
+const SUIT_SHARD = {
+  color: "ACC_BLUE",
+  type: "/Lotus/Upgrades/Invigorations/ArchonCrystalUpgrades/ArchonCrystalUpgradeWarframeEnergyMax",
+};
+
 describe("underframeUrl", () => {
   const names: Record<string, string> = {
     [SUIT.type]: "Dante",
@@ -255,12 +261,101 @@ describe("underframeUrl", () => {
     expect(b.m[1]).toEqual({ n: "Primed Sure Footed", r: 10 });
     expect(b.m[2]).toEqual({ n: "Intensify", r: 5 });
     expect(b.a).toEqual(["Molt Augmented"]);
-    expect(b.h).toEqual(["Xata's Whisper", 3]);
+    // Underframe counts abilities from 1; the inventory's index 3 is the fourth.
+    expect(b.h).toEqual(["Xata's Whisper", 4]);
+  });
+
+  it("carries archon shards by colour and tier", () => {
+    const shard = (color: string, type: string) => ({
+      color,
+      type: `/Lotus/Upgrades/Invigorations/ArchonCrystalUpgrades/${type}`,
+    });
+    const built = underframeBuild(
+      {
+        ...SUIT,
+        shards: [
+          shard("ACC_RED_MYTHIC", "ArchonCrystalUpgradeWarframeAbilityStrengthMythic"),
+          shard("ACC_BLUE", "ArchonCrystalUpgradeWarframeEnergyMax"),
+        ],
+      },
+      (type) => names[type] ?? null,
+    );
+    expect(built?.archon_shards).toEqual([
+      { type: "crimson", effect: expect.stringContaining("Ability Strength"), isTaufurged: true },
+      { type: "azure", effect: "+50 Energy Max", isTaufurged: false },
+    ]);
+    const { b } = decode(
+      underframeUrl({ ...SUIT, shards: [SUIT_SHARD] }, (t) => names[t] ?? null)!,
+    );
+    expect(b.as).toEqual([["azure", "+50 Energy Max"]]);
+  });
+
+  it("keeps a gun's exilus last, where Underframe puts it", () => {
+    const gun: LevelCapItem = {
+      kind: "primary",
+      type: "/Soma",
+      config: 0,
+      upgrades: [
+        { slot: 0, type: "/Mods/Serration", rank: 10 },
+        { slot: 8, type: "/Mods/Vigilante", rank: 5 },
+      ],
+    };
+    const built = underframeBuild(gun, (type) => type.split("/").pop() ?? null);
+    expect(built?.type).toBe("Primary");
+    expect(built?.mods).toHaveLength(9);
+    expect(built?.mods[0]).toEqual({ name: "Serration", rank: 10 });
+    expect(built?.mods[8]).toEqual({ name: "Vigilante", rank: 5 });
+    expect(built?.helminth).toBeUndefined();
   });
 
   it("returns null for companions and unknown items", () => {
     expect(underframeUrl({ ...SUIT, kind: "companion" }, () => "x")).toBeNull();
     expect(underframeUrl(SUIT, () => null)).toBeNull();
+  });
+});
+
+describe("sanitizeUnderframeBuild", () => {
+  it("keeps known fields and drops everything else", () => {
+    const clean = sanitizeUnderframeBuild({
+      name: "Rhino (Level Cap)",
+      type: "Warframe",
+      itemName: "Rhino",
+      mods: [{ name: "Intensify", rank: 5, extra: 1 }, null, { name: "Bad", rank: 99 }],
+      arcanes: ["Arcane Avenger", 7, "Arcane Fury", "Third"],
+      archon_shards: [
+        { type: "crimson", effect: "+10% Ability Strength", isTaufurged: false },
+        { type: "rainbow", effect: "x" },
+      ],
+      helminth: { name: "Roar", slot: 3 },
+      slug: "evil",
+    });
+    expect(clean).toEqual({
+      name: "Rhino (Level Cap)",
+      type: "Warframe",
+      itemName: "Rhino",
+      mods: [{ name: "Intensify", rank: 5 }, null, { name: "Bad" }],
+      arcanes: ["Arcane Avenger", "Arcane Fury"],
+      archon_shards: [{ type: "crimson", effect: "+10% Ability Strength", isTaufurged: false }],
+      helminth: { name: "Roar", slot: 3 },
+    });
+  });
+
+  it("rejects anything that is not a build", () => {
+    expect(sanitizeUnderframeBuild(null)).toBeNull();
+    expect(sanitizeUnderframeBuild("x")).toBeNull();
+    expect(
+      sanitizeUnderframeBuild({ name: "a", type: "Companion", itemName: "b", mods: [] }),
+    ).toBeNull();
+    expect(sanitizeUnderframeBuild({ name: "a", type: "Primary", itemName: "b" })).toBeNull();
+    expect(
+      sanitizeUnderframeBuild({
+        name: "a",
+        type: "Warframe",
+        itemName: "b",
+        mods: [],
+        helminth: { name: "R", slot: 0 },
+      })?.helminth,
+    ).toBeNull();
   });
 });
 

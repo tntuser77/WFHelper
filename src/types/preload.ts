@@ -371,6 +371,9 @@ export interface PreloadAPI {
   openLevelCapScreenshot: (
     id: IpcInvokeMap["openLevelCapScreenshot"]["args"][0],
   ) => Promise<IpcInvokeMap["openLevelCapScreenshot"]["return"]>;
+  openUnderframeDps: (
+    ...args: IpcInvokeMap["openUnderframeDps"]["args"]
+  ) => Promise<IpcInvokeMap["openUnderframeDps"]["return"]>;
   onLevelCapUpdated: (callback: (payload: IpcEventMap["level-cap-updated"]) => void) => () => void;
   onLevelCapHotkey: (callback: (payload: IpcEventMap["level-cap-hotkey"]) => void) => () => void;
   workbenchGetState: () => Promise<IpcInvokeMap["workbenchGetState"]["return"]>;

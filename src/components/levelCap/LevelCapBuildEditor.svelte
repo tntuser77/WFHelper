@@ -327,6 +327,8 @@
           item={draft[slot.kind]}
           {catalog}
           itemOptions={catalog[slot.kind]}
+          {abilityNames}
+          frame={draft.suit}
           open={slot.kind === focusSlot}
           onChange={(item) => setSlot(slot.kind, item)}
         />

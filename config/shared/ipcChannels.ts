@@ -234,6 +234,7 @@ export const LEVEL_CAP_PICK_FOLDER = "level-cap:pick-folder";
 export const LEVEL_CAP_THUMBNAIL = "level-cap:thumbnail";
 export const LEVEL_CAP_SCREENSHOT = "level-cap:screenshot";
 export const LEVEL_CAP_OPEN_SCREENSHOT = "level-cap:open-screenshot";
+export const LEVEL_CAP_UNDERFRAME_DPS = "level-cap:underframe-dps";
 export const LEVEL_CAP_SQUAD_CROP = "level-cap:squad-crop";
 export const LEVEL_CAP_FIX_SQUADMATE = "level-cap:fix-squadmate";
 export const LEVEL_CAP_PORTRAIT_THUMB = "level-cap:portrait-thumb";

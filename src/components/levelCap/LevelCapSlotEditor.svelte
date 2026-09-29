@@ -26,6 +26,7 @@
   import { loadLevelCapItemConfigs, loadLevelCapModularItems } from "../../stores/levelCap.js";
   import LevelCapModGrid from "./LevelCapModGrid.svelte";
   import LevelCapPicker from "./LevelCapPicker.svelte";
+  import LevelCapUnderframeButton from "./LevelCapUnderframeButton.svelte";
 
   let {
     kind,
@@ -36,6 +37,7 @@
     abilityNames = {},
     removable = true,
     open = false,
+    frame = null,
     onChange,
   }: {
     kind: LevelCapSlotKind;
@@ -47,6 +49,8 @@
     abilityNames?: Record<string, string>;
     removable?: boolean;
     open?: boolean;
+    /** The build's warframe, whose buffs a weapon takes to Underframe. */
+    frame?: LevelCapItem | null;
     onChange: (item: LevelCapItem | null) => void;
   } = $props();
 
@@ -326,6 +330,9 @@
           >
         {/each}
       </div>
+    {/if}
+    {#if item}
+      <LevelCapUnderframeButton {item} {frame} {abilityNames} />
     {/if}
     <button
       type="button"
