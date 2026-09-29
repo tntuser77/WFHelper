@@ -72,6 +72,10 @@ function workerAnswers(): void {
       if (route === "GET /v1/pair") return response(405);
       if (route === "POST /v1/pair") return response(200, JSON.stringify({ key: "phone-key" }));
       if (route === "DELETE /v1/pair") return response(204);
+      if (route === "GET /v1/inbox/notes") {
+        return response(200, JSON.stringify({ Dante: { note: "from the phone", editedAt: 5 } }));
+      }
+      if (route === "POST /v1/inbox/notes/ack") return response(200, "{}");
       if (init.method === "PUT") return response(200, JSON.stringify({ etag: '"x"' }));
       return response(404);
     },
@@ -221,6 +225,22 @@ describe("uploads", () => {
       "/v1/data/levelcap",
       "/v1/data/relics",
     ]);
+    sync.stop();
+  });
+
+  it("applies notes from the phone and acknowledges them by edit time", async () => {
+    const sync = await importPhoneSync();
+    await sync.setConfig(URL_OK, WRITE_KEY);
+    sync.stop();
+    const applied: Array<Record<string, string>> = [];
+    sync.start({
+      buildSnapshot: () => ({ v: 1, kind: "levelcap", generatedAt: 1, frameNotes: {}, runs: [] }),
+      applyNotes: (notes) => applied.push(notes),
+    });
+    await sync.syncNow();
+    expect(applied[0]).toEqual({ Dante: "from the phone" });
+    const ack = fetchMock.mock.calls.find(([url]) => (url as URL).pathname.endsWith("/ack"));
+    expect(JSON.parse(ack?.[1].body as string)).toEqual({ Dante: 5 });
     sync.stop();
   });
 

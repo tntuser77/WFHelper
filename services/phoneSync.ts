@@ -25,6 +25,10 @@ const log = withScope("phoneSync");
 
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_RESPONSE_BYTES = 16 * 1024;
+// The notes inbox holds up to 200 notes of 2,000 characters.
+const MAX_INBOX_BYTES = 1024 * 1024;
+// Notes written on the phone show up on the desktop within about this long.
+const NOTES_INTERVAL_MS = 60_000;
 const CHECK_INTERVAL_MS = 5 * 60_000;
 const DIRTY_DELAY_MS = 30_000;
 // Prices move all the time; the Worker's free tier allows 1,000 writes a day.
@@ -43,6 +47,8 @@ interface StoredConfig {
 
 interface PhoneSyncDeps {
   buildSnapshot: (kind: PhoneSnapshotKind) => PhoneSnapshot | null;
+  /** Frame notes written on the phone, frame -> note; an empty note clears it. */
+  applyNotes?: (notes: Record<string, string>) => void;
 }
 
 function encryptionAvailable(): boolean {
@@ -82,6 +88,7 @@ const cache = createJsonCache<StoredConfig>("phone-sync.json", reviveConfig);
 let config: StoredConfig | null = null;
 let deps: PhoneSyncDeps | null = null;
 let timer: NodeJS.Timeout | null = null;
+let notesTimer: NodeJS.Timeout | null = null;
 const dirtyTimers = new Map<PhoneSnapshotKind, NodeJS.Timeout>();
 const lastSent: Record<PhoneSnapshotKind, number | null> = { relics: null, levelcap: null };
 const lastHash: Partial<Record<PhoneSnapshotKind, string>> = {};
@@ -129,6 +136,7 @@ async function request(
   method: string,
   path: string,
   body?: string,
+  maxBytes = MAX_RESPONSE_BYTES,
 ): Promise<{ status: number; text: string }> {
   const current = load();
   const checked = await validateWebhookUrl(current.url);
@@ -145,7 +153,7 @@ async function request(
       redirect: "manual",
       signal,
     });
-    const text = await readResponseText(res, MAX_RESPONSE_BYTES, {
+    const text = await readResponseText(res, maxBytes, {
       truncate: true,
       allowPartial: true,
     });
@@ -245,12 +253,12 @@ async function upload(kind: PhoneSnapshotKind, force: boolean): Promise<void> {
 let queue: Promise<void> = Promise.resolve();
 let queued = 0;
 
-function run(kinds: PhoneSnapshotKind[], force: boolean): Promise<void> {
+function enqueue(job: () => Promise<void>): Promise<void> {
   queued += 1;
   syncing = true;
   queue = queue.then(async () => {
     try {
-      for (const kind of kinds) await upload(kind, force);
+      await job();
       lastError = null;
     } catch (err) {
       lastError = normalizeErrorMessage(err);
@@ -263,8 +271,35 @@ function run(kinds: PhoneSnapshotKind[], force: boolean): Promise<void> {
   return queue;
 }
 
+function run(kinds: PhoneSnapshotKind[], force: boolean): Promise<void> {
+  return enqueue(async () => {
+    for (const kind of kinds) await upload(kind, force);
+  });
+}
+
+// Applied notes are acknowledged by their edit time, so an edit the phone made
+// after this read stays in the inbox for the next one.
+async function pullNotes(): Promise<void> {
+  if (!configured() || !deps?.applyNotes) return;
+  const res = await request("GET", "v1/inbox/notes", undefined, MAX_INBOX_BYTES);
+  if (res.status !== 200) throw new Error(`notes inbox failed (${res.status})`);
+  const inbox = JSON.parse(res.text) as Record<string, { note?: unknown; editedAt?: unknown }>;
+  const notes: Record<string, string> = {};
+  const taken: Record<string, number> = {};
+  for (const [frame, entry] of Object.entries(inbox)) {
+    if (typeof entry?.note !== "string" || typeof entry.editedAt !== "number") continue;
+    notes[frame] = entry.note;
+    taken[frame] = entry.editedAt;
+  }
+  if (!Object.keys(taken).length) return;
+  deps.applyNotes(notes);
+  const ack = await request("POST", "v1/inbox/notes/ack", JSON.stringify(taken));
+  if (ack.status !== 200) throw new Error(`notes ack failed (${ack.status})`);
+}
+
 /** Uploads both snapshots now, even when nothing changed. */
 export async function syncNow(): Promise<PhoneSyncState> {
+  await enqueue(pullNotes);
   await run(KINDS, true);
   return getState();
 }
@@ -291,12 +326,17 @@ export function start(nextDeps: PhoneSyncDeps): void {
   // with the hash check catches them without uploading unchanged data.
   timer = setInterval(() => void run(KINDS, false), CHECK_INTERVAL_MS);
   timer.unref();
+  notesTimer = setInterval(() => void enqueue(pullNotes), NOTES_INTERVAL_MS);
+  notesTimer.unref();
   scheduleAll();
+  void enqueue(pullNotes);
 }
 
 export function stop(): void {
   if (timer) clearInterval(timer);
   timer = null;
+  if (notesTimer) clearInterval(notesTimer);
+  notesTimer = null;
   for (const pending of dirtyTimers.values()) clearTimeout(pending);
   dirtyTimers.clear();
 }

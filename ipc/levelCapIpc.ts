@@ -8,7 +8,7 @@ import { showLevelCapNotification, type LevelCapToastCard } from "./tradeNotific
 import { registerTransientHotkey, unregisterTransientHotkey } from "./hotkeyRegistry";
 import { asRunId } from "./runTrackerIpc";
 import { addInventoryListener } from "./inventoryIpc";
-import { levelCapChanged } from "./phoneSyncIpc";
+import { levelCapChanged, setLevelCapRefresh } from "./phoneSyncIpc";
 import * as itemDb from "../services/itemDatabase";
 import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
@@ -288,6 +288,7 @@ function isSettingsPatch(raw: unknown): raw is Partial<LevelCapSettings> {
 }
 
 function register(): void {
+  setLevelCapRefresh(pushUpdate);
   tracker.initLevelCapTracker({
     getInventory: () => ctx.currentInventoryData,
     frameName,

@@ -99,6 +99,20 @@ function buildSnapshot(kind: PhoneSnapshotKind): PhoneSnapshot | null {
   return kind === "relics" ? relicSnapshot() : levelCapSnapshot();
 }
 
+let refreshLevelCap: (() => void) | null = null;
+
+/** levelCapIpc hands over its broadcast so notes from the phone show in the open window. */
+export function setLevelCapRefresh(refresh: () => void): void {
+  refreshLevelCap = refresh;
+}
+
+function applyNotes(notes: Record<string, string>): void {
+  for (const [frame, note] of Object.entries(notes)) {
+    if (frame.trim() && frame.length <= 120) levelCapStore.setFrameNotes(frame, note);
+  }
+  refreshLevelCap?.();
+}
+
 /** Level cap changes land here from levelCapIpc so the phone hears of them soon. */
 export function levelCapChanged(): void {
   phoneSync.markDirty("levelcap");
@@ -124,7 +138,7 @@ function register(): void {
   handleAuthorized(PHONE_SYNC_NOW, assertMainRendererSender, () => phoneSync.syncNow());
 
   addInventoryListener(() => phoneSync.markDirty("relics"));
-  phoneSync.start({ buildSnapshot });
+  phoneSync.start({ buildSnapshot, applyNotes });
 }
 
 export { register };
