@@ -12,6 +12,14 @@ const log = withScope("devRendererReload");
 // vite build --watch writes several files per rebuild; wait for it to settle.
 const SETTLE_MS = 400;
 
+function entryMtime(entryFile: string): number | null {
+  try {
+    return fs.statSync(entryFile).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 function isMainRendererWindow(win: BrowserWindow, entryFile: string): boolean {
   try {
     const url = new URL(win.webContents.getURL());
@@ -29,10 +37,16 @@ export function watchRendererBuild(entryFile: string): void {
   if (app.isPackaged) return;
   const rendererDir = path.dirname(path.dirname(entryFile));
   let timer: NodeJS.Timeout | null = null;
+  // On Windows fs.watch also fires when the renderer merely reads a chunk (NTFS
+  // updates last-access at most hourly), so opening a tab the first time in an
+  // hour looked like a rebuild. Every rebuild rewrites the entry file; a read does not.
+  let builtMtime = entryMtime(entryFile);
 
   const reload = (): void => {
     timer = null;
-    if (!fs.existsSync(entryFile)) return;
+    const mtime = entryMtime(entryFile);
+    if (mtime === null || mtime === builtMtime) return;
+    builtMtime = mtime;
     const windows = BrowserWindow.getAllWindows().filter(
       (win) => !win.isDestroyed() && isMainRendererWindow(win, entryFile),
     );
