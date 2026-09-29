@@ -35,6 +35,7 @@
   import { masteryData } from "../stores/mastery.js";
   import { activeRelic } from "../stores/modals.js";
   import { priceCacheRevision } from "../stores/pricing.js";
+  import { getCachedPriceState } from "../lib/wfm/priceCache.js";
   import { themeSettings } from "../stores/theme.js";
   import {
     computeGroupDucatonator,
@@ -62,7 +63,9 @@
   import { inventorySafetyContext } from "../stores/inventorySafety.js";
   import { stripQuantityPrefix } from "../../config/shared/quantityPrefix.js";
   import {
+    RELIC_GOLD_AT_LEAST_MAX,
     RELIC_OWNED_ABOVE_STEPS,
+    relicGoldReward,
     relicOwnedCountForMode,
     relicQualityForMode,
     selectRelicPlannerRows,
@@ -94,6 +97,7 @@
     ["tier", "common.default"],
     ["name", "common.name"],
     ["ev", "common.platinum"],
+    ["gold", "relics.sort.gold"],
     ["ducat", "common.ducats"],
     ["ducatonator", "relics.sort.ducatsPerPlat"],
     ["owned", "common.owned"],
@@ -265,6 +269,36 @@
     }
   }
 
+  // Kept as typed text so "4" on the way to "40" does not reflow the grid into
+  // a half-typed filter; the store only takes whole, in-range numbers.
+  let goldAtLeastText = $relicViewState.goldAtLeast > 0 ? String($relicViewState.goldAtLeast) : "";
+
+  function setRelicGoldAtLeast(text: string): void {
+    goldAtLeastText = text;
+    const trimmed = text.trim();
+    const goldAtLeast = trimmed === "" ? 0 : Number(trimmed);
+    if (
+      Number.isFinite(goldAtLeast) &&
+      goldAtLeast >= 0 &&
+      goldAtLeast <= RELIC_GOLD_AT_LEAST_MAX
+    ) {
+      setRelicFilter({ goldAtLeast });
+    }
+  }
+
+  function goldPrice(group: RelicGroup): number | null {
+    const rewards =
+      group.qualities.intact?.rewards ??
+      RELIC_QUALITY_COLUMNS.map((quality) => group.qualities[quality]?.rewards).find(
+        (list) => list?.length,
+      ) ??
+      [];
+    const gold = relicGoldReward(rewards);
+    const slug = gold ? rewardSlug(gold) : "";
+    const cached = slug ? getCachedPriceState(slug) : null;
+    return cached?.status === "ok" ? cached.median : null;
+  }
+
   function setRelicVaultedMode(event: Event): void {
     setRelicFilter({
       vaultedMode: (event.currentTarget as HTMLSelectElement).value as RelicVaultedMode,
@@ -365,6 +399,7 @@
         ownedCount: relicOwnedCountForMode(ownedCounts[group.key], viewState.qualityMode),
         ownedTotal: relicOwnedCountForMode(ownedCounts[group.key], "owned"),
         plat: ev.plat,
+        gold: goldPrice(group),
         ducat: ev.ducat,
         ratio: ev.ratio,
       };
@@ -738,6 +773,22 @@
               </select>
             </label>
 
+            <label class="shared-filter-sort" title={$tr("relics.goldAtLeastTitle")}>
+              <span>{$tr("relics.goldAtLeastLabel")}</span>
+              <input
+                type="number"
+                inputmode="numeric"
+                min="0"
+                max={RELIC_GOLD_AT_LEAST_MAX}
+                class="shared-filter-select relic-gold-input"
+                data-relic-gold-at-least
+                placeholder={$tr("relics.minOwned.any")}
+                value={goldAtLeastText}
+                on:input={(event) => setRelicGoldAtLeast(event.currentTarget.value)}
+                on:contextmenu|preventDefault={() => setRelicGoldAtLeast("")}
+              />
+            </label>
+
             <label class="shared-filter-sort" title={$tr("relics.vaultedTitle")}>
               <span>{$tr("relics.vaultedLabel")}</span>
               <select
@@ -818,3 +869,18 @@
     {/if}
   </LayoutGrid>
 </section>
+
+<style>
+  /* The select class brings the look; a number needs neither the arrow gap nor 8rem. */
+  .relic-gold-input {
+    min-width: 0;
+    width: 4.5rem;
+    padding-right: 0.5rem;
+    color: var(--text-primary);
+  }
+  .relic-gold-input::-webkit-inner-spin-button,
+  .relic-gold-input::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+</style>
