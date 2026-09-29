@@ -20,6 +20,8 @@
   let keyDraft = $state("");
   let busy = $state(false);
   let qr = $state<string | null>(null);
+  let code = $state<string | null>(null);
+  let copied = $state(false);
   let message = $state<{ text: string; error: boolean } | null>(null);
   let now = $state(Date.now());
 
@@ -77,6 +79,8 @@
       if (result.ok) {
         sync = result.value.state;
         qr = result.value.qr;
+        code = result.value.code;
+        copied = false;
       } else {
         say(result.error, true);
       }
@@ -200,9 +204,20 @@
           <p class="m-0 max-w-64 text-center text-xs text-black">
             {$tr("settings.phonePairHint")}
           </p>
-          <button class="btn-secondary btn-sm" onclick={() => (qr = null)}
-            >{$tr("settings.phoneHideQr")}</button
-          >
+          <span class="flex gap-2">
+            <button
+              class="btn-secondary btn-sm"
+              disabled={!code}
+              onclick={async () => {
+                if (!code) return;
+                await navigator.clipboard.writeText(code);
+                copied = true;
+              }}>{copied ? $tr("settings.copied") : $tr("settings.phoneCopyCode")}</button
+            >
+            <button class="btn-secondary btn-sm" onclick={() => (qr = null)}
+              >{$tr("settings.phoneHideQr")}</button
+            >
+          </span>
         </div>
       {/if}
 

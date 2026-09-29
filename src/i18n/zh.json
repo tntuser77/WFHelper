@@ -2939,5 +2939,6 @@
   "settings.phoneHideQr": "隐藏二维码",
   "settings.phoneLevelCap": "等级上限记录",
   "settings.phoneNotSent": "尚未发送",
-  "settings.phoneSyncNow": "立即发送"
+  "settings.phoneSyncNow": "立即发送",
+  "settings.phoneCopyCode": "复制代码"
 }

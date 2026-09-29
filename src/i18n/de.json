@@ -2939,5 +2939,6 @@
   "settings.phoneHideQr": "Code ausblenden",
   "settings.phoneLevelCap": "Level-Cap-Runs",
   "settings.phoneNotSent": "Noch nicht gesendet",
-  "settings.phoneSyncNow": "Jetzt senden"
+  "settings.phoneSyncNow": "Jetzt senden",
+  "settings.phoneCopyCode": "Code kopieren"
 }

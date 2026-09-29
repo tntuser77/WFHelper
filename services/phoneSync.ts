@@ -202,7 +202,7 @@ export async function pair(): Promise<PhoneSyncResult<PhonePairing>> {
     const qr = await QRCode.toDataURL(payload, { margin: 1, width: 320 });
     load().pairedAt = Date.now();
     persist();
-    return { ok: true, value: { qr, state: getState() } };
+    return { ok: true, value: { qr, code: payload, state: getState() } };
   } catch (err) {
     return { ok: false, error: normalizeErrorMessage(err) };
   }

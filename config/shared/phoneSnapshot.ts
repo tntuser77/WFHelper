@@ -100,6 +100,8 @@ export type PhoneSyncResult<T = PhoneSyncState> =
 export interface PhonePairing {
   /** PNG data URL of the QR code the phone scans. */
   qr: string;
+  /** The same pairing as text, for pasting when the camera is not an option. */
+  code: string;
   state: PhoneSyncState;
 }
 
