@@ -15,12 +15,18 @@ interface LevelCapRivenStat {
   value: number;
   positive: boolean;
   multiplier: boolean;
+  /** The game's stat tag and the bonus as a plain fraction (metres for range
+   *  stats), signed as shown; enough to rebuild the roll in another tool. */
+  tag?: string;
+  raw?: number;
 }
 
 /** The rolled stats of a riven in a slot, frozen with the build. */
 export interface LevelCapRiven {
   name: string;
   stats: LevelCapRivenStat[];
+  rank?: number;
+  disposition?: number;
 }
 
 export interface LevelCapUpgrade {

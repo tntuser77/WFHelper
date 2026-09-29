@@ -72,16 +72,28 @@ function riven(raw: unknown): LevelCapRiven | null {
     const statName = text(stat?.name, 80);
     const amount = stat?.value;
     if (!statName || typeof amount !== "number" || !Number.isFinite(amount)) return [];
+    const tag = text(stat?.tag, 80);
+    const raw = stat?.raw;
     return [
       {
         name: statName,
         value: amount,
         positive: stat?.positive !== false,
         multiplier: stat?.multiplier === true,
+        ...(tag && typeof raw === "number" && Number.isFinite(raw) ? { tag, raw } : {}),
       },
     ];
   });
-  return { name, stats };
+  const rank = int(value.rank, 0, 8);
+  const disposition = value.disposition;
+  return {
+    name,
+    stats,
+    ...(rank !== null ? { rank } : {}),
+    ...(typeof disposition === "number" && disposition > 0 && disposition <= 3
+      ? { disposition }
+      : {}),
+  };
 }
 
 function upgrade(raw: unknown): LevelCapUpgrade | null {

@@ -274,7 +274,10 @@ function linkByLoadout(run: LevelCapRun): void {
   if (!run.build) return;
   const key = levelCapBuildKey(run.build);
   const found = _builds.find((b) => b.frame === run.frame && levelCapBuildKey(b.build) === key);
-  if (found) fillIncarnon(found.build, run.build);
+  if (found) {
+    fillIncarnon(found.build, run.build);
+    fillRivens(found.build, run.build);
+  }
   stamp(run, found ?? newBuild(run.frame, run.build));
 }
 
@@ -286,6 +289,19 @@ function fillIncarnon(target: LevelCapBuild, source: LevelCapBuild): void {
     const perks = source[kind]?.incarnon;
     if (item && perks?.length && !item.incarnon && source[kind]?.type === item.type) {
       item.incarnon = [...perks];
+    }
+  }
+}
+
+/** Rivens saved before their full roll was kept take it from the next run on
+ *  that loadout, when it is the same riven. */
+function fillRivens(target: LevelCapBuild, source: LevelCapBuild): void {
+  for (const kind of ["primary", "secondary", "melee", "archgun"] as const) {
+    for (const upgrade of target[kind]?.upgrades ?? []) {
+      const seen = source[kind]?.upgrades.find((u) => u.slot === upgrade.slot)?.riven;
+      if (upgrade.riven && upgrade.riven.rank === undefined && seen?.name === upgrade.riven.name) {
+        upgrade.riven = structuredClone(seen);
+      }
     }
   }
 }

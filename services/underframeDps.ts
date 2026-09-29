@@ -93,6 +93,40 @@ const PAGE_SCRIPT = String.raw`
   }
   weapon = withDefaults(weapon);
   weapon.slug = "wfhelper-weapon";
+  // A riven is a roll their editor keeps in its own library, so rebuild each
+  // one from its stats and file it there as well as in its slot.
+  try {
+    const found = A.weapons.find((w) => w.name === weapon.itemName);
+    let kind = found.type;
+    if (kind === "Primary" || kind === "Secondary") {
+      kind = found.type === "Secondary" || found.is_modular ? "Pistol"
+        : found.subtype === "Shotgun" ? "Shotgun" : "Rifle";
+    }
+    const table = A.riven_stats[kind] || {};
+    let family = weapon.itemName.replace(/^MK1-/, "");
+    for (const suffix of ["Prime", "Vandal", "Wraith", "Dex", "Umbra", "Prisma", "Carmine"]) {
+      if (family.endsWith(" " + suffix)) family = family.slice(0, -suffix.length - 1);
+    }
+    weapon.mods = weapon.mods.map((mod, n) => {
+      if (!mod || !mod.riven) return mod;
+      const stats = mod.riven.stats.flatMap((s) => {
+        const base = table[s.name];
+        if (!base) return [];
+        const unit = base.includes("%") ? "%" : (base.match(/[a-zA-Z]+$/) || [""])[0];
+        return [{ name: s.name, value: s.value, unit }];
+      });
+      if (!stats.length) return null;
+      const riven = {
+        isRiven: true, id: "riven_wfhelper_" + n, name: family + " Riven Mod", family,
+        disposition: mod.riven.disposition, rank: mod.riven.rank, stats,
+      };
+      A.rivens = (A.rivens || []).filter((r) => r.id !== riven.id);
+      A.rivens.push(riven);
+      return JSON.parse(JSON.stringify(riven));
+    });
+  } catch (e) {
+    weapon.mods = weapon.mods.map((mod) => (mod && mod.riven ? null : mod));
+  }
   A.builds = (A.builds || []).filter((b) => !String(b.slug || "").startsWith("wfhelper-"));
   A.builds.push(...partners, weapon);
   A.buildSlugMap = new Map();

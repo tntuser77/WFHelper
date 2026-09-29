@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LevelCapBuild, LevelCapRun } from "../../config/shared/levelCapTypes";
+import type { LevelCapBuild, LevelCapRiven, LevelCapRun } from "../../config/shared/levelCapTypes";
 
 let tmpDir: string;
 
@@ -336,6 +336,25 @@ describe("levelCapStore", () => {
     // Perks already on the build are the player's and stay.
     store.addRun(run({ build: { ...BUILD, secondary: { ...gun, incarnon: [0, 0, 0] } } }));
     expect(store.getBuilds()[0].build.secondary?.incarnon).toEqual([0, 1, 2, 0, 1]);
+  });
+
+  it("fills a riven's full roll into a build saved without it", async () => {
+    const store = await freshStore();
+    const stat = { name: "Toxin", value: 154.1, positive: true, multiplier: false };
+    const melee = (riven: LevelCapRiven) => ({
+      kind: "melee" as const,
+      type: "/Magistar",
+      config: 0,
+      upgrades: [{ slot: 1, type: "/Mods/Randomized/X", rank: 8, riven }],
+    });
+    const old = { name: "Magistar Toxicron", stats: [stat] };
+    const full = { ...old, rank: 8, disposition: 1.25, stats: [{ ...stat, tag: "T", raw: 1.541 }] };
+    store.addRun(run({ build: { ...BUILD, melee: melee(old) } }));
+    store.addRun(run({ build: { ...BUILD, melee: melee(full) } }));
+    expect(store.getBuilds()[0].build.melee?.upgrades[0].riven).toEqual(full);
+    // A different riven in the slot is left alone.
+    store.addRun(run({ build: { ...BUILD, melee: melee({ ...full, name: "Magistar Other" }) } }));
+    expect(store.getBuilds()[0].build.melee?.upgrades[0].riven?.name).toBe("Magistar Toxicron");
   });
 
   it("editing a build rewrites every run that uses it", async () => {

@@ -160,6 +160,12 @@ describe("levelCapBuild", () => {
     const riven = snapshotEquippedBuild(inventory)?.secondary?.upgrades.find((u) => u.riven)?.riven;
     expect(riven?.name).toMatch(/^Braton /);
     expect(riven?.stats.map((s) => s.positive)).toEqual([true, false]);
+    // Enough to rebuild the roll elsewhere: its rank, disposition, and each bonus as a fraction.
+    expect(riven?.rank).toBe(8);
+    expect(riven?.disposition).toBeGreaterThan(0);
+    expect(riven?.stats.map((s) => s.tag)).toEqual(["WeaponFireDamageMod", "WeaponFireRateMod"]);
+    for (const stat of riven?.stats ?? []) expect(stat.raw).toBeCloseTo(stat.value / 100, 2);
+    expect(riven?.stats[1].raw).toBeLessThan(0);
     expect([...rivensByWeapon(inventory).keys()]).toEqual(["braton"]);
   });
 

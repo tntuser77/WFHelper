@@ -31,12 +31,60 @@ export const UNDERFRAME_SHARD_TYPES = [
   "topaz",
 ] as const;
 
+/** Underframe's name for each of the game's riven stat tags. */
+export const UNDERFRAME_RIVEN_STATS: Readonly<Record<string, string>> = {
+  WeaponDamageAmountMod: "BaseDamage",
+  WeaponMeleeDamageMod: "Melee Damage",
+  WeaponCritChanceMod: "Critical Chance",
+  WeaponCritDamageMod: "Critical Damage",
+  WeaponFireRateMod: "Fire Rate/Attack Speed",
+  WeaponFireIterationsMod: "Multishot",
+  WeaponStunChanceMod: "Status Chance",
+  WeaponProcTimeMod: "Status Duration",
+  WeaponReloadSpeedMod: "Reload Speed",
+  WeaponClipMaxMod: "Magazine Capacity",
+  WeaponAmmoMaxMod: "Ammo Maximum",
+  WeaponRecoilReductionMod: "Recoil",
+  WeaponZoomFovMod: "Zoom",
+  WeaponProjectileSpeedMod: "Projectile Speed",
+  WeaponPunctureDepthMod: "Punch Through",
+  WeaponImpactDamageMod: "ImpactDamage",
+  WeaponArmorPiercingDamageMod: "PunctureDamage",
+  WeaponSlashDamageMod: "SlashDamage",
+  WeaponFreezeDamageMod: "ColdDamage",
+  WeaponFireDamageMod: "HeatDamage",
+  WeaponElectricityDamageMod: "ElectricityDamage",
+  WeaponToxinDamageMod: "ToxinDamage",
+  WeaponFactionDamageGrineer: "Damage vs.Grineer",
+  WeaponFactionDamageCorpus: "Damage vs.Corpus",
+  WeaponFactionDamageInfested: "Damage vs.Infested",
+  WeaponMeleeFactionDamageGrineer: "Damage vs.Grineer",
+  WeaponMeleeFactionDamageCorpus: "Damage vs.Corpus",
+  WeaponMeleeFactionDamageInfested: "Damage vs.Infested",
+  ComboDurationMod: "Combo Duration",
+  SlideAttackCritChanceMod: "Critical ChanceonSlide Attack",
+  WeaponMeleeRangeIncMod: "Range",
+  WeaponMeleeFinisherDamageMod: "FinisherDamage",
+  WeaponMeleeComboEfficiencyMod: "Heavy Attack Efficiency",
+  WeaponMeleeComboInitialBonusMod: "Initial Combo",
+  WeaponMeleeComboPointsOnHitMod: "Chance to not gainCombo Count",
+  WeaponMeleeComboBonusOnHitMod: "AdditionalCombo CountChance",
+};
+
+/** A riven as their build editor keeps one. `value` is the stat before the
+ *  weapon's disposition and the riven's rank scale it, negative for a curse. */
+export interface UnderframeRiven {
+  rank: number;
+  disposition: number;
+  stats: Array<{ name: string; value: number }>;
+}
+
 export interface UnderframeBuild {
   name: string;
   type: UnderframeBuildType;
   itemName: string;
   /** Their slot order: aura/stance and exilus lead, except guns keep exilus last. */
-  mods: Array<{ name: string; rank?: number } | null>;
+  mods: Array<{ name: string; rank?: number; riven?: UnderframeRiven } | null>;
   arcanes: string[];
   /** `effect` is our English card text; the page matches it to its own wording. */
   archon_shards?: Array<{ type: string; effect: string; isTaufurged: boolean }>;
@@ -77,6 +125,25 @@ const MAX_MODS = 16;
 const text = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 && value.length <= MAX_TEXT ? value : null;
 
+const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+
+function sanitizeRiven(value: unknown): UnderframeRiven | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as { rank?: unknown; disposition?: unknown; stats?: unknown };
+  if (!Number.isInteger(raw.rank) || (raw.rank as number) < 0 || (raw.rank as number) > 8) {
+    return null;
+  }
+  if (!finite(raw.disposition) || raw.disposition <= 0 || raw.disposition > 3) return null;
+  const stats = (Array.isArray(raw.stats) ? raw.stats : []).slice(0, 4).flatMap((entry) => {
+    const stat = entry as { name?: unknown; value?: unknown } | null;
+    const name = text(stat?.name);
+    return name && finite(stat?.value) ? [{ name, value: stat.value }] : [];
+  });
+  return stats.length
+    ? { rank: raw.rank as number, disposition: raw.disposition, stats }
+    : null;
+}
+
 /** Rebuilds a renderer-sent build from known fields only, or null if it is not one. */
 export function sanitizeUnderframeBuild(value: unknown): UnderframeBuild | null {
   if (!value || typeof value !== "object") return null;
@@ -91,9 +158,14 @@ export function sanitizeUnderframeBuild(value: unknown): UnderframeBuild | null 
     const modName = text((mod as { name?: unknown } | null)?.name);
     if (!modName) return null;
     const rank = (mod as { rank?: unknown }).rank;
-    return Number.isInteger(rank) && (rank as number) >= 0 && (rank as number) <= 30
-      ? { name: modName, rank: rank as number }
-      : { name: modName };
+    const riven = sanitizeRiven((mod as { riven?: unknown }).riven);
+    return {
+      name: modName,
+      ...(Number.isInteger(rank) && (rank as number) >= 0 && (rank as number) <= 30
+        ? { rank: rank as number }
+        : {}),
+      ...(riven ? { riven } : {}),
+    };
   });
   const arcanes = (Array.isArray(raw.arcanes) ? raw.arcanes : [])
     .map(text)

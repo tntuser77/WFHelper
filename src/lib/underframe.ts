@@ -1,10 +1,17 @@
-import type { LevelCapItem, LevelCapSlotKind } from "../../config/shared/levelCapTypes.js";
+import type {
+  LevelCapItem,
+  LevelCapRiven,
+  LevelCapSlotKind,
+} from "../../config/shared/levelCapTypes.js";
 import { ARCHON_SHARD_EFFECTS } from "../../config/shared/archonShardCatalog.js";
 import {
+  UNDERFRAME_RIVEN_STATS,
   UNDERFRAME_SHARE_BASE,
   type UnderframeBuild,
   type UnderframeBuildType,
+  type UnderframeRiven,
 } from "../../config/shared/underframe.js";
+import { isLevelCapRivenType } from "../../config/shared/levelCapBuild.js";
 import { levelCapUpgradeRole } from "./levelCap.js";
 
 // Underframe share links carry the whole build in the URL fragment, so opening
@@ -50,6 +57,20 @@ export function underframeSupports(kind: LevelCapSlotKind): boolean {
   return kind in BUILD_TYPE;
 }
 
+/** The roll as Underframe keeps it, or null when the capture lacks what it needs
+ *  (builds saved before rolls were kept in full) or no stat maps across. */
+function underframeRiven(riven: LevelCapRiven | undefined): UnderframeRiven | null {
+  if (riven?.rank === undefined || !riven.disposition) return null;
+  const scale = (riven.disposition * (riven.rank + 1)) / 9;
+  const stats = riven.stats.flatMap((stat) => {
+    const name = stat.tag ? UNDERFRAME_RIVEN_STATS[stat.tag] : undefined;
+    if (!name || stat.raw === undefined) return [];
+    const base = Math.abs(stat.raw) / scale;
+    return [{ name, value: stat.positive ? base : -base }];
+  });
+  return stats.length ? { rank: riven.rank, disposition: riven.disposition, stats } : null;
+}
+
 /** The item as Underframe keeps a build, or null for kinds it does not model.
  * `name` resolves a `/Lotus/` path to the English name Underframe matches on. */
 export function underframeBuild(
@@ -68,7 +89,8 @@ export function underframeBuild(
     .filter((i) => i !== layout.aura && i !== layout.stance && i !== layout.exilus);
 
   for (const upgrade of [...item.upgrades].sort((a, b) => a.slot - b.slot)) {
-    const modName = upgrade.type ? name(upgrade.type) : null;
+    const riven = isLevelCapRivenType(upgrade.type) ? underframeRiven(upgrade.riven) : null;
+    const modName = upgrade.type ? (name(upgrade.type) ?? (riven ? "Riven Mod" : null)) : null;
     if (!modName) continue;
     const role = levelCapUpgradeRole(item.kind, upgrade);
     if (role === "arcane") {
@@ -84,8 +106,11 @@ export function underframeBuild(
             ? layout.exilus
             : free.shift();
     if (index !== undefined) {
-      mods[index] =
-        upgrade.rank !== null ? { name: modName, rank: upgrade.rank } : { name: modName };
+      mods[index] = {
+        name: modName,
+        ...(upgrade.rank !== null ? { rank: upgrade.rank } : {}),
+        ...(riven ? { riven } : {}),
+      };
     }
   }
 
@@ -160,8 +185,13 @@ function base64Url(text: string): string {
 export function underframeShareUrl(build: UnderframeBuild): string {
   const short: Record<string, unknown> = { n: build.name, t: build.type, i: build.itemName };
   if (build.mods.some(Boolean)) {
+    // A riven only exists in their editor, so a share link leaves its slot empty.
     short.m = build.mods.map((mod) =>
-      mod ? (mod.rank !== undefined ? { n: mod.name, r: mod.rank } : { n: mod.name }) : null,
+      mod && !mod.riven
+        ? mod.rank !== undefined
+          ? { n: mod.name, r: mod.rank }
+          : { n: mod.name }
+        : null,
     );
   }
   if (build.arcanes.length) short.a = build.arcanes;

@@ -2,6 +2,7 @@ import { unwrapInventoryPayload } from "../config/shared/inventoryPayload";
 import { asRecord } from "../config/shared/objectValidation";
 import { toNonEmptyString } from "../config/shared/stringValidation";
 import { decodeRivenUpgrade } from "./rivenFingerprint";
+import { NON_PERCENTAGE_TAGS } from "./rivenConstants";
 import { isLevelCapRivenType } from "../config/shared/levelCapBuild";
 import type {
   LevelCapBuild,
@@ -72,6 +73,15 @@ function decodeRiven(type: string | null, fingerprint: unknown) {
   return decodeRivenUpgrade({ ItemType: type, UpgradeFingerprint: fingerprint });
 }
 
+/** The card's number as a plain fraction: a multiplier shows x1.3 for +0.3, and
+ *  only the range-like stats skip the percent. */
+function rawBonus(stat: { tag: string; displayValue: number; multiplier: boolean }): number {
+  if (stat.multiplier) return Math.round((stat.displayValue - 1) * 1e4) / 1e4;
+  return NON_PERCENTAGE_TAGS.has(stat.tag)
+    ? stat.displayValue
+    : Math.round(stat.displayValue * 10) / 1000;
+}
+
 /** A riven's rolled stats from its inventory entry, for freezing into the build. */
 function rivenOf(type: string | null, fingerprint: unknown): LevelCapRiven | undefined {
   const decoded = decodeRiven(type, fingerprint);
@@ -86,7 +96,11 @@ function rivenOf(type: string | null, fingerprint: unknown): LevelCapRiven | und
       value: stat.displayValue,
       positive: stat.positive,
       multiplier: stat.multiplier,
+      tag: stat.tag,
+      raw: rawBonus(stat),
     })),
+    rank: decoded.currentRank,
+    disposition: decoded.disposition,
   };
 }
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   LevelCapBuild,
   LevelCapItem,
+  LevelCapRiven,
   LevelCapRun,
 } from "../../../config/shared/levelCapTypes.js";
 import {
@@ -186,6 +187,32 @@ describe("levelCap helpers", () => {
     expect(withRiven("Magistar Toxicron")?.name).toBe("Magistar Toxicron");
   });
 
+  it("keeps the roll behind a riven, and drops a malformed one", () => {
+    const stat = { name: "Toxin", value: 154.1, positive: true, multiplier: false };
+    const kept = (riven: object) =>
+      normalizeLevelCapBuild({
+        ...build(null),
+        melee: {
+          type: "/Melee/Magistar",
+          upgrades: [{ slot: 1, type: "/Mods/Randomized/X", rank: 8, riven }],
+        },
+      })?.melee?.upgrades[0].riven;
+    const full = {
+      name: "Magistar Toxicron",
+      rank: 8,
+      disposition: 1.25,
+      stats: [{ ...stat, tag: "WeaponToxinDamageMod", raw: 1.541 }],
+    };
+    expect(kept(full)).toEqual(full);
+    const bad = kept({
+      ...full,
+      rank: 99,
+      disposition: 0,
+      stats: [{ ...stat, tag: "X", raw: "1" }],
+    });
+    expect(bad).toEqual({ name: "Magistar Toxicron", stats: [stat] });
+  });
+
   it("names a new build with the first free letter", () => {
     expect(nextLevelCapBuildName([])).toBe("Build A");
     expect(nextLevelCapBuildName(["Build A", "caster", "build c"])).toBe("Build B");
@@ -313,6 +340,63 @@ describe("underframeUrl", () => {
     expect(built?.incarnon).toBeUndefined();
   });
 
+  it("turns a riven into its unscaled stats and keeps it out of share links", () => {
+    const melee = (riven: LevelCapRiven): LevelCapItem => ({
+      kind: "melee",
+      type: "/Magistar",
+      config: 0,
+      upgrades: [
+        { slot: 0, type: "/Mods/Randomized/PlayerMeleeWeaponRandomModRare", rank: 8, riven },
+      ],
+    });
+    const stat = (tag: string, raw: number, positive = true) => ({
+      name: tag,
+      value: raw * 100,
+      positive,
+      multiplier: false,
+      tag,
+      raw,
+    });
+    const rolled = melee({
+      name: "Magistar Toxicron",
+      rank: 8,
+      disposition: 1.25,
+      stats: [
+        stat("WeaponCritChanceMod", 1.25),
+        stat("WeaponMeleeDamageMod", 0.5),
+        stat("WeaponProcTimeMod", 0.25, false),
+        stat("WeaponUnknownMod", 0.1),
+      ],
+    });
+    const name = (type: string) => type.split("/").pop() ?? null;
+    const built = underframeBuild(rolled, name);
+    // Rank 8 leaves only the disposition: 1.25 / 1.25 = 1, and a curse goes negative.
+    expect(built?.mods[2]?.riven).toEqual({
+      rank: 8,
+      disposition: 1.25,
+      stats: [
+        { name: "Critical Chance", value: 1 },
+        { name: "Melee Damage", value: 0.4 },
+        { name: "Status Duration", value: -0.2 },
+      ],
+    });
+    expect(decode(underframeUrl(rolled, name)!).b.m).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+    // Captures from before the roll was kept in full leave the slot as a plain mod.
+    const old = underframeBuild(melee({ name: "Magistar Toxicron", stats: [] }), name);
+    expect(old?.mods[2]?.riven).toBeUndefined();
+  });
+
   it("sends Incarnon perks counted from 1, null past the last unlocked", () => {
     const gun: LevelCapItem = {
       kind: "secondary",
@@ -366,6 +450,21 @@ describe("underframeUrl", () => {
 });
 
 describe("sanitizeUnderframeBuild", () => {
+  it("keeps a riven's roll and drops one with a bad rank or no stats", () => {
+    const riven = { rank: 8, disposition: 1.25, stats: [{ name: "Critical Chance", value: 1 }] };
+    const clean = (r: unknown) =>
+      sanitizeUnderframeBuild({
+        name: "a",
+        type: "Melee",
+        itemName: "b",
+        mods: [{ name: "Riven Mod", riven: r, extra: 1 }],
+        arcanes: [],
+      })?.mods[0];
+    expect(clean(riven)).toEqual({ name: "Riven Mod", riven });
+    expect(clean({ ...riven, rank: 9 })).toEqual({ name: "Riven Mod" });
+    expect(clean({ ...riven, stats: [] })).toEqual({ name: "Riven Mod" });
+  });
+
   it("keeps known fields and drops everything else", () => {
     const clean = sanitizeUnderframeBuild({
       name: "Rhino (Level Cap)",
