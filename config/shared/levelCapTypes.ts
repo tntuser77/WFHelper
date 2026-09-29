@@ -123,6 +123,9 @@ export interface LevelCapRun {
   /** Who was in each squad row and what they played, as far as the screenshot
    *  tells; redone as names and portrait labels are learned. For analytics. */
   squadmates?: LevelCapSquadmate[];
+  /** The squad as EE.log told it, you included: exact names, HUD slots, and
+   *  the frame where the log gave it away. */
+  squadLog?: LevelCapLogSquadmate[];
   tile: LevelCapTile | null;
   /** The archgun got kills this run, so it belongs in the build. */
   archgunUsed: boolean;
@@ -209,6 +212,19 @@ export interface LevelCapSquadmate {
   frame: string | null;
   /** The row in `squadReads` (or past them, for one the read missed) it came from. */
   slot?: number;
+}
+
+/** One player of a logged run's squad. */
+export interface LevelCapLogSquadmate {
+  name: string;
+  /** The digit the HUD shows by the name: the host is 1, then join order. */
+  slot: number;
+  host?: true;
+  you?: true;
+  /** Base frame name ("Ember"); only when the log loaded their frame by name. */
+  frame?: string;
+  /** `frame` is the host's, guessed from what their level loaded first. */
+  frameGuess?: true;
 }
 
 /** A correction to one squad row, by its place in `squadReads`; a slot past the

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 
-import { resolveSquadNames } from "./levelCapSquadNames";
+import { cleanSquadRead, matchRowsToPlayers, resolveSquadNames } from "./levelCapSquadNames";
 import type { SquadScreenshotRead } from "./levelCapSquadOcr";
 import { groupPortraits, isPortrait } from "./levelCapSquadPortraits";
 import { guessLevelCapTags, newlyGuessedLevelCapTags } from "./levelCapTagGuess";
@@ -23,6 +23,7 @@ import type {
   LevelCapBuildPatch,
   LevelCapImportResult,
   LevelCapItem,
+  LevelCapLogSquadmate,
   LevelCapNamedBuild,
   LevelCapPortraitLabel,
   LevelCapSquadFix,
@@ -121,6 +122,9 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
     out.squadPortraits = run.squadPortraits.slice(0, 4).map((p) => (isPortrait(p) ? p : null));
   }
   if (Array.isArray(run.squadmates)) out.squadmates = normalizeSquadmates(run.squadmates);
+  delete out.squadLog;
+  const squadLog = Array.isArray(run.squadLog) ? normalizeSquadLog(run.squadLog) : [];
+  if (squadLog.length) out.squadLog = squadLog;
   delete out.squadReader;
   if (typeof run.squadReader === "number") out.squadReader = run.squadReader;
   delete out.squadRows;
@@ -158,7 +162,7 @@ function normalizeSquadReads(raw: unknown[]): string[][] {
 
 function normalizeSquadmates(raw: unknown[]): LevelCapSquadmate[] {
   const text = (value: unknown) => (typeof value === "string" && value ? value.slice(0, 64) : null);
-  return raw.slice(0, 4).map((entry) => {
+  return raw.slice(0, 8).map((entry) => {
     const value = (entry ?? {}) as Record<string, unknown>;
     const mate: LevelCapSquadmate = {
       name: text(value.name),
@@ -167,6 +171,23 @@ function normalizeSquadmates(raw: unknown[]): LevelCapSquadmate[] {
     };
     if (Number.isInteger(value.slot)) mate.slot = value.slot as number;
     return mate;
+  });
+}
+
+function normalizeSquadLog(raw: unknown[]): LevelCapLogSquadmate[] {
+  return raw.slice(0, 8).flatMap((entry) => {
+    const value = (entry ?? {}) as Record<string, unknown>;
+    if (typeof value.name !== "string" || !value.name.trim()) return [];
+    if (!Number.isInteger(value.slot)) return [];
+    const mate: LevelCapLogSquadmate = {
+      name: value.name.trim().slice(0, 64),
+      slot: value.slot as number,
+    };
+    if (value.host === true) mate.host = true;
+    if (value.you === true) mate.you = true;
+    if (typeof value.frame === "string" && value.frame) mate.frame = value.frame.slice(0, 64);
+    if (value.frameGuess === true && mate.frame) mate.frameGuess = true;
+    return [mate];
   });
 }
 
@@ -383,10 +404,51 @@ function namesFromLiveRuns(): string[] {
     .map(([name]) => name);
 }
 
+/** Your own name: the log marks it, else it is the one name every live run has. */
+function selfNames(): Set<string> {
+  const marked = _runs.flatMap(
+    (run) => run.squadLog?.flatMap((mate) => (mate.you ? [mate.name] : [])) ?? [],
+  );
+  if (marked.length) return new Set(marked);
+  const live = _runs.filter((run) => run.players?.length && !run.playersFromScreenshot);
+  if (live.length < 2) return new Set();
+  const counts = new Map<string, number>();
+  for (const run of live)
+    for (const name of new Set(run.players)) counts.set(name, (counts.get(name) ?? 0) + 1);
+  return new Set([...counts].filter(([, count]) => count === live.length).map(([name]) => name));
+}
+
+/** The exact names a run's log gave for your squadmates; empty for runs with no log. */
+function loggedSquadmates(run: LevelCapRun, self: Set<string>): string[] {
+  if (run.squadLog?.length) return run.squadLog.flatMap((mate) => (mate.you ? [] : [mate.name]));
+  if (!run.players?.length || run.playersFromScreenshot) return [];
+  return run.players.filter((name) => !self.has(name));
+}
+
+/** The frame the log gave a player; a host's guessed one only when nothing better is known. */
+function logFrame(run: LevelCapRun, name: string | null, guesses: boolean): string | null {
+  const mate = name ? run.squadLog?.find((entry) => entry.name === name) : undefined;
+  if (!mate?.frame || (mate.frameGuess === true) !== guesses) return null;
+  return mate.frame;
+}
+
+/** Log players no screenshot row was pinned to, so their names and frames still count. */
+function unplacedLogSquadmates(run: LevelCapRun, placed: Set<string>): LevelCapSquadmate[] {
+  return (run.squadLog ?? []).flatMap((mate) =>
+    mate.you || placed.has(mate.name)
+      ? []
+      : [{ name: mate.name, portrait: null, frame: mate.frame ?? null }],
+  );
+}
+
 /** Re-pins every screenshot run's squad, since each learned name can fix old reads. */
 function resolveScreenshotSquads(): void {
+  for (const run of _runs) {
+    if (!run.squadReads && run.squadLog) run.squadmates = unplacedLogSquadmates(run, new Set());
+  }
   const read = _runs.filter((run) => run.squadReads);
   if (!read.length) return;
+  const self = selfNames();
   const known = [...new Set([...getSettings().knownPlayers, ...namesFromLiveRuns()])];
   const resolved = resolveSquadNames(
     read.map((run) => run.squadReads ?? []),
@@ -403,21 +465,35 @@ function resolveScreenshotSquads(): void {
   const groups = groupPortraits(portraits, _portraitLabels);
   read.forEach((run, i) => {
     const fixes = fixesOf(run);
-    run.squadmates = resolved[i].slots.flatMap((name, slot) => {
+    // A logged run's rows can only be the players its log named.
+    const own = loggedSquadmates(run, self);
+    const names = own.length ? matchRowsToPlayers(run.squadReads ?? [], own) : resolved[i].slots;
+    const allPlaced = own.length > 0 && own.every((name) => names.includes(name));
+    run.squadmates = names.flatMap((read, slot) => {
       const fix = fixes.get(slot);
       if (fix?.notSquadmate) return [];
+      const name = fix?.name ?? read;
+      // On a logged run an unnamed row is a companion or nametag once every
+      // logged player is placed, or when nothing on it reads as a name.
+      const noName = !run.squadReads?.[slot]?.some((raw) => cleanSquadRead(raw));
+      if (own.length && name === null && !fix && (allPlaced || noName)) return [];
       const group = groups.get(`${run.id}:${slot}`);
       return [
         {
-          name: fix?.name ?? name,
+          name,
           portrait: group?.group ?? null,
-          frame: fix?.frame ?? group?.frame ?? null,
+          frame:
+            fix?.frame ??
+            logFrame(run, name, false) ??
+            group?.frame ??
+            logFrame(run, name, true) ??
+            null,
           slot,
         },
       ];
     });
     // Fixes past the rows read are squadmates the reader missed outright.
-    const readRows = resolved[i].slots.length;
+    const readRows = names.length;
     for (const fix of run.squadFixes ?? []) {
       if (fix.slot < readRows || fix.notSquadmate) continue;
       run.squadmates.push({
@@ -427,6 +503,8 @@ function resolveScreenshotSquads(): void {
         slot: fix.slot,
       });
     }
+    const placed = new Set(run.squadmates.flatMap((mate) => (mate.name ? [mate.name] : [])));
+    run.squadmates.push(...unplacedLogSquadmates(run, placed));
     if (run.players?.length && !run.playersFromScreenshot) return;
     const players = [...new Set(run.squadmates.flatMap((mate) => (mate.name ? [mate.name] : [])))];
     if (players.length) {

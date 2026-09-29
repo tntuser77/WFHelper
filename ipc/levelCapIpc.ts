@@ -127,6 +127,39 @@ function abilityNameMap(): Map<string, string> {
   return names;
 }
 
+let _suitsByFolder: Map<string, string[]> | null = null;
+
+/** Warframe paths under each Powersuits folder; archwings and necramechs left out. */
+function suitsByFolder(): Map<string, string[]> {
+  if (_suitsByFolder) return _suitsByFolder;
+  const byFolder = new Map<string, string[]>();
+  try {
+    const pep = require("warframe-public-export-plus") as {
+      ExportWarframes?: Record<string, { productCategory?: string }>;
+    };
+    for (const [type, suit] of Object.entries(pep.ExportWarframes ?? {})) {
+      const folder = type.split("/")[3];
+      if (suit.productCategory !== "Suits" || !folder) continue;
+      byFolder.set(folder, [...(byFolder.get(folder) ?? []), type]);
+    }
+  } catch (err) {
+    log.warn("[LevelCap] warframe list unavailable:", String(err));
+  }
+  _suitsByFolder = byFolder;
+  return byFolder;
+}
+
+/** A squadmate's base frame from what their loadout loaded: the suit path when
+ *  it is a warframe, else the folder's base suit (Excalibur, not Umbra). */
+function squadFrame(folder: string, type: string | null): string | null {
+  const suits = suitsByFolder().get(folder) ?? [];
+  const base =
+    (type && suits.includes(type) ? type : null) ??
+    suits.find((suit) => suit.endsWith(`/${folder}`)) ??
+    [...suits].sort((a, b) => a.length - b.length)[0];
+  return base ? tracker.frameGroup(frameName(base)) : null;
+}
+
 function payload(): LevelCapPayload {
   const runs = store.getRuns();
   const builds = store.getBuilds();
@@ -350,6 +383,7 @@ function register(): void {
   tracker.initLevelCapTracker({
     getInventory: () => ctx.currentInventoryData,
     frameName,
+    squadFrame,
     async capture() {
       const shot = await captureScreenFast();
       return shot && !shot.image.isEmpty() ? shot.image.toPNG() : null;

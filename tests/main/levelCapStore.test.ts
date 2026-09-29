@@ -239,6 +239,56 @@ describe("levelCapStore", () => {
     expect(fixed.players).toEqual(["xSavxage"]);
   });
 
+  it("names a logged run's rows from its own log, and gives them the log's frames", async () => {
+    const store = await freshStore();
+    const portrait = (shade: number) => Buffer.alloc(16 * 16 * 3, shade).toString("base64");
+    const a = store.addRun(
+      run({
+        screenshot: "a.png",
+        players: ["Me", "Host", "Joiner", "Quiet"],
+        squadLog: [
+          { name: "Host", slot: 1, host: true, frame: "Inaros", frameGuess: true },
+          { name: "Me", slot: 2, you: true },
+          { name: "Joiner", slot: 3, frame: "Ember" },
+          { name: "Quiet", slot: 4 },
+        ],
+      }),
+    );
+    store.recordSquadRead(a.id, {
+      names: [["Foxy [30]"], ["Hosl ne"], ["Jolner"]],
+      portraits: [null, portrait(10), portrait(200)],
+      thumbs: [null, null, null],
+    });
+    store.labelPortrait(portrait(10), "Nidus");
+    store.labelPortrait(portrait(200), "Saryn");
+    const fixed = store.getRuns().find((r) => r.id === a.id)!;
+    // A labelled portrait beats the host's guessed frame; a loaded one beats the
+    // portrait; the player no row showed still counts, without a slot.
+    expect(fixed.squadmates?.map((m) => [m.name, m.frame, m.slot])).toEqual([
+      ["Host", "Nidus", 1],
+      ["Joiner", "Ember", 2],
+      ["Quiet", null, undefined],
+    ]);
+    expect(fixed.players).toEqual(["Me", "Host", "Joiner", "Quiet"]);
+  });
+
+  it("gives a logged run with no screenshot its squad from the log", async () => {
+    const store = await freshStore();
+    const a = store.addRun(
+      run({
+        players: ["Me", "Joiner"],
+        squadLog: [
+          { name: "Me", slot: 1, host: true, you: true },
+          { name: "Joiner", slot: 2, frame: "Mesa" },
+        ],
+      }),
+    );
+    store.updateRun(a.id, () => {});
+    expect(store.getRuns()[0].squadmates).toEqual([
+      { name: "Joiner", portrait: null, frame: "Mesa" },
+    ]);
+  });
+
   it("counts a run as solo once every squad row is ruled out", async () => {
     const store = await freshStore();
     const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));

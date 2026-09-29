@@ -22,6 +22,8 @@ const NAMES: Record<string, string> = {
   "/Lotus/Powersuits/Nezha/NezhaPrime": "Nezha Prime",
 };
 
+const FOLDERS: Record<string, string> = { Ember: "Ember", Sandman: "Inaros", Pagemaster: "Dante" };
+
 let outcomes: LevelCapHotkeyOutcome[];
 let captureResult: Buffer | null;
 
@@ -33,6 +35,7 @@ async function setup(): Promise<{ tracker: Tracker; store: Store }> {
   tracker.initLevelCapTracker({
     getInventory: () => levelCapInventory(),
     frameName: (type) => NAMES[type] ?? type,
+    squadFrame: (folder) => FOLDERS[folder] ?? null,
     capture: async () => captureResult,
     onChanged: () => {},
     onHotkey: (outcome) => outcomes.push(outcome),
@@ -229,6 +232,32 @@ describe("levelCapTracker", () => {
     await settle();
     expect(outcomes[0]?.type).toBe("logged");
     expect(store.getRuns()[0]).toMatchObject({ exolizers: null, rounds: 27 });
+  });
+
+  it("keeps the log's squad: HUD slots, host, and frames it loaded by name", async () => {
+    const { tracker, store } = await setup();
+    feed(tracker, [
+      "1.0 Net [Info]: JoinSquadSessionCallback. Session id=abc123, host name=Host",
+      "1.1 Net [Info]: AddSquadMember: Me, mm=A1, squadCount=1",
+      "1.2 Net [Info]: AddSquadMember: Host, mm=A2, squadCount=2",
+      "2.0 Script [Info]: Progress.lua: Remote player Host",
+      "2.1 Sys [Error]: Could not find object: /Lotus/Powersuits/Pagemaster/PagemasterHelmet",
+      "2.2 Sys [Error]: Required by lotus black hole /Lotus/Powersuits/Sandman/StormBlackHole",
+      ...START,
+      "20.0 Net [Info]: AddSquadMember: Joiner, mm=A3, squadCount=3",
+      "21.0 Sys [Info]: Creating loader for /Temp/OtherPlayer4_Joiner_9 loadout... Flags=0xA50007F7",
+      "21.1 Sys [Info]: Spot-loading /Lotus/Powersuits/Ember/EmberPassive.lua (root-type: /Lotus/Powersuits/Ember/EmberPrime)",
+      "21.2 Sys [Info]: ResourceLoader 0x1 (/Temp/OtherPlayer4_Joiner_9) Found 10 items to load",
+    ]);
+    tracker.onLevelCapHotkey();
+    await settle();
+    const run = store.getRuns()[0];
+    // Dante is your own frame, so the host's level load is read past it.
+    expect(run.squadLog).toEqual([
+      { name: "Host", slot: 1, host: true, frame: "Inaros", frameGuess: true },
+      { name: "Me", slot: 2, you: true },
+      { name: "Joiner", slot: 3, frame: "Ember" },
+    ]);
   });
 
   it("groups a Prime under its base frame", async () => {
