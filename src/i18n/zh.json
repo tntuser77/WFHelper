@@ -1640,6 +1640,7 @@
   "titlebar.logoAlt": "徽标",
   "titlebar.maximize": "最大化",
   "titlebar.minimize": "最小化",
+  "titlebar.syncNow": "立即同步库存",
   "titlebar.status.accessDenied": "WF 以管理员运行，无法读取",
   "titlebar.status.memoryBlocked": "Linux 阻止读取 WF",
   "titlebar.status.dataMissing": "缺少 WF 数据",

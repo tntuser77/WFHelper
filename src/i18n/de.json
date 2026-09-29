@@ -1635,6 +1635,7 @@
   "titlebar.logoAlt": "Logo",
   "titlebar.maximize": "Maximieren",
   "titlebar.minimize": "Minimieren",
+  "titlebar.syncNow": "Inventar jetzt synchronisieren",
   "titlebar.status.accessDenied": "WF läuft als Admin, nicht lesbar",
   "titlebar.status.memoryBlocked": "Linux blockiert WF-Lesen",
   "titlebar.status.dataMissing": "WF-Daten fehlen",
