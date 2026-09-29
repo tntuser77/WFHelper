@@ -2787,7 +2787,7 @@
   "levelCap.role.exilus": "特殊功能槽",
   "levelCap.role.stance": "架式",
   "levelCap.underframeTitle": "在 underframe.site 打开此配置",
-  "levelCap.underframeDpsTitle": "在 underframe.site 打开此武器并带上此配置的战甲增益；在那里点击计算 DPS",
+  "levelCap.underframeDpsTitle": "在独立窗口中用 underframe.site 测试此武器的 DPS，并带上此配置的战甲增益；不会保存到浏览器",
   "levelCap.underframeOpening": "正在打开...",
   "levelCap.underframeNoFrame": "已打开但未带战甲增益；underframe.site 这次未能关联它们",
   "levelCap.missionEnd": "任务结束时自动记录",

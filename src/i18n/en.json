@@ -2807,7 +2807,7 @@
   "levelCap.role.exilus": "Exilus",
   "levelCap.role.stance": "Stance",
   "levelCap.underframeTitle": "Open this build on underframe.site",
-  "levelCap.underframeDpsTitle": "Open this weapon on underframe.site with this build's warframe buffs; press Calculate DPS there",
+  "levelCap.underframeDpsTitle": "Test this weapon's DPS on underframe.site in its own window, with this build's warframe buffs; nothing is saved to your browser",
   "levelCap.underframeOpening": "Opening...",
   "levelCap.underframeNoFrame": "Opened without the warframe's buffs; underframe.site could not link them this time",
   "levelCap.missionEnd": "Logged at mission end",

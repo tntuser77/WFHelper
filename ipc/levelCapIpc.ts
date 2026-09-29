@@ -13,7 +13,7 @@ import * as itemDb from "../services/itemDatabase";
 import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
 import { levelCapCatalog } from "../services/levelCapCatalog";
-import { prewarmUnderframe, underframeDpsLink } from "../services/underframeDps";
+import { openUnderframeDpsWindow, prewarmUnderframe } from "../services/underframeDps";
 import {
   sanitizeUnderframeBuild,
   UNDERFRAME_SHARE_BASE,
@@ -606,12 +606,11 @@ function register(): void {
         companionBuild?.type === "Sentinel" || companionBuild?.type === "Beast"
           ? companionBuild
           : null;
-      const link =
-        partnerFrame || partnerCompanion
-          ? await underframeDpsLink(partnerFrame, partnerCompanion, weaponBuild)
-          : null;
-      void shell.openExternal(link ?? fallbackUrl);
-      return { ok: true, withFrame: link !== null };
+      const opened =
+        (partnerFrame || partnerCompanion) &&
+        (await openUnderframeDpsWindow(partnerFrame, partnerCompanion, weaponBuild));
+      if (!opened) void shell.openExternal(fallbackUrl);
+      return { ok: true, withFrame: !!opened };
     },
   );
 }

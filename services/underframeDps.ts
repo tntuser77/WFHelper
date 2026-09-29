@@ -1,17 +1,13 @@
 import { withScope } from "./logger";
 import { normalizeErrorMessage } from "../config/shared/errors";
-import {
-  UNDERFRAME_ORIGIN,
-  UNDERFRAME_SHARE_BASE,
-  type UnderframeBuild,
-} from "../config/shared/underframe";
+import { UNDERFRAME_ORIGIN, type UnderframeBuild } from "../config/shared/underframe";
 
 const log = withScope("underframeDps");
 
 // Underframe only works a frame's or companion's buffs into a weapon when they
-// are linked as partner builds. So a hidden window loads the site, links them
-// as its partner dialog does, and takes the share link. Any failure falls back
-// to the weapon's own link. Nothing is saved on their server.
+// are linked as partner builds, and only lets you DPS-test a build it has saved.
+// So the build opens in a window of our own, on a throwaway in-memory profile,
+// with its partners linked. Nothing lands in the user's browser.
 
 const PARTITION = "underframe-dps";
 const TIMEOUT_MS = 45_000;
@@ -30,9 +26,10 @@ const PAGE_SCRIPT = String.raw`
     throw new Error("timed out waiting for " + what);
   };
   // Import each partner's buffs. The first overwrites what the weapon had; the
-  // rest add to it, or the companion's bond buffs would wipe the frame's. Never
-  // ask their server for short partner links when sharing.
+  // rest add to it, or the companion's bond buffs would wipe the frame's.
+  // The stubs are put back at the end so the user's own dialogs still work.
   let overwrites = 0;
+  const dialogs = { confirm: window.confirm, alert: window.alert, prompt: window.prompt };
   window.confirm = (m) => {
     const text = String(m);
     if (text.startsWith("Would you like to include partnered")) return false;
@@ -41,7 +38,7 @@ const PAGE_SCRIPT = String.raw`
   };
   window.alert = () => {};
   window.prompt = () => null;
-
+  try {
   const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9.%+]+/g, " ").trim();
   const words = (s) => norm(s).replace(/[0-9.%+]+/g, " ").split(/\s+/).filter(Boolean);
   const numbers = (s) => (String(s).match(/[0-9.]+/g) || []).join(" ");
@@ -123,12 +120,10 @@ const PAGE_SCRIPT = String.raw`
     buffs = (built()?.externalBuffs || []).length;
   }
 
-  const field = document.getElementById("share-link-text");
-  if (!field) throw new Error("missing #share-link-text");
-  field.value = "";
-  click("share-build-btn");
-  await until(() => field.value.startsWith(location.origin + "/share#"), "the share link");
-  return { link: field.value, buffs };
+  return { buffs };
+  } finally {
+    Object.assign(window, dialogs);
+  }
 })
 `;
 
@@ -150,11 +145,12 @@ function discard(page: WarmPage): void {
 }
 
 function loadPage(): WarmPage {
-  const { BrowserWindow } = require("electron") as typeof import("electron");
+  const { BrowserWindow, shell } = require("electron") as typeof import("electron");
   const win = new BrowserWindow({
-    width: 1280,
+    width: 1400,
     height: 900,
     show: false,
+    autoHideMenuBar: true,
     webPreferences: {
       partition: PARTITION,
       sandbox: true,
@@ -162,7 +158,10 @@ function loadPage(): WarmPage {
       nodeIntegration: false,
     },
   });
-  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("https://")) void shell.openExternal(url);
+    return { action: "deny" };
+  });
   win.webContents.on("will-navigate", (e, target) => {
     if (!target.startsWith(`${UNDERFRAME_ORIGIN}/`)) e.preventDefault();
   });
@@ -201,11 +200,11 @@ export function prewarmUnderframe(): void {
   warm = loadPage();
 }
 
-async function runInHiddenPage(
+async function openInWindow(
   frame: UnderframeBuild | null,
   companion: UnderframeBuild | null,
   weapon: UnderframeBuild,
-): Promise<{ link: string; buffs: number }> {
+): Promise<number> {
   const page = warm && !warm.win.isDestroyed() ? warm : loadPage();
   warm = null;
   clearTimeout(page.idle);
@@ -214,44 +213,48 @@ async function runInHiddenPage(
     timer = setTimeout(() => reject(new Error("timed out")), TIMEOUT_MS);
   });
   try {
-    return await Promise.race([
+    const { buffs } = await Promise.race([
       page.ready.then(() =>
         page.win.webContents.executeJavaScript(
           `${PAGE_SCRIPT}(${[frame, companion, weapon].map((b) => JSON.stringify(b)).join(", ")})`,
           true,
-        ) as Promise<{ link: string; buffs: number }>,
+        ) as Promise<{ buffs: number }>,
       ),
       timeout,
     ]);
+    page.win.setTitle(`Underframe - ${weapon.itemName}`);
+    page.win.show();
+    return buffs;
+  } catch (err) {
+    discard(page);
+    throw err;
   } finally {
     clearTimeout(timer);
-    discard(page);
   }
 }
 
-let running: Promise<string | null> | null = null;
+let running: Promise<boolean> | null = null;
 
-/** A share link for `weapon` with the buffs of `frame` and `companion` (its bond
- *  mods) worked in, or null when the page could not make one. One run at a time;
- *  a second click joins the first. */
-export function underframeDpsLink(
+/** Opens `weapon` in a window of its own with the buffs of `frame` and
+ *  `companion` (its bond mods) worked in, ready to DPS-test. False when the page
+ *  could not be set up. One run at a time; a second click joins the first. */
+export function openUnderframeDpsWindow(
   frame: UnderframeBuild | null,
   companion: UnderframeBuild | null,
   weapon: UnderframeBuild,
-): Promise<string | null> {
+): Promise<boolean> {
   if (running) return running;
   running = (async () => {
     const started = Date.now();
     try {
-      const { link, buffs } = await runInHiddenPage(frame, companion, weapon);
-      if (!link.startsWith(UNDERFRAME_SHARE_BASE)) throw new Error("unexpected share link");
+      const buffs = await openInWindow(frame, companion, weapon);
       log.info(
-        `[Underframe] ${weapon.itemName} linked in ${Date.now() - started}ms, ${buffs} partner buffs`,
+        `[Underframe] ${weapon.itemName} opened in ${Date.now() - started}ms, ${buffs} partner buffs`,
       );
-      return link;
+      return true;
     } catch (err) {
-      log.warn("[Underframe] partner link failed:", normalizeErrorMessage(err));
-      return null;
+      log.warn("[Underframe] partner window failed:", normalizeErrorMessage(err));
+      return false;
     } finally {
       running = null;
     }
