@@ -155,13 +155,14 @@ function payload(): LevelCapPayload {
 function backfillRivens(inventory: unknown): boolean {
   if (!inventory) return false;
   let byWeapon: Map<string, LevelCapRiven[]> | null = null;
-  return store.backfillRivens((type) => {
+  return store.backfillRivens((type, named) => {
     // Decoding every riven is only worth it once a build turns out to need one.
     byWeapon ??= rivensByWeapon(inventory);
     const name = frameName(type).toLowerCase();
     const fits = [...byWeapon].flatMap(([weapon, rivens]) =>
       name === weapon || name.startsWith(`${weapon} `) || name.endsWith(` ${weapon}`) ? rivens : [],
     );
+    if (named) return fits.find((riven) => riven.name === named) ?? null;
     return fits.length === 1 ? fits[0] : null;
   });
 }

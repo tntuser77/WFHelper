@@ -338,25 +338,6 @@ describe("levelCapStore", () => {
     expect(store.getBuilds()[0].build.secondary?.incarnon).toEqual([0, 1, 2, 0, 1]);
   });
 
-  it("fills a riven's full roll into a build saved without it", async () => {
-    const store = await freshStore();
-    const stat = { name: "Toxin", value: 154.1, positive: true, multiplier: false };
-    const melee = (riven: LevelCapRiven) => ({
-      kind: "melee" as const,
-      type: "/Magistar",
-      config: 0,
-      upgrades: [{ slot: 1, type: "/Mods/Randomized/X", rank: 8, riven }],
-    });
-    const old = { name: "Magistar Toxicron", stats: [stat] };
-    const full = { ...old, rank: 8, disposition: 1.25, stats: [{ ...stat, tag: "T", raw: 1.541 }] };
-    store.addRun(run({ build: { ...BUILD, melee: melee(old) } }));
-    store.addRun(run({ build: { ...BUILD, melee: melee(full) } }));
-    expect(store.getBuilds()[0].build.melee?.upgrades[0].riven).toEqual(full);
-    // A different riven in the slot is left alone.
-    store.addRun(run({ build: { ...BUILD, melee: melee({ ...full, name: "Magistar Other" }) } }));
-    expect(store.getBuilds()[0].build.melee?.upgrades[0].riven?.name).toBe("Magistar Toxicron");
-  });
-
   it("editing a build rewrites every run that uses it", async () => {
     const store = await freshStore();
     const a = store.addRun(run({ build: BUILD }));
@@ -478,6 +459,33 @@ describe("levelCapStore", () => {
     expect(store.getRuns()[0].build?.secondary?.upgrades[0].riven).toEqual(riven);
     // Already filled, so a second pass changes nothing.
     expect(store.backfillRivens(() => riven)).toBe(false);
+  });
+
+  it("upgrades a riven saved without its full roll when the inventory has it", async () => {
+    const store = await freshStore();
+    const stat = { name: "Critical Chance", value: 120, positive: true, multiplier: false };
+    const melee = (riven: LevelCapRiven) => ({
+      kind: "melee" as const,
+      type: "/Magistar",
+      config: 0,
+      upgrades: [{ slot: 1, type: "/Mods/Randomized/X", rank: 8, riven }],
+    });
+    store.addRun(
+      run({ build: { ...BUILD, melee: melee({ name: "Magistar Toxicron", stats: [stat] }) } }),
+    );
+    const full = {
+      name: "Magistar Toxicron",
+      rank: 8,
+      disposition: 1.25,
+      stats: [{ ...stat, tag: "WeaponCritChanceMod", raw: 1.2 }],
+    };
+    // Another riven for the weapon is not the one saved.
+    expect(store.backfillRivens((_t, named) => (named === "Magistar Other" ? full : null))).toBe(
+      false,
+    );
+    expect(store.backfillRivens((_t, named) => (named === full.name ? full : null))).toBe(true);
+    expect(store.getBuilds()[0].build.melee?.upgrades[0].riven).toEqual(full);
+    expect(store.backfillRivens(() => full)).toBe(false);
   });
 
   it("deleting a build sends its runs back to needing one", async () => {

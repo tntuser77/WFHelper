@@ -274,10 +274,7 @@ function linkByLoadout(run: LevelCapRun): void {
   if (!run.build) return;
   const key = levelCapBuildKey(run.build);
   const found = _builds.find((b) => b.frame === run.frame && levelCapBuildKey(b.build) === key);
-  if (found) {
-    fillIncarnon(found.build, run.build);
-    fillRivens(found.build, run.build);
-  }
+  if (found) fillIncarnon(found.build, run.build);
   stamp(run, found ?? newBuild(run.frame, run.build));
 }
 
@@ -289,19 +286,6 @@ function fillIncarnon(target: LevelCapBuild, source: LevelCapBuild): void {
     const perks = source[kind]?.incarnon;
     if (item && perks?.length && !item.incarnon && source[kind]?.type === item.type) {
       item.incarnon = [...perks];
-    }
-  }
-}
-
-/** Rivens saved before their full roll was kept take it from the next run on
- *  that loadout, when it is the same riven. */
-function fillRivens(target: LevelCapBuild, source: LevelCapBuild): void {
-  for (const kind of ["primary", "secondary", "melee", "archgun"] as const) {
-    for (const upgrade of target[kind]?.upgrades ?? []) {
-      const seen = source[kind]?.upgrades.find((u) => u.slot === upgrade.slot)?.riven;
-      if (upgrade.riven && upgrade.riven.rank === undefined && seen?.name === upgrade.riven.name) {
-        upgrade.riven = structuredClone(seen);
-      }
     }
   }
 }
@@ -817,17 +801,21 @@ function itemsOf(build: LevelCapBuild | null): LevelCapItem[] {
   return items.filter((item): item is LevelCapItem => item !== null);
 }
 
-/** Builds from before rivens were captured name the riven but not its stats; fill
- * them from the inventory when the lookup is sure which riven it was. */
-export function backfillRivens(find: (weaponType: string) => LevelCapRiven | null): boolean {
+/** Builds from before rivens were captured name the riven but not its stats, and
+ * later ones lack the full roll; fill both from the inventory when the lookup is
+ * sure which riven it was. `named` is the saved riven's name, when it has one. */
+export function backfillRivens(
+  find: (weaponType: string, named?: string) => LevelCapRiven | null,
+): boolean {
   ensureLoaded();
   let changed = false;
   for (const build of [..._builds.map((b) => b.build), ..._runs.map((r) => r.build)]) {
     for (const item of itemsOf(build)) {
       for (const upgrade of item.upgrades) {
-        if (upgrade.riven || !isLevelCapRivenType(upgrade.type)) continue;
-        const riven = find(item.type);
-        if (!riven) continue;
+        const partial = upgrade.riven && upgrade.riven.rank === undefined;
+        if ((upgrade.riven && !partial) || !isLevelCapRivenType(upgrade.type)) continue;
+        const riven = find(item.type, partial ? upgrade.riven?.name : undefined);
+        if (!riven || (partial && riven.rank === undefined)) continue;
         upgrade.riven = structuredClone(riven);
         changed = true;
       }
