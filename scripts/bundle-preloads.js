@@ -29,6 +29,19 @@ function validateBundle(outfile) {
   }
 }
 
+// mtime of each preload as this script last wrote it. On Windows fs.watch also
+// fires when Electron merely reads a preload (last-access update), so without
+// this check opening a window rewrote its preload and nodemon restarted the app.
+const bundledMtimes = new Map();
+
+function isUnchangedSinceBundle(name) {
+  try {
+    return fs.statSync(path.join(BUILD_DIR, name)).mtimeMs === bundledMtimes.get(name);
+  } catch {
+    return false;
+  }
+}
+
 function bundlePreload(name) {
   const entry = path.join(BUILD_DIR, name);
   const tempEntry = tempPath(entry, "input.js");
@@ -48,6 +61,7 @@ function bundlePreload(name) {
     });
     validateBundle(tempOut);
     fs.renameSync(tempOut, entry);
+    bundledMtimes.set(name, fs.statSync(entry).mtimeMs);
     if (process.env.WFHELPER_SOURCE_MAPS === "1") fs.renameSync(`${tempOut}.map`, `${entry}.map`);
     else fs.rmSync(`${entry}.map`, { force: true });
   } finally {
@@ -83,6 +97,7 @@ async function main() {
       name,
       setTimeout(() => {
         timers.delete(name);
+        if (isUnchangedSinceBundle(name)) return;
         try {
           bundlePreload(name);
           ignoreUntil.set(name, Date.now() + SELF_WRITE_IGNORE_MS);
