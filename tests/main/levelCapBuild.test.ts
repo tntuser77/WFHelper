@@ -212,13 +212,13 @@ describe("levelCapBuild incarnon evolutions", () => {
       ],
     );
     expect(perks(inv, LAETUM)).toEqual([0, 0, 0, 2, 2]);
-    // Genesis trees skip evolution I, and no progress row means it is complete.
-    expect(perks(inv, LEX_PRIME)).toEqual([0, 0, 1, 0, 2]);
+    // A Genesis tree stops at IV, and no progress row means it is complete.
+    expect(perks(inv, LEX_PRIME)).toEqual([0, 1, 0, 2]);
   });
 
   it("stops at the evolutions unlocked so far, looking at the parent for a Genesis weapon", () => {
     const inv = inventory([{ ItemType: LEX, Rank: 2 }], [[LEX_PRIME, "0102"]]);
-    expect(perks(inv, LEX_PRIME)).toEqual([0, 0, 1]);
+    expect(perks(inv, LEX_PRIME)).toEqual([0, 1, 0]);
   });
 
   it("ignores weapons without an Incarnon", () => {
