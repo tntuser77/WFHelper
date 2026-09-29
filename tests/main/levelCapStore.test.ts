@@ -90,20 +90,24 @@ describe("levelCapStore", () => {
     expect(b.id).toBe(`${a.id}-2`);
   });
 
-  it("reads each imported screenshot for Exolizers once", async () => {
+  it("reads each screenshot without an Exolizer count once", async () => {
     const store = await freshStore();
     const shot = path.join(tmpDir, "shot.png");
     const a = store.addRun(run({ source: "import", exolizers: null, screenshot: shot }));
     const b = store.addRun(run({ source: "import", exolizers: null, screenshot: shot }));
+    // A squad client's hotkey run: the log had rounds but no Exolizers.
+    const c = store.addRun(run({ exolizers: null, rounds: 27, screenshot: shot }));
     store.addRun(run({ screenshot: shot }));
-    expect(store.runsAwaitingExolizerRead().map((r) => r.id)).toEqual([a.id, b.id]);
+    expect(store.runsAwaitingExolizerRead().map((r) => r.id)).toEqual([a.id, b.id, c.id]);
 
     store.recordExolizerRead(a.id, { exolizers: 112, rounds: 29 });
     store.recordExolizerRead(b.id, null);
+    store.recordExolizerRead(c.id, { exolizers: 108, rounds: 28 });
     expect(store.runsAwaitingExolizerRead()).toEqual([]);
     const byId = new Map(store.getRuns().map((r) => [r.id, r]));
     expect(byId.get(a.id)).toMatchObject({ exolizers: 112, rounds: 29, exolizerOcr: "read" });
     expect(byId.get(b.id)).toMatchObject({ exolizers: null, exolizerOcr: "unreadable" });
+    expect(byId.get(c.id)).toMatchObject({ exolizers: 108, rounds: 27, exolizerOcr: "read" });
   });
 
   it("names screenshot squads from known players and live runs", async () => {

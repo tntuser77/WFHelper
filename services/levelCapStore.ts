@@ -565,11 +565,12 @@ export function updateRun(id: string, mutate: (run: LevelCapRun) => void): Level
   return run;
 }
 
-/** Imported runs whose screenshot has not been read for the Exolizer count yet. */
+/** Runs without an Exolizer count whose screenshot has not been read for it yet:
+ *  imports, and hotkey runs from a squad client's log, which never has the count. */
 export function runsAwaitingExolizerRead(): Array<{ id: string; screenshot: string }> {
   ensureLoaded();
   return _runs.flatMap((run) =>
-    run.source === "import" && run.exolizers === null && !run.exolizerOcr && run.screenshot
+    run.exolizers === null && !run.exolizerOcr && run.screenshot
       ? [{ id: run.id, screenshot: run.screenshot }]
       : [],
   );
