@@ -68,6 +68,11 @@ import type {
   WebhookTestResult,
 } from "../../config/shared/notifications.js";
 import type {
+  PhonePairing,
+  PhoneSyncResult,
+  PhoneSyncState,
+} from "../../config/shared/phoneSnapshot.js";
+import type {
   MarketAlertEngineStatus,
   MarketAlertHit,
   MarketAlertImportOutcome,
@@ -500,6 +505,30 @@ export interface IpcInvokeMap {
   testNotificationWebhook: {
     args: [channel: WebhookChannel];
     return: WebhookTestResult;
+  };
+  getPhoneSync: {
+    args: [];
+    return: PhoneSyncState;
+  };
+  setPhoneSyncConfig: {
+    args: [url: string, key: string];
+    return: PhoneSyncResult;
+  };
+  clearPhoneSync: {
+    args: [];
+    return: PhoneSyncState;
+  };
+  pairPhone: {
+    args: [];
+    return: PhoneSyncResult<PhonePairing>;
+  };
+  unpairPhone: {
+    args: [];
+    return: PhoneSyncResult;
+  };
+  syncPhoneNow: {
+    args: [];
+    return: PhoneSyncState;
   };
   marketAlertsList: {
     args: [];

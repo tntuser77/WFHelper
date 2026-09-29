@@ -8,6 +8,7 @@ import { showLevelCapNotification, type LevelCapToastCard } from "./tradeNotific
 import { registerTransientHotkey, unregisterTransientHotkey } from "./hotkeyRegistry";
 import { asRunId } from "./runTrackerIpc";
 import { addInventoryListener } from "./inventoryIpc";
+import { levelCapChanged } from "./phoneSyncIpc";
 import * as itemDb from "../services/itemDatabase";
 import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
@@ -178,6 +179,7 @@ function isBuildPatch(raw: unknown): raw is LevelCapBuildPatch & { fromEquipped?
 
 function pushUpdate(): void {
   broadcastToRenderers(LEVEL_CAP_UPDATED, payload());
+  levelCapChanged();
 }
 
 /** Reads the Exolizer count and the squad off screenshots, one at a time in the background. */

@@ -105,6 +105,13 @@ export const NOTIFICATION_CHANNELS_SET_GAME_GATE = "notification-channels:set-ga
 export const NOTIFICATION_CHANNELS_SET_DISCORD_PING = "notification-channels:set-discord-ping";
 export const NOTIFICATION_CHANNELS_TEST = "notification-channels:test";
 
+export const PHONE_SYNC_GET = "phone-sync:get";
+export const PHONE_SYNC_SET_CONFIG = "phone-sync:set-config";
+export const PHONE_SYNC_CLEAR = "phone-sync:clear";
+export const PHONE_SYNC_PAIR = "phone-sync:pair";
+export const PHONE_SYNC_UNPAIR = "phone-sync:unpair";
+export const PHONE_SYNC_NOW = "phone-sync:now";
+
 export const STATS_GET_HISTORY = "stats:get-history";
 export const STATS_GET_CURRENT = "stats:get-current";
 export const STATS_IMPORT = "stats:import";

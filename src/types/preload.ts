@@ -137,6 +137,15 @@ export interface PreloadAPI {
   testNotificationWebhook: (
     channel: IpcInvokeMap["testNotificationWebhook"]["args"][0],
   ) => Promise<IpcInvokeMap["testNotificationWebhook"]["return"]>;
+  getPhoneSync: () => Promise<IpcInvokeMap["getPhoneSync"]["return"]>;
+  setPhoneSyncConfig: (
+    url: IpcInvokeMap["setPhoneSyncConfig"]["args"][0],
+    key: IpcInvokeMap["setPhoneSyncConfig"]["args"][1],
+  ) => Promise<IpcInvokeMap["setPhoneSyncConfig"]["return"]>;
+  clearPhoneSync: () => Promise<IpcInvokeMap["clearPhoneSync"]["return"]>;
+  pairPhone: () => Promise<IpcInvokeMap["pairPhone"]["return"]>;
+  unpairPhone: () => Promise<IpcInvokeMap["unpairPhone"]["return"]>;
+  syncPhoneNow: () => Promise<IpcInvokeMap["syncPhoneNow"]["return"]>;
   marketAlertsList: () => Promise<IpcInvokeMap["marketAlertsList"]["return"]>;
   marketAlertsSave: (
     payload: IpcInvokeMap["marketAlertsSave"]["args"][0],
