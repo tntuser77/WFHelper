@@ -69,6 +69,12 @@ import type {
   WebhookTestResult,
 } from "../../config/shared/notifications.js";
 import type {
+  MacroScriptAction,
+  MacroSettings,
+  MacroStatus,
+  MacrosPayload,
+} from "../../config/shared/macros.js";
+import type {
   PhonePairing,
   PhoneSyncResult,
   PhoneSyncState,
@@ -511,6 +517,14 @@ export interface IpcInvokeMap {
     args: [];
     return: PhoneSyncState;
   };
+  getMacros: { args: []; return: MacrosPayload };
+  getMacroStatus: { args: []; return: MacroStatus };
+  saveMacros: { args: [settings: MacroSettings]; return: MacrosPayload };
+  setMacroPaths: {
+    args: [patch: { script?: string; mexianIni?: string }];
+    return: MacrosPayload;
+  };
+  runMacroScript: { args: [action: MacroScriptAction]; return: MacrosPayload };
   setPhoneSyncConfig: {
     args: [url: string, key: string];
     return: PhoneSyncResult;
