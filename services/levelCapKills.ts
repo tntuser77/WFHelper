@@ -7,8 +7,11 @@ const log = withScope("levelCapKills");
 /** Stats land on the profile about a minute after a mission ends; a Cascade
  *  started sooner than that would read the last mission as unposted. */
 const BASELINE_REREADS_MS = [2 * 60_000, 10 * 60_000];
-const AFTER_POLL_MS = 30_000;
+const AFTER_POLL_MS = 60_000;
 const AFTER_GIVE_UP_MS = 10 * 60_000;
+/** The profile endpoint blocks for minutes after a dozen quick reads (HTTP 409),
+ *  so reads go one at a time with this gap between them. */
+const READ_GAP_MS = 5_000;
 
 /** Lifetime totals off the public profile. */
 export interface LifetimeStats {
@@ -74,6 +77,21 @@ export function createKillCounter(deps: KillCounterDeps) {
   // the next mission starting.
   const pending = new Map<string, number>();
   const pollTimers = new Set<Timer>();
+  let readQueue: Promise<unknown> = Promise.resolve();
+  let lastReadAt = -Infinity;
+
+  function read(accountId: string): Promise<LifetimeStats | null> {
+    const next = readQueue.then(async () => {
+      const wait = lastReadAt + READ_GAP_MS - Date.now();
+      if (wait > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, wait).unref?.());
+      }
+      lastReadAt = Date.now();
+      return deps.read(accountId);
+    });
+    readQueue = next.catch(() => undefined);
+    return next;
+  }
 
   function later(timers: Set<Timer>, ms: number, fn: () => void): void {
     const timer = setTimeout(() => {
@@ -101,8 +119,7 @@ export function createKillCounter(deps: KillCounterDeps) {
   }
 
   function readBaseline(accountId: string, player: Tracked): void {
-    player.reading = deps
-      .read(accountId)
+    player.reading = read(accountId)
       .then((stats) => {
         // A later reading only ever adds a mission that was still posting.
         if (stats && stats.missionsEnded >= (player.baseline?.missionsEnded ?? 0)) {
@@ -140,8 +157,7 @@ export function createKillCounter(deps: KillCounterDeps) {
       }
       later(pollTimers, AFTER_POLL_MS, () => poll(runId, accountId, before, deadline, you));
     };
-    deps
-      .read(accountId)
+    read(accountId)
       .then((after) => {
         if (!pending.has(runId)) return;
         if (!after || after.missionsEnded <= before.missionsEnded) return retry();
@@ -220,6 +236,8 @@ export function createKillCounter(deps: KillCounterDeps) {
       clear(pollTimers);
       players = null;
       pending.clear();
+      readQueue = Promise.resolve();
+      lastReadAt = -Infinity;
     },
   };
 }

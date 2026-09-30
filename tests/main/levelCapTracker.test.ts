@@ -255,7 +255,7 @@ describe("levelCapTracker", () => {
       expect(tracker.getStatus().killsPending).toEqual([run.id]);
 
       readings.shift();
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(90_000);
       expect(store.getRuns()[0].kills).toBe(113);
       expect(tracker.getStatus().killsPending).toEqual([]);
     } finally {
@@ -283,9 +283,9 @@ describe("levelCapTracker", () => {
         exo(4000, 108),
         ...END(4100, false),
       ]);
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(10_000);
       posted.value = true;
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(90_000);
       const run = store.getRuns()[0];
       expect(run.kills).toBe(50);
       expect(run.squadLog).toEqual([

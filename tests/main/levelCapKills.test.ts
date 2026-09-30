@@ -85,9 +85,9 @@ describe("createKillCounter", () => {
 
     // Not posted yet at the first poll, posted at the second.
     readings.push(stats(1_979_602, 7739), stats(1_979_715, 7740));
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(kills).toEqual([]);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(kills).toEqual([["run-1", 113]]);
     expect(kc.pendingRunIds()).toEqual([]);
   });
@@ -147,7 +147,7 @@ describe("createKillCounter", () => {
     await flush();
     kc.missionEnded("run-1");
     readings.push(new Error("HTTP 503"), stats(150, 6));
-    await minutes(1);
+    await minutes(2);
     expect(kills).toEqual([["run-1", 50]]);
   });
 
@@ -208,7 +208,8 @@ describe("createKillCounter", () => {
     readings.push(stats(250, 6));
     queues.host.push({ kills: 7400, missionsEnded: 116, name: "l7ese" });
     queues.mate.push({ kills: 43_000, missionsEnded: 548, name: "A_jie0929" });
-    await minutes(1);
+    // Reads go one at a time, five seconds apart.
+    await minutes(1.5);
     expect(kills).toEqual([["run-1", 150]]);
     expect(squadKills).toEqual([["run-1", "l7ese", 400]]);
     // One squadmate's stats are late, so the run stays pending for them.
@@ -233,11 +234,24 @@ describe("createKillCounter", () => {
     await flush();
     kc.missionEnded("run-1");
     readings.push(stats(130, 6));
-    await minutes(1);
+    await minutes(1.5);
     expect(kills).toEqual([["run-1", 30]]);
     expect(squadKills).toEqual([]);
     expect(kc.pendingRunIds()).toEqual([]);
     expect(read.mock.calls.some(([id]) => id === "stray")).toBe(false);
+  });
+
+  it("spaces profile reads five seconds apart", async () => {
+    const { kc, read } = counter([stats(100, 5)], { a: [stats(1, 1)], b: [stats(2, 2)] });
+    kc.missionStarted();
+    kc.squadmateSeen("a");
+    kc.squadmateSeen("b");
+    await flush();
+    expect(read).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(read).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(read.mock.calls.map(([id]) => id)).toEqual(["me", "a", "b"]);
   });
 
   it("stops every timer on reset", async () => {
