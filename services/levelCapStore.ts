@@ -102,6 +102,8 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
     screenshot: typeof run.screenshot === "string" ? run.screenshot : null,
   };
   delete out.tags;
+  delete out.kills;
+  if (Number.isSafeInteger(run.kills) && (run.kills as number) >= 0) out.kills = run.kills;
   delete out.players;
   delete out.exolizerOcr;
   if (run.exolizerOcr === "read" || run.exolizerOcr === "unreadable") {

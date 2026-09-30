@@ -59,6 +59,11 @@ function _loadAccountId(): string | null {
   return _accountId;
 }
 
+/** Your account id, once an inventory fetch has seen it. */
+export function getProfileAccountId(): string | null {
+  return _loadAccountId();
+}
+
 export function getProfileAccountGeneration(): number {
   return accountGeneration;
 }
@@ -257,6 +262,19 @@ function _httpsGetString(url: string): Promise<string> {
         signal.addEventListener("abort", abort, { once: true });
       }),
   );
+}
+
+/** The account's public profile, fresh: level cap kill counting must not see
+ *  the shared snapshot, which can be a minute old. */
+export async function fetchProfileJson(accountId: string): Promise<unknown> {
+  const body = await _httpsGetString(
+    `https://api.warframe.com/cdn/getProfileViewingData.php?playerId=${accountId}`,
+  );
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new Error("profile response is not valid JSON");
+  }
 }
 
 export async function getCodexScans(refresh = false): Promise<CodexScansResult> {

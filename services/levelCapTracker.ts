@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 import { withScope } from "./logger";
+import { createKillCounter, type LifetimeStats } from "./levelCapKills";
 import { createLevelCapParser, isLevelCapLine, type LevelCapMission } from "./levelCapParser";
 import { snapshotBuildForFrame, snapshotEquippedBuild, suitTypeForId } from "./levelCapBuild";
 import * as store from "./levelCapStore";
@@ -26,6 +27,8 @@ interface LevelCapDeps {
   capture(): Promise<Buffer | null>;
   onChanged(): void;
   onHotkey(outcome: LevelCapHotkeyOutcome): void;
+  /** Your lifetime kills and missions off the profile; null without an account. */
+  lifetimeStats?(): Promise<LifetimeStats | null>;
 }
 
 let _deps: LevelCapDeps | null = null;
@@ -40,6 +43,14 @@ let _inMission = false;
 const LEAD_IN_LINES = 3000;
 const MAX_MISSION_LINES = 200_000;
 
+const _kills = createKillCounter({
+  read: () => _deps?.lifetimeStats?.() ?? Promise.resolve(null),
+  onKills(runId, kills) {
+    if (store.updateRun(runId, (run) => (run.kills = kills))) _deps?.onChanged();
+  },
+  onPending: () => _deps?.onChanged(),
+});
+
 function keepLogLine(line: string): void {
   _logLines.push(line);
   const cap = _inMission ? MAX_MISSION_LINES : LEAD_IN_LINES;
@@ -48,6 +59,8 @@ function keepLogLine(line: string): void {
 
 export function initLevelCapTracker(deps: LevelCapDeps): void {
   _deps = deps;
+  // A Cascade found at startup may have been primed before the profile could be read.
+  if (_parser.current()) _kills.missionStarted();
 }
 
 /** Group key: a Prime shares its base frame's row and folder. */
@@ -67,6 +80,7 @@ export function getStatus(): LevelCapStatus {
     exolizers: mission?.exolizers ?? null,
     rounds: mission?.rounds ?? null,
     runId: mission ? _missionRunId : null,
+    killsPending: _kills.pendingRunIds(),
   };
 }
 
@@ -83,11 +97,12 @@ function withoutArchgun(build: LevelCapBuild | null): LevelCapBuild | null {
   return build && { ...build, archgun: null };
 }
 
-function finishMission(mission: LevelCapMission): void {
+/** Fills in or logs the run; returns its id, or null when the mission logged none. */
+function finishMission(mission: LevelCapMission): string | null {
   const deps = _deps;
   const runId = _missionRunId;
   _missionRunId = null;
-  if (!deps) return;
+  if (!deps) return null;
   const durationSec =
     mission.endSec !== null ? Math.max(0, Math.round(mission.endSec - mission.startSec)) : null;
   const archgunUsed = "HEAVY_GUN_SLOT" in mission.gearXp;
@@ -118,11 +133,11 @@ function finishMission(mission: LevelCapMission): void {
     const archgun = archgunUsed ? snapshotEquippedBuild(deps.getInventory())?.archgun : null;
     if (archgun) store.addArchgunToBuild(runId, archgun);
     deps.onChanged();
-    return;
+    return runId;
   }
 
   // No key press, but the run made it: keep it without a screenshot rather than lose it.
-  if ((mission.exolizers ?? 0) < LEVEL_CAP_EXOLIZER_TARGET) return;
+  if ((mission.exolizers ?? 0) < LEVEL_CAP_EXOLIZER_TARGET) return null;
   const snapshot = playedType
     ? snapshotBuildForFrame(deps.getInventory(), playedType)
     : snapshotEquippedBuild(deps.getInventory());
@@ -145,6 +160,7 @@ function finishMission(mission: LevelCapMission): void {
   if (archgun) store.addArchgunToBuild(run.id, archgun);
   log.info(`[LevelCap] ${run.frame} run logged at mission end without a screenshot`);
   deps.onChanged();
+  return run.id;
 }
 
 export function processLevelCapLine(line: string, source: "dbwin" | "file"): void {
@@ -156,13 +172,14 @@ export function processLevelCapLine(line: string, source: "dbwin" | "file"): voi
     if (event.type === "start") {
       _missionRunId = null;
       _inMission = true;
+      _kills.missionStarted();
       changed = true;
     } else {
       // Squadmates' frames are not read from the log yet; keep samples to learn from.
       if (event.mission.players.length > 1) store.saveSquadLog(_logLines.join("\n"));
       _logLines = [];
       _inMission = false;
-      finishMission(event.mission);
+      _kills.missionEnded(finishMission(event.mission));
     }
   }
   // Exolizer and round ticks update the live counter in the tab.
@@ -199,6 +216,7 @@ export function primeLevelCapFromLog(filePath: string, size: number): void {
   if (!mission) return;
   _parser = parser;
   _missionRunId = null;
+  _kills.missionStarted();
   log.info(
     `[LevelCap] joined a Void Cascade already in progress (${mission.exolizers ?? "?"} Exolizers, round ${mission.rounds ?? "?"})`,
   );
@@ -207,7 +225,8 @@ export function primeLevelCapFromLog(filePath: string, size: number): void {
 /** EE.log was truncated (game restart): whatever was open has ended. */
 export function notifyLevelCapEeLogReset(): void {
   const mission = _parser.flush();
-  if (mission) finishMission(mission);
+  // The run's stats still post after a game restart, so its kills are still worth waiting for.
+  if (mission) _kills.missionEnded(finishMission(mission));
   _parser = createLevelCapParser();
 }
 
@@ -286,4 +305,5 @@ export function __resetLevelCapTrackerForTest(): void {
   _hotkeyBusy = false;
   _logLines = [];
   _inMission = false;
+  _kills.reset();
 }

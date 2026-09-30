@@ -25,7 +25,9 @@ const NAMES: Record<string, string> = {
 let outcomes: LevelCapHotkeyOutcome[];
 let captureResult: Buffer | null;
 
-async function setup(): Promise<{ tracker: Tracker; store: Store }> {
+async function setup(
+  lifetimeStats?: () => Promise<{ kills: number; missionsEnded: number } | null>,
+): Promise<{ tracker: Tracker; store: Store }> {
   const store = await import("../../services/levelCapStore");
   const tracker = await import("../../services/levelCapTracker");
   store.__resetLevelCapStoreForTest();
@@ -36,6 +38,7 @@ async function setup(): Promise<{ tracker: Tracker; store: Store }> {
     capture: async () => captureResult,
     onChanged: () => {},
     onHotkey: (outcome) => outcomes.push(outcome),
+    lifetimeStats,
   });
   return { tracker, store };
 }
@@ -132,6 +135,7 @@ describe("levelCapTracker", () => {
       exolizers: 108,
       rounds: null,
       runId: logged.id,
+      killsPending: [],
     });
 
     feed(tracker, [exo(4100, 110), ...END(4212, true)]);
@@ -229,6 +233,28 @@ describe("levelCapTracker", () => {
     await settle();
     expect(outcomes[0]?.type).toBe("logged");
     expect(store.getRuns()[0]).toMatchObject({ exolizers: null, rounds: 27 });
+  });
+
+  it("counts your kills on a run from the profile before and after it", async () => {
+    vi.useFakeTimers();
+    try {
+      const readings = [
+        { kills: 1_979_602, missionsEnded: 7739 },
+        { kills: 1_979_715, missionsEnded: 7740 },
+      ];
+      const { tracker, store } = await setup(async () => readings[0]);
+      feed(tracker, [...START, exo(4000, 108), ...END(4100, false)]);
+      const [run] = store.getRuns();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(tracker.getStatus().killsPending).toEqual([run.id]);
+
+      readings.shift();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(store.getRuns()[0].kills).toBe(113);
+      expect(tracker.getStatus().killsPending).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("groups a Prime under its base frame", async () => {

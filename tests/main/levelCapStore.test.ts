@@ -188,6 +188,29 @@ describe("levelCapStore", () => {
     expect(store.getRuns()[0].squadmates?.[0].frame).toBe("Titania");
   });
 
+  it("keeps a run's kill count from the index and drops junk ones", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const kills = [1234, 0, -5, 2.5, "99", null];
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        schemaVersion: 2,
+        runs: kills.map((value, i) => ({ ...run(), id: `r${i}`, kills: value })),
+      }),
+    );
+    const store = await freshStore();
+    const byId = new Map(store.getRuns().map((r) => [r.id, r]));
+    expect(kills.map((_, i) => byId.get(`r${i}`)?.kills)).toEqual([
+      1234,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect("kills" in byId.get("r2")!).toBe(false);
+  });
+
   it("applies squad corrections: a frame, a name, and a row that was never a player", async () => {
     const store = await freshStore();
     const portrait = (shade: number) => Buffer.alloc(16 * 16 * 3, shade).toString("base64");

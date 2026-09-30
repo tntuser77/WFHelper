@@ -118,6 +118,14 @@ export function formatLevelCapDuration(sec: number | null): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 
+/** Your kills per minute of run time; null when either is unknown. */
+export function levelCapKillsPerMin(
+  run: Pick<LevelCapRun, "kills" | "durationSec">,
+): number | null {
+  if (run.kills == null || !run.durationSec || run.durationSec <= 0) return null;
+  return run.kills / (run.durationSec / 60);
+}
+
 /** "Melee, Influence" -> ["melee", "influence"]; every term has to match. */
 export function levelCapSearchTerms(query: string): string[] {
   return query

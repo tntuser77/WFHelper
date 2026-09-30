@@ -3,6 +3,7 @@ import type {
   LevelCapNamedBuild,
   LevelCapRun,
 } from "../../../config/shared/levelCapTypes.js";
+import { levelCapKillsPerMin } from "../levelCap.js";
 
 export const ANALYTICS_MEASURES = [
   "runs",
@@ -10,6 +11,8 @@ export const ANALYTICS_MEASURES = [
   "exolizersAvg",
   "exolizersBest",
   "durationAvg",
+  "killsAvg",
+  "killsPerMin",
 ] as const;
 export type AnalyticsMeasure = (typeof ANALYTICS_MEASURES)[number];
 
@@ -130,6 +133,8 @@ const counts = (measure: AnalyticsMeasure) => measure === "runs" || measure === 
 
 function measureOf(run: LevelCapRun, measure: AnalyticsMeasure): number | null {
   if (measure === "durationAvg") return run.durationSec;
+  if (measure === "killsAvg") return run.kills ?? null;
+  if (measure === "killsPerMin") return levelCapKillsPerMin(run);
   if (counts(measure)) return null;
   return run.exolizers;
 }

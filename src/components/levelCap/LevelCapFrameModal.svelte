@@ -8,13 +8,14 @@
     formatLevelCapDuration,
     levelCapItemImage,
     levelCapItemName,
+    levelCapKillsPerMin,
     levelCapPlayerTerms,
     levelCapRunHasPlayer,
     levelCapSquad,
     orderLevelCapTags,
     type LevelCapFrameRow,
   } from "../../lib/levelCap.js";
-  import { assignLevelCapBuild, createLevelCapBuild } from "../../stores/levelCap.js";
+  import { assignLevelCapBuild, createLevelCapBuild, levelCap } from "../../stores/levelCap.js";
   import { itemDb } from "../../stores/data.js";
   import { addToast } from "../../stores/toasts.js";
   import ModalShell from "../ModalShell.svelte";
@@ -78,6 +79,7 @@
   );
   const checkedRuns = $derived(runs.filter((run) => checked.has(run.id)));
   const buildName = (id: string | undefined) => builds.find((b) => b.id === id)?.name ?? "";
+  const killsPending = $derived(new Set($levelCap?.status.killsPending ?? []));
 
   function toggle(set: SvelteSet<string>, id: string): void {
     if (set.has(id)) set.delete(id);
@@ -125,6 +127,14 @@
     return $t("levelCap.dateAt", {
       date: d.toLocaleDateString($locale, { year: "numeric", month: "short", day: "numeric" }),
       time: d.toLocaleTimeString($locale, { hour: "numeric", minute: "2-digit" }),
+    });
+  }
+
+  function perMinLabel(run: LevelCapRun): string {
+    const rate = levelCapKillsPerMin(run);
+    if (rate === null) return "";
+    return $t("levelCap.killsPerMin", {
+      count: rate.toLocaleString($locale, { maximumFractionDigits: 1 }),
     });
   }
 
@@ -391,7 +401,7 @@
                 </div>
                 <button
                   type="button"
-                  class="grid min-w-0 flex-1 cursor-pointer grid-cols-[4.5rem_6.5rem_minmax(0,1fr)_auto] items-center gap-4 text-left"
+                  class="grid min-w-0 flex-1 cursor-pointer grid-cols-[4.5rem_6.5rem_6rem_minmax(0,1fr)_auto] items-center gap-4 text-left"
                   onclick={() => toggle(expanded, run.id)}
                 >
                   <span
@@ -415,6 +425,25 @@
                       {/if}
                     </span>
                   {/if}
+                  <span class="flex flex-col leading-tight" title={$t("levelCap.col.kills")}>
+                    {#if run.kills != null}
+                      <span class="flex items-baseline gap-1">
+                        <span class="font-mono text-base font-bold text-text-primary"
+                          >{run.kills.toLocaleString($locale)}</span
+                        >
+                        <span class="text-[10px] uppercase tracking-wide text-text-muted"
+                          >{$t("levelCap.kills")}</span
+                        >
+                      </span>
+                      {#if perMinLabel(run)}
+                        <span class="text-[10px] text-text-muted">{perMinLabel(run)}</span>
+                      {/if}
+                    {:else if killsPending.has(run.id)}
+                      <span class="text-xs text-text-muted" data-level-cap-kills-pending
+                        >{$t("levelCap.killsPending")}</span
+                      >
+                    {/if}
+                  </span>
                   <span
                     class="flex min-w-0 flex-col text-xs leading-snug text-text-secondary"
                     title={tileRooms(run).join(" · ")}
