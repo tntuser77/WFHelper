@@ -5,6 +5,7 @@ import {
   RELIC_OWNED_ABOVE_STEPS,
   normalizeRelicOverlayFilterPush,
   relicDucatonator,
+  relicGoldReward,
   relicOwnedCountForMode,
   relicQualityForMode,
   selectRelicPlannerRows,
@@ -23,6 +24,7 @@ function row(overrides: Partial<PlannerRow> & { name: string }): PlannerRow {
     ownedCount: 0,
     ownedTotal: 0,
     plat: null,
+    gold: null,
     ducat: null,
     ratio: null,
     ...overrides,
@@ -186,6 +188,22 @@ describe("relic planner filters", () => {
     ).toEqual(["Mixed"]);
   });
 
+  it("keeps relics whose gold part sells for at least the typed plat", () => {
+    const rows = [
+      row({ name: "Cheap", gold: 12 }),
+      row({ name: "Exact", gold: 40 }),
+      row({ name: "Rich", gold: 95.5 }),
+      row({ name: "Unpriced" }),
+    ];
+    const kept = (goldAtLeast: number) =>
+      names(selectRelicPlannerRows(rows, filters({ goldAtLeast }), ALL_PASS));
+
+    expect(kept(0)).toEqual(["Cheap", "Exact", "Rich", "Unpriced"]);
+    expect(kept(40)).toEqual(["Exact", "Rich"]);
+    expect(kept(37.5)).toEqual(["Exact", "Rich"]);
+    expect(kept(1000)).toEqual([]);
+  });
+
   it("filters before it sorts", () => {
     const rows = [
       row({ name: "Cheap", plat: 1, vaulted: true }),
@@ -249,6 +267,15 @@ describe("pushed filter validation", () => {
       expect(plannerFilters({ squadSize }).squadSize).toBe(DEFAULT_RELIC_PLANNER_FILTERS.squadSize);
     }
     expect(plannerFilters({ squadSize: 3 }).squadSize).toBe(3);
+  });
+
+  it("accepts any typed gold floor in range", () => {
+    for (const goldAtLeast of [0, 1, 37, 42.5, 100_000]) {
+      expect(plannerFilters({ goldAtLeast }).goldAtLeast).toBe(goldAtLeast);
+    }
+    for (const goldAtLeast of [-1, 100_001, "40", null, NaN, Infinity]) {
+      expect(plannerFilters({ goldAtLeast }, filters({ goldAtLeast: 30 })).goldAtLeast).toBe(30);
+    }
   });
 
   it("accepts only the copy thresholds the planner offers", () => {
@@ -315,5 +342,26 @@ describe("pushed filter validation", () => {
 
     expect(normalizeRelicOverlayFilterPush({ tierFilter: 3 }).tierFilter).toBe(null);
     expect(normalizeRelicOverlayFilterPush({}).neededRewardKeys).toBe(null);
+  });
+});
+
+describe("relic gold reward", () => {
+  it("picks the reward marked rare", () => {
+    const rewards = [
+      { name: "Forma", rarity: "Common", chance: 25.33 },
+      { name: "Banshee Prime Systems", rarity: "Rare", chance: 2 },
+      { name: "Bronco Prime Barrel", rarity: "Uncommon", chance: 11 },
+    ];
+    expect(relicGoldReward(rewards)?.name).toBe("Banshee Prime Systems");
+  });
+
+  it("falls back to the least likely drop when no rarity is set", () => {
+    const rewards = [
+      { name: "A", chance: 25.33 },
+      { name: "B", chance: 2 },
+      { name: "C", chance: 11 },
+    ];
+    expect(relicGoldReward(rewards)?.name).toBe("B");
+    expect(relicGoldReward([])).toBe(null);
   });
 });

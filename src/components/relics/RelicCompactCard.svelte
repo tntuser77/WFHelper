@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { showMasteredBadges, showOwnedParentBadges } from "../../stores/preferences.js";
+  import {
+    showMasteredBadges,
+    showOwnedParentBadges,
+    showRelicCardEv,
+  } from "../../stores/preferences.js";
   import { itemLabel } from "../../lib/itemLabel.js";
   import ItemImage from "../ItemImage.svelte";
   import MarketMetricStrip from "../MarketMetricStrip.svelte";
@@ -28,6 +32,8 @@
   export let selectedOwned: RelicQuality | null;
   export let selected: RowEvData;
   export let rewardIcons: RelicReward[] = [];
+  export let goldName: string | null = null;
+  export let goldPlat: number | null = null;
   export let plain = false;
   export let ownedCount: (group: RelicGroup, quality: RelicQuality) => number;
   export let isOwnedReward: (reward: RelicReward) => boolean;
@@ -118,33 +124,51 @@
 
     <!-- No min-w-0: it let this column fall under the vaulted tag's own width,
          and the tag then overflowed right into the price. The name's ellipsis
-         yields instead. -->
+         yields instead, and the gold part's name past 60% of the row. -->
     <span class="flex flex-1 basis-24 flex-col gap-1">
       <span
         class="relic-row-name overflow-hidden text-ellipsis whitespace-nowrap font-display text-xl font-semibold tracking-[0.01em]"
         >{group.name}</span
       >
-      <span class="relic-status-tag" class:vaulted={group.vaulted}>
-        {group.vaulted ? $tr("common.vaulted") : $tr("common.unvaulted")}
-      </span>
+      <!-- Hidden, not removed, on unvaulted relics so every card's rows line up. -->
+      <span
+        class="relic-status-tag"
+        class:invisible={!group.vaulted}
+        aria-hidden={group.vaulted ? undefined : "true"}>{$tr("common.vaulted")}</span
+      >
     </span>
 
     <!-- shrink-0 keeps the nowrap strip inside this column; min-w-0 let it
          shrink underneath and the numbers spilled left onto the tag. -->
-    <span class="ml-auto flex shrink-0 flex-col items-end gap-0.5">
+    <span class="ml-auto flex max-w-[60%] shrink-0 flex-col items-end gap-0.5">
       <span
         class="relic-compact-block-label max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-right font-display text-[0.65rem] tracking-[0.06em] uppercase text-text-secondary"
-        >{qualityHeader}</span
+        data-relic-gold-name
+        title={goldName ?? ""}>{goldName ?? $tr("relics.sort.gold")}</span
       >
       <MarketMetricStrip
-        platinum={selected.plat != null ? selected.plat.toFixed(1) : null}
-        ducats={selected.ducat != null ? selected.ducat.toFixed(1) : null}
-        ratio={selected.ratio != null ? selected.ratio.toFixed(1) : null}
-        state={selected.cls}
+        platinum={goldPlat != null ? Math.round(goldPlat) : null}
+        showDucats={false}
+        state="no-data"
         size="compact"
         wrap={false}
         justify="end"
       />
+      {#if $showRelicCardEv}
+        <span
+          class="relic-compact-block-label mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-right font-display text-[0.65rem] tracking-[0.06em] uppercase text-text-secondary"
+          >{qualityHeader}</span
+        >
+        <MarketMetricStrip
+          platinum={selected.plat != null ? selected.plat.toFixed(1) : null}
+          ducats={selected.ducat != null ? selected.ducat.toFixed(1) : null}
+          ratio={selected.ratio != null ? selected.ratio.toFixed(1) : null}
+          state={selected.cls}
+          size="compact"
+          wrap={false}
+          justify="end"
+        />
+      {/if}
     </span>
   </button>
 
@@ -251,13 +275,13 @@
     transform: scale(1.06);
   }
 
-  /* Info-blue, not success-green: owned reward icons already use --success. */
+  /* Only vaulted relics carry a tag; unvaulted is the quiet default. */
   .relic-status-tag {
     width: fit-content;
-    border: 1px solid color-mix(in oklab, var(--info) 44%, transparent);
+    border: 1px solid color-mix(in oklab, var(--danger) 38%, transparent);
     border-radius: var(--radius-sm);
-    background: color-mix(in oklab, var(--info) 14%, transparent);
-    color: color-mix(in oklab, var(--info) 84%, white);
+    background: color-mix(in oklab, var(--danger) 13%, transparent);
+    color: color-mix(in oklab, var(--danger) 82%, white);
     padding: 0.08rem 0.32rem;
     font-family: var(--font-display);
     font-size: 0.62rem;
@@ -265,11 +289,6 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
     line-height: 1.2;
-  }
-  .relic-status-tag.vaulted {
-    border-color: color-mix(in oklab, var(--danger) 38%, transparent);
-    background: color-mix(in oklab, var(--danger) 13%, transparent);
-    color: color-mix(in oklab, var(--danger) 82%, white);
   }
 
   .relic-reward-preview-icon.owned {

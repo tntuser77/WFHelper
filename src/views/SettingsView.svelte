@@ -63,6 +63,7 @@
     showFoundryReadyBadges,
     showMasteredBadges,
     showOwnedParentBadges,
+    showRelicCardEv,
     showVaultedBadges,
     type AppearanceTab,
     type SettingsCategory,
@@ -1258,6 +1259,14 @@
                 dataSetting="show-vaulted-badges"
               >
                 <input type="checkbox" bind:checked={$showVaultedBadges} />
+              </SettingsRow>
+            </div>
+          </SettingsSection>
+
+          <SettingsSection title={$tr("settings.relicCardsTitle")}>
+            <div class="mt-2.5 grid gap-1">
+              <SettingsRow label={$tr("settings.showRelicCardEv")} dataSetting="show-relic-card-ev">
+                <input type="checkbox" bind:checked={$showRelicCardEv} />
               </SettingsRow>
             </div>
           </SettingsSection>
