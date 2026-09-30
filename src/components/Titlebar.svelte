@@ -21,6 +21,25 @@
 
   let helperStatus: HelperStatus | null = null;
   let withoutInventory = false;
+  let helperSource = false;
+  let syncing = false;
+  let refreshHelperStatus: () => void = () => {};
+
+  // Force one helper run now instead of waiting for the next poll; the file
+  // watcher pushes the fresh inventory (relic counts included) to every view.
+  async function syncInventoryNow(): Promise<void> {
+    if (syncing) return;
+    syncing = true;
+    refreshHelperStatus();
+    try {
+      await invoke("runHelperNow");
+    } catch {
+      // The status pill reports why the run failed.
+    } finally {
+      syncing = false;
+      refreshHelperStatus();
+    }
+  }
 
   // Show just the clock time, plus the date once the data is over a day old.
   function formatHelperTime(ms: number | null, localeCode: string): string {
@@ -91,13 +110,16 @@
     const unsubscribe = on("inventory-status-updated", (status) => {
       sourceUpdated = true;
       withoutInventory = status.source === "none";
+      helperSource = status.source === "helper";
     });
     void invoke("getInventoryStatus")
       .then((status) => {
-        if (!sourceUpdated) withoutInventory = status.source === "none";
+        if (sourceUpdated) return;
+        withoutInventory = status.source === "none";
+        helperSource = status.source === "helper";
       })
       .catch(() => {});
-    const refreshHelperStatus = (): void => {
+    refreshHelperStatus = (): void => {
       invoke("getHelperStatus")
         .then((status) => {
           helperStatus = status;
@@ -138,6 +160,29 @@
         >{helperStatusText}</span
       >
     </span>
+    {#if helperSource}
+      <button
+        type="button"
+        class="app-region-no-drag flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded border-0 bg-transparent text-text-muted transition-[color,background-color] duration-150 hover:bg-bg-hover hover:text-text-primary disabled:cursor-default disabled:opacity-50"
+        title={$tr("titlebar.syncNow")}
+        aria-label={$tr("titlebar.syncNow")}
+        disabled={syncing || (helperStatus?.running ?? false)}
+        on:click={syncInventoryNow}
+      >
+        <svg
+          class="h-3 w-3 {syncing || helperStatus?.running ? 'animate-spin' : ''}"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M10 6a4 4 0 1 1-1.17-2.83" />
+          <polyline points="10 1.5 10 3.5 8 3.5" />
+        </svg>
+      </button>
+    {/if}
   </div>
   <!-- ml-auto, because justify-between centres a third child. -->
   <div class="app-region-no-drag ml-auto flex items-center pr-2">

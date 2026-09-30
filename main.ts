@@ -114,6 +114,7 @@ import * as rivensIpc from "./ipc/rivensIpc";
 import * as tradeNotificationIpc from "./ipc/tradeNotificationIpc";
 import * as notificationLogIpc from "./ipc/notificationLogIpc";
 import * as notificationChannelsIpc from "./ipc/notificationChannelsIpc";
+import * as phoneSyncIpc from "./ipc/phoneSyncIpc";
 import * as marketAlertsIpc from "./ipc/marketAlertsIpc";
 import * as missionRewardsIpc from "./ipc/missionRewardsIpc";
 import * as inventorySelectionIpc from "./ipc/inventorySelectionIpc";
@@ -542,6 +543,7 @@ function registerIpcHandlers(profileStage: ProfileStage): void {
   arbiScheduleIpc.register();
   notificationLogIpc.register();
   notificationChannelsIpc.register();
+  phoneSyncIpc.register();
   marketAlertsIpc.register();
   tradeWorkbenchIpc.register();
   tradeLedgerIpc.register();
