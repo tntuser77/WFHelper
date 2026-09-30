@@ -31,9 +31,19 @@ import {
 import {
   underframeBuild,
   underframeCompanionBuild,
-  underframeUrl,
+  underframeShareUrl,
 } from "../../../src/lib/underframe.js";
 import { sanitizeUnderframeBuild } from "../../../config/shared/underframe.js";
+
+/** Share link for one item, the way the Underframe button builds it. */
+function underframeUrl(
+  item: LevelCapItem,
+  name: (type: string) => string | null,
+  helminthName?: string | null,
+): string | null {
+  const build = underframeBuild(item, name, helminthName);
+  return build ? underframeShareUrl(build) : null;
+}
 
 const SUIT: LevelCapItem = {
   kind: "suit",

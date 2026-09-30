@@ -206,13 +206,3 @@ export function underframeShareUrl(build: UnderframeBuild): string {
   }
   return `${UNDERFRAME_SHARE_BASE}v4u.${base64Url(JSON.stringify({ v: 1, b: short }))}`;
 }
-
-/** Share link for one item, or null for kinds Underframe does not model. */
-export function underframeUrl(
-  item: LevelCapItem,
-  name: (type: string) => string | null,
-  helminthName?: string | null,
-): string | null {
-  const build = underframeBuild(item, name, helminthName);
-  return build ? underframeShareUrl(build) : null;
-}
