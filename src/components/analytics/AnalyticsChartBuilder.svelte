@@ -396,7 +396,7 @@
         >
           <div class="flex flex-col gap-1" data-analytics-condition-editor>
             {#each conditions as row, i (i)}
-              <!-- Right-click anywhere on the row drops the condition, like its ×. -->
+              <!-- Right-click anywhere on the row drops the condition, like its close button. -->
               <div
                 role="presentation"
                 class="flex flex-wrap items-center gap-1 rounded-[var(--radius-md)] border border-border-subtle p-1.5"

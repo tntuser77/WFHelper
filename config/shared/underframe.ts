@@ -4,7 +4,7 @@
 export const UNDERFRAME_ORIGIN = "https://www.underframe.site";
 export const UNDERFRAME_SHARE_BASE = `${UNDERFRAME_ORIGIN}/share#`;
 
-export const UNDERFRAME_BUILD_TYPES = [
+const UNDERFRAME_BUILD_TYPES = [
   "Warframe",
   "Primary",
   "Secondary",
@@ -22,14 +22,7 @@ export const UNDERFRAME_WEAPON_TYPES: readonly UnderframeBuildType[] = [
 ];
 export type UnderframeBuildType = (typeof UNDERFRAME_BUILD_TYPES)[number];
 
-export const UNDERFRAME_SHARD_TYPES = [
-  "crimson",
-  "amber",
-  "azure",
-  "violet",
-  "emerald",
-  "topaz",
-] as const;
+const UNDERFRAME_SHARD_TYPES = ["crimson", "amber", "azure", "violet", "emerald", "topaz"] as const;
 
 /** Underframe's name for each of the game's riven stat tags. */
 export const UNDERFRAME_RIVEN_STATS: Readonly<Record<string, string>> = {
@@ -94,7 +87,7 @@ export interface UnderframeBuild {
   incarnon?: UnderframeIncarnon | null;
 }
 
-export interface UnderframeIncarnon {
+interface UnderframeIncarnon {
   evolution_1_active: boolean;
   evolution_2_perk: number | null;
   evolution_3_perk: number | null;
@@ -139,9 +132,7 @@ function sanitizeRiven(value: unknown): UnderframeRiven | null {
     const name = text(stat?.name);
     return name && finite(stat?.value) ? [{ name, value: stat.value }] : [];
   });
-  return stats.length
-    ? { rank: raw.rank as number, disposition: raw.disposition, stats }
-    : null;
+  return stats.length ? { rank: raw.rank as number, disposition: raw.disposition, stats } : null;
 }
 
 /** Rebuilds a renderer-sent build from known fields only, or null if it is not one. */

@@ -248,11 +248,12 @@ async function openInWindow(
   });
   try {
     const { buffs } = await Promise.race([
-      page.ready.then(() =>
-        page.win.webContents.executeJavaScript(
-          `${PAGE_SCRIPT}(${[frame, companion, weapon].map((b) => JSON.stringify(b)).join(", ")})`,
-          true,
-        ) as Promise<{ buffs: number }>,
+      page.ready.then(
+        () =>
+          page.win.webContents.executeJavaScript(
+            `${PAGE_SCRIPT}(${[frame, companion, weapon].map((b) => JSON.stringify(b)).join(", ")})`,
+            true,
+          ) as Promise<{ buffs: number }>,
       ),
       timeout,
     ]);

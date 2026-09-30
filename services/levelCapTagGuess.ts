@@ -45,11 +45,10 @@ const RULES: TagRule[] = [
   { tag: "Influence", since: 5, test: (build) => meleeHas(build, MELEE_INFLUENCE) },
 ];
 
-/** Tags a loadout implies on its own: Vazarin for dashing, Arcane Persistence, both
- *  shield recharge delay mods for passive shield gating, Huras for invisibility, a
- *  slam melee, Falcor or the Melee Influence arcane, and Melee Afflictions. Only
- *  rules newer than `afterVersion` count, so an index upgrade adds just the tags its
- *  new rules bring. */
+/** Tags a loadout implies on its own: Vazarin dash, Arcane Persistence, passive
+ *  shield gating (both recharge delay mods), Huras, a slam melee, Falcor or Melee
+ *  Influence, Melee Afflictions. Only rules newer than `afterVersion` count, so
+ *  an index upgrade adds just the tags its new rules bring. */
 export function guessLevelCapTags(build: LevelCapBuild | null, afterVersion = 0): string[] {
   if (!build) return [];
   const suitMods = new Set((build.suit?.upgrades ?? []).map((upgrade) => upgrade.type));

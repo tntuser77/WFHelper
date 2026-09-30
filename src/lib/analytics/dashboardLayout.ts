@@ -1,8 +1,6 @@
-/**
- * Where cards sit on the analytics dashboard: four columns, rows as tall as
- * their tallest card, and gaps allowed anywhere. A row with nothing left in it
- * closes up, so rows are always numbered 0, 1, 2 ... with no empty ones.
- */
+// Where cards sit on the analytics dashboard: four columns, rows as tall as
+// their tallest card, and gaps allowed anywhere. A row with nothing left in it
+// closes up, so rows are always numbered 0, 1, 2 ... with no empty ones.
 
 export const DASHBOARD_COLS = 4;
 
@@ -72,12 +70,10 @@ export function tidyLayout<T extends LayoutBox>(boxes: readonly T[]): T[] {
   return compactLayout(placed);
 }
 
-/**
- * Card `id` at `row` and `col`, `cols` wide; a row past the last starts a new
- * one. The cards it lands on move to a new row just below, keeping their
- * columns, and everything under that moves down one; the rest stay where they
- * are. The column is pulled in so the card never hangs off the right edge.
- */
+/** Card `id` at `row` and `col`, `cols` wide; a row past the last starts a new
+ *  one. Cards it lands on move to a new row just below, keeping their columns,
+ *  and everything under that moves down one. The column is pulled in so the
+ *  card never hangs off the right edge. */
 export function placeInLayout<T extends LayoutBox>(
   boxes: readonly T[],
   id: string,

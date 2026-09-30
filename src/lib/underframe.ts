@@ -52,11 +52,6 @@ const SHARD_COLORS: Record<string, string> = {
   ORANGE: "topaz",
 };
 
-/** Underframe models this kind of item. */
-export function underframeSupports(kind: LevelCapSlotKind): boolean {
-  return kind in BUILD_TYPE;
-}
-
 /** The roll as Underframe keeps it, or null when the capture lacks what it needs
  *  (builds saved before rolls were kept in full) or no stat maps across. */
 function underframeRiven(riven: LevelCapRiven | undefined): UnderframeRiven | null {

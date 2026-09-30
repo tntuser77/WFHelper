@@ -98,12 +98,10 @@
     cols: spec.cols,
   });
 
-  /**
-   * The saved row under screen height `y`, or null over a gap between rows.
-   * The grid on screen shows the preview, whose rows can differ from the saved
-   * ones (a row pushed in, one closed up), so a row is known by the other
-   * cards in it; a row holding only the held card keeps the current target.
-   */
+  /** The saved row under screen height `y`, or null over a gap between rows. The
+   *  grid shows the preview, whose rows can differ from the saved ones, so a row
+   *  is known by the other cards in it; a row holding only the held card keeps
+   *  the current target. */
   function rowAt(
     y: number,
     start: readonly LayoutBox[],

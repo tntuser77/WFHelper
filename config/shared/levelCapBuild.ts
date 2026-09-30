@@ -106,7 +106,7 @@ function upgrade(raw: unknown): LevelCapUpgrade | null {
   return out;
 }
 
-export const LEVEL_CAP_INCARNON_TIERS = 5;
+const LEVEL_CAP_INCARNON_TIERS = 5;
 /** Most perks any evolution offers. */
 export const LEVEL_CAP_INCARNON_PERKS = 3;
 const INCARNON_KINDS = new Set<LevelCapSlotKind>(["primary", "secondary", "melee"]);

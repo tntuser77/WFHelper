@@ -44,7 +44,7 @@ const NOT_A_FRAME = new Set([
 ]);
 const LEVEL_HINTS_MAX = 4;
 
-export interface LevelCapSquadEntry {
+interface LevelCapSquadEntry {
   name: string;
   slot: number;
   host: boolean;
