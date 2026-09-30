@@ -24,8 +24,10 @@
   } from "../../lib/inventory/archonShards.js";
   import { log } from "../../lib/log.js";
   import { loadLevelCapItemConfigs, loadLevelCapModularItems } from "../../stores/levelCap.js";
+  import LevelCapIncarnon from "./LevelCapIncarnon.svelte";
   import LevelCapModGrid from "./LevelCapModGrid.svelte";
   import LevelCapPicker from "./LevelCapPicker.svelte";
+  import LevelCapUnderframeButton from "./LevelCapUnderframeButton.svelte";
 
   let {
     kind,
@@ -36,6 +38,8 @@
     abilityNames = {},
     removable = true,
     open = false,
+    frame = null,
+    companion = null,
     onChange,
   }: {
     kind: LevelCapSlotKind;
@@ -47,6 +51,10 @@
     abilityNames?: Record<string, string>;
     removable?: boolean;
     open?: boolean;
+    /** The build's warframe, whose buffs a weapon takes to Underframe. */
+    frame?: LevelCapItem | null;
+    /** The build's companion, whose bond mods a weapon takes to Underframe. */
+    companion?: LevelCapItem | null;
     onChange: (item: LevelCapItem | null) => void;
   } = $props();
 
@@ -245,8 +253,15 @@
     onChange(next);
   }
 
-  /** Augments fit only this frame's own abilities or the one the Helminth grafted. */
+  /** Augments fit only this frame's own abilities or the one the Helminth grafted;
+   *  weapon-exclusive and class mods only the weapons that take them. */
   function fitsItem(mod: LevelCapCatalog["mods"][number]): boolean {
+    if (mod.target) {
+      const targets = item ? catalog.weaponTargets[item.type] : undefined;
+      // Zaws and kitguns are not in the export: keep class mods, drop another gun's.
+      if (!targets) return !mod.target.weapon;
+      return targets.includes(mod.target.type);
+    }
     if (!mod.augment) return true;
     if (kind !== "suit" || !item) return false;
     return (
@@ -257,9 +272,12 @@
 
   const fittingMods = $derived(catalog.mods.filter(fitsItem));
 
-  function modOptions(compat: readonly string[]) {
+  const exilusMods = $derived(fittingMods.filter((mod) => mod.exilus));
+
+  function modOptions(compat: readonly string[], role: string) {
     if (!compat.length) return catalog.arcanes;
-    return fittingMods.filter((mod) => compat.includes(mod.compat));
+    const pool = role === "exilus" ? exilusMods : fittingMods;
+    return pool.filter((mod) => compat.includes(mod.compat));
   }
 </script>
 
@@ -317,6 +335,9 @@
         {/each}
       </div>
     {/if}
+    {#if item}
+      <LevelCapUnderframeButton {item} {frame} {companion} {abilityNames} />
+    {/if}
     <button
       type="button"
       class="cursor-pointer rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary hover:border-info hover:text-info"
@@ -350,6 +371,10 @@
         {catalog}
         selected={pickedSlot}
         onSelect={(slot) => toggle(slot)}
+        onClear={(slot) => {
+          setUpgrade(slot, null);
+          if (pickedSlot === slot) picking = null;
+        }}
       />
 
       {#if pickedSpec}
@@ -388,8 +413,12 @@
             <span class="text-[11px] text-text-muted">{$t("levelCap.editor.rivenHint")}</span>
           {/if}
           <LevelCapPicker
-            options={modOptions(pickedSpec.compat)}
-            fallback={pickedSpec.compat.length ? fittingMods : []}
+            options={modOptions(pickedSpec.compat, pickedSpec.role)}
+            fallback={!pickedSpec.compat.length
+              ? []
+              : pickedSpec.role === "exilus"
+                ? exilusMods
+                : fittingMods}
             placeholder={$t(
               pickedSpec.role === "arcane"
                 ? "levelCap.editor.searchArcane"
@@ -399,6 +428,19 @@
             onCancel={() => (picking = null)}
           />
         </div>
+      {/if}
+
+      {#if kind !== "suit" && (item.incarnon || $itemDb[item.type]?.incarnon)}
+        <LevelCapIncarnon
+          perks={item.incarnon ?? []}
+          onChange={(perks) => {
+            if (!item) return;
+            const next = { ...item };
+            if (perks?.length) next.incarnon = perks;
+            else delete next.incarnon;
+            onChange(next);
+          }}
+        />
       {/if}
 
       {#if kind === "suit"}
@@ -412,6 +454,12 @@
               ? 'border-accent/50 text-text-primary'
               : 'border-dashed border-border text-text-muted'} hover:border-info"
             onclick={() => toggle("helminth")}
+            oncontextmenu={(event) => {
+              if (!item?.helminth) return;
+              event.preventDefault();
+              setHelminth(null, 0);
+              picking = null;
+            }}
             data-level-cap-helminth
             >{item.helminth
               ? abilityName(item.helminth.ability)
@@ -475,6 +523,11 @@
                     : 'border-dashed border-border text-text-muted'} hover:border-info"
                 title={shard ? shardEffect(shard.type) : undefined}
                 onclick={() => toggle(`shard:${socket}`)}
+                oncontextmenu={(event) => {
+                  if (!shard) return;
+                  event.preventDefault();
+                  setShard(socket, null);
+                }}
                 data-level-cap-shard={socket}
               >
                 {#if icon}<img src={icon} alt="" class="h-5 w-5 shrink-0 object-contain" />{/if}

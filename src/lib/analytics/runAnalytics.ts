@@ -7,6 +7,7 @@ import type {
 export const ANALYTICS_MEASURES = [
   "runs",
   "squadmates",
+  "exolizersTotal",
   "exolizersAvg",
   "exolizersBest",
   "durationAvg",
@@ -30,13 +31,28 @@ export const ANALYTICS_SPLITS = [
 ] as const;
 export type AnalyticsSplit = (typeof ANALYTICS_SPLITS)[number];
 
-export const ANALYTICS_CHARTS = ["columns", "line", "ranked", "stat", "table"] as const;
+export const ANALYTICS_CHARTS = [
+  "columns",
+  "line",
+  "ranked",
+  "pie",
+  "donut",
+  "stat",
+  "table",
+] as const;
 export type AnalyticsChartKind = (typeof ANALYTICS_CHARTS)[number];
 
 export const ANALYTICS_RANGES = ["all", "30d", "90d", "365d"] as const;
 export type AnalyticsRange = (typeof ANALYTICS_RANGES)[number];
 
 export const ANALYTICS_SQUAD_FILTERS = ["all", "solo", "squad"] as const;
+
+/** Columns a card spans on the dashboard's four-column grid. */
+export const ANALYTICS_COLS = [1, 2, 3, 4] as const;
+export type AnalyticsCols = (typeof ANALYTICS_COLS)[number];
+
+export const ANALYTICS_HEIGHTS = ["short", "normal", "tall"] as const;
+export type AnalyticsHeight = (typeof ANALYTICS_HEIGHTS)[number];
 export type AnalyticsSquadFilter = (typeof ANALYTICS_SQUAD_FILTERS)[number];
 
 /** A run passes when it has (or, with `has` false, lacks) a squadmate matching
@@ -63,12 +79,22 @@ export interface AnalyticsChartSpec {
   squad: AnalyticsSquadFilter;
   /** Frames you played to keep; empty keeps every frame. */
   frames: string[];
+  /** Tags a run needs every one of, off its build or the run itself; empty keeps all. */
+  tags: string[];
   /** Every one has to hold. The first `has` condition also picks which
    *  squadmates the "squadmates" measure counts. */
   squadConditions: AnalyticsSquadCondition[];
-  /** Categories shown before the rest fold into "Other"; time splits never fold. */
+  /** Split values left out, e.g. "Operator" or a player's name. */
+  exclude: string[];
+  /** Categories shown before the rest fold into "Other"; 0 shows them all, and
+   *  time splits never fold. */
   limit: number;
-  wide: boolean;
+  cols: AnalyticsCols;
+  /** How much room the card's chart gets; a list longer than that scrolls. */
+  height: AnalyticsHeight;
+  /** Where it sits on the dashboard: its row, and its first of four columns. */
+  row: number;
+  col: number;
 }
 
 /** The theme has six chart colours, so five series plus "Other". */
@@ -128,6 +154,15 @@ const newAcc = (): Acc => ({ runs: 0, sum: 0, n: 0, max: null });
 
 const counts = (measure: AnalyticsMeasure) => measure === "runs" || measure === "squadmates";
 
+/** Slices and stacks only make a whole when the measure counts or totals something. */
+export function analyticsMeasureAddsUp(measure: AnalyticsMeasure): boolean {
+  return counts(measure) || measure === "exolizersTotal";
+}
+
+export function isAnalyticsPie(chart: AnalyticsChartKind): boolean {
+  return chart === "pie" || chart === "donut";
+}
+
 function measureOf(run: LevelCapRun, measure: AnalyticsMeasure): number | null {
   if (measure === "durationAvg") return run.durationSec;
   if (counts(measure)) return null;
@@ -144,9 +179,10 @@ function add(acc: Acc, { run }: Unit, measure: AnalyticsMeasure): void {
 }
 
 function read(acc: Acc | undefined, measure: AnalyticsMeasure): number | null {
-  if (!acc) return counts(measure) ? 0 : null;
+  if (!acc) return analyticsMeasureAddsUp(measure) ? 0 : null;
   if (counts(measure)) return acc.runs;
   if (measure === "exolizersBest") return acc.max;
+  if (measure === "exolizersTotal") return acc.sum;
   return acc.n ? acc.sum / acc.n : null;
 }
 
@@ -232,6 +268,12 @@ function squadKey(run: LevelCapRun): string {
 
 type ValuesOf = (unit: Unit) => string[];
 
+/** A run's tags: its build's, then its own. */
+function runTags(run: LevelCapRun, builds: ReadonlyMap<string, LevelCapNamedBuild>): string[] {
+  const build = run.buildId ? builds.get(run.buildId) : undefined;
+  return [...(build?.tags ?? []), ...(run.tags ?? [])];
+}
+
 function valuesFor(
   split: AnalyticsSplit,
   ctx: AnalyticsContext,
@@ -253,10 +295,7 @@ function valuesFor(
         return build ? [`${build.frame} · ${build.name}`] : [];
       };
     case "tag":
-      return ({ run }) => {
-        const build = run.buildId ? builds.get(run.buildId) : undefined;
-        return [...(build?.tags ?? []), ...(run.tags ?? [])];
-      };
+      return ({ run }) => runTags(run, builds);
     case "primary":
     case "secondary":
     case "melee":
@@ -278,6 +317,7 @@ function keepRun(
   run: LevelCapRun,
   spec: AnalyticsChartSpec,
   now: number,
+  builds: ReadonlyMap<string, LevelCapNamedBuild>,
   mates: (run: LevelCapRun) => Mate[],
 ): boolean {
   if (spec.range !== "all") {
@@ -287,6 +327,10 @@ function keepRun(
   if (spec.squad === "solo" && run.squadSize !== 1) return false;
   if (spec.squad === "squad" && !(run.squadSize !== null && run.squadSize > 1)) return false;
   if (spec.frames.length && !spec.frames.includes(run.frame)) return false;
+  if (spec.tags.length) {
+    const tags = runTags(run, builds);
+    if (!spec.tags.every((tag) => tags.includes(tag))) return false;
+  }
   return spec.squadConditions.every(
     (condition) => mates(run).some((mate) => mateMatches(mate, condition)) === condition.has,
   );
@@ -314,7 +358,7 @@ function topKeys(
         b.runs - a.runs ||
         ak.localeCompare(bk),
     )
-    .slice(0, Math.max(1, limit))
+    .slice(0, limit > 0 ? limit : undefined)
     .map(([key]) => key);
 }
 
@@ -348,6 +392,15 @@ export function analyticsSquadChoices(runs: readonly LevelCapRun[]): {
   };
 }
 
+/** Tags runs can be filtered on, most used first. */
+export function analyticsTagChoices(
+  runs: readonly LevelCapRun[],
+  builds: readonly LevelCapNamedBuild[],
+): string[] {
+  const byId = new Map(builds.map((b) => [b.id, b]));
+  return mostSeenFirst(runs.flatMap((run) => [...new Set(runTags(run, byId))]));
+}
+
 /** Filters the runs, splits them and works out the measure for every cell. */
 export function analyticsResult(
   runs: readonly LevelCapRun[],
@@ -361,7 +414,8 @@ export function analyticsResult(
     if (!list) mateCache.set(run, (list = matesOf(run, self)));
     return list;
   };
-  const kept = runs.filter((run) => keepRun(run, spec, ctx.now, mates));
+  const builds = new Map(ctx.builds.map((b) => [b.id, b]));
+  const kept = runs.filter((run) => keepRun(run, spec, ctx.now, builds, mates));
   const focus = spec.squadConditions.find((condition) => condition.has);
   const units: Unit[] =
     spec.measure === "squadmates"
@@ -374,9 +428,13 @@ export function analyticsResult(
   // A single number counts everything that passed, split or not.
   const stat = spec.chart === "stat";
   const time = !stat && isAnalyticsTimeSplit(spec.splitBy);
-  const catValues = stat ? () => [""] : valuesFor(spec.splitBy, ctx, mates);
+  // Left-out values go before anything is ranked, so they never reach "Other".
+  const drop = new Set(spec.exclude);
+  const without = (of: ValuesOf): ValuesOf =>
+    drop.size ? (unit) => of(unit).filter((value) => !drop.has(value)) : of;
+  const catValues = stat ? () => [""] : without(valuesFor(spec.splitBy, ctx, mates));
   const seriesBy = spec.seriesBy && !isAnalyticsTimeSplit(spec.seriesBy) ? spec.seriesBy : null;
-  const seriesValues = seriesBy ? valuesFor(seriesBy, ctx, mates) : () => [""];
+  const seriesValues = seriesBy ? without(valuesFor(seriesBy, ctx, mates)) : () => [""];
 
   let categories: string[];
   let catKept: Set<string> | null = null;
@@ -386,7 +444,11 @@ export function analyticsResult(
       units.map(({ run }) => run.completedAt),
     );
   } else {
-    categories = topKeys(units, catValues, spec.measure, spec.limit);
+    // A pie gets a colour per slice, so it stops where the palette does.
+    const limit = isAnalyticsPie(spec.chart)
+      ? Math.min(spec.limit || ANALYTICS_MAX_SERIES, ANALYTICS_MAX_SERIES)
+      : spec.limit;
+    categories = topKeys(units, catValues, spec.measure, limit);
     catKept = new Set(categories);
     if (hasOther(units, catValues, catKept)) categories.push(ANALYTICS_OTHER);
   }

@@ -1,5 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
-import { dialog, nativeImage, shell } from "electron";
+import { dialog, nativeImage, shell, type NativeImage } from "electron";
 
 import { assertMainRendererSender, handleAuthorized } from "./ipcSecurity";
 import ctx from "./context";
@@ -13,6 +14,12 @@ import * as itemDb from "../services/itemDatabase";
 import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
 import { levelCapCatalog } from "../services/levelCapCatalog";
+import { openUnderframeDpsWindow, prewarmUnderframe } from "../services/underframeDps";
+import {
+  sanitizeUnderframeBuild,
+  UNDERFRAME_SHARE_BASE,
+  UNDERFRAME_WEAPON_TYPES,
+} from "../config/shared/underframe";
 import {
   findModularIdentity,
   ownedModularItems,
@@ -25,8 +32,10 @@ import {
 import { captureScreenFast } from "../services/screenCapture";
 import { readExolizersFromScreenshot } from "../services/levelCapExolizerOcr";
 import { readSquadFromScreenshot } from "../services/levelCapSquadOcr";
+import { loadSharp } from "../services/sharpRuntime";
 import { withScope } from "../services/logger";
 import { loadRegionTranslation } from "../services/regionNames";
+import { normalizeErrorMessage } from "../config/shared/errors";
 import { fallbackNameFromUniqueName } from "../config/shared/displayName";
 import {
   LEVEL_CAP_ASSIGN_BUILD,
@@ -34,20 +43,30 @@ import {
   LEVEL_CAP_CREATE_BUILD,
   LEVEL_CAP_DELETE_BUILD,
   LEVEL_CAP_DELETE_RUN,
+  LEVEL_CAP_FIX_SQUADMATE,
   LEVEL_CAP_GET,
+  LEVEL_CAP_LABEL_PORTRAIT,
   LEVEL_CAP_HOTKEY,
   LEVEL_CAP_ITEM_CONFIGS,
   LEVEL_CAP_MODULAR_ITEMS,
   LEVEL_CAP_IMPORT_FOLDERS,
   LEVEL_CAP_OPEN_SCREENSHOT,
+  LEVEL_CAP_UNDERFRAME_DPS,
+  LEVEL_CAP_UNDERFRAME_PREWARM,
   LEVEL_CAP_PICK_FOLDER,
+  LEVEL_CAP_PORTRAIT_THUMB,
   LEVEL_CAP_SET_NOTES,
+  LEVEL_CAP_SQUAD_CROP,
+  LEVEL_CAP_SCREENSHOT,
   LEVEL_CAP_THUMBNAIL,
   LEVEL_CAP_UPDATE_BUILD,
   LEVEL_CAP_UPDATED,
   LEVEL_CAP_UPDATE_SETTINGS,
 } from "../config/shared/ipcChannels";
-import { LEVEL_CAP_EXOLIZER_TARGET } from "../config/shared/levelCapTypes";
+import {
+  LEVEL_CAP_EXOLIZER_TARGET,
+  LEVEL_CAP_SQUAD_CROP as SQUAD_CROP,
+} from "../config/shared/levelCapTypes";
 import type {
   LevelCapBuild,
   LevelCapBuildPatch,
@@ -55,11 +74,19 @@ import type {
   LevelCapPayload,
   LevelCapRiven,
   LevelCapSettings,
+  LevelCapSquadFixPatch,
   LevelCapSlotKind,
 } from "../config/shared/levelCapTypes";
 
 const log = withScope("levelCapIpc");
 const THUMBNAIL_WIDTH = 960;
+const SCREENSHOT_MIME: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".bmp": "image/bmp",
+};
 
 let _boundHotkey = "";
 let _readingScreenshots = false;
@@ -101,6 +128,39 @@ function abilityNameMap(): Map<string, string> {
   return names;
 }
 
+let _suitsByFolder: Map<string, string[]> | null = null;
+
+/** Warframe paths under each Powersuits folder; archwings and necramechs left out. */
+function suitsByFolder(): Map<string, string[]> {
+  if (_suitsByFolder) return _suitsByFolder;
+  const byFolder = new Map<string, string[]>();
+  try {
+    const pep = require("warframe-public-export-plus") as {
+      ExportWarframes?: Record<string, { productCategory?: string }>;
+    };
+    for (const [type, suit] of Object.entries(pep.ExportWarframes ?? {})) {
+      const folder = type.split("/")[3];
+      if (suit.productCategory !== "Suits" || !folder) continue;
+      byFolder.set(folder, [...(byFolder.get(folder) ?? []), type]);
+    }
+  } catch (err) {
+    log.warn("[LevelCap] warframe list unavailable:", String(err));
+  }
+  _suitsByFolder = byFolder;
+  return byFolder;
+}
+
+/** A squadmate's base frame from what their loadout loaded: the suit path when
+ *  it is a warframe, else the folder's base suit (Excalibur, not Umbra). */
+function squadFrame(folder: string, type: string | null): string | null {
+  const suits = suitsByFolder().get(folder) ?? [];
+  const base =
+    (type && suits.includes(type) ? type : null) ??
+    suits.find((suit) => suit.endsWith(`/${folder}`)) ??
+    [...suits].sort((a, b) => a.length - b.length)[0];
+  return base ? tracker.frameGroup(frameName(base)) : null;
+}
+
 function payload(): LevelCapPayload {
   const runs = store.getRuns();
   const builds = store.getBuilds();
@@ -129,13 +189,14 @@ function payload(): LevelCapPayload {
 function backfillRivens(inventory: unknown): boolean {
   if (!inventory) return false;
   let byWeapon: Map<string, LevelCapRiven[]> | null = null;
-  return store.backfillRivens((type) => {
+  return store.backfillRivens((type, named) => {
     // Decoding every riven is only worth it once a build turns out to need one.
     byWeapon ??= rivensByWeapon(inventory);
     const name = frameName(type).toLowerCase();
     const fits = [...byWeapon].flatMap(([weapon, rivens]) =>
       name === weapon || name.startsWith(`${weapon} `) || name.endsWith(` ${weapon}`) ? rivens : [],
     );
+    if (named) return fits.find((riven) => riven.name === named) ?? null;
     return fits.length === 1 ? fits[0] : null;
   });
 }
@@ -211,6 +272,15 @@ async function readScreenshots(): Promise<void> {
       pushUpdate();
     }
     if (squads) log.info(`[LevelCap] read ${squads} squad list(s) off screenshots`);
+    // Row positions for runs read before they were kept, for the name review.
+    const placing = store.runsAwaitingSquadRows();
+    for (const { id, screenshot } of placing) {
+      store.recordSquadRows(id, await readSquadFromScreenshot(screenshot));
+    }
+    if (placing.length) {
+      pushUpdate();
+      log.info(`[LevelCap] placed squad rows on ${placing.length} screenshot(s)`);
+    }
   } finally {
     _readingScreenshots = false;
   }
@@ -287,11 +357,36 @@ function isSettingsPatch(raw: unknown): raw is Partial<LevelCapSettings> {
   );
 }
 
+function isSquadFixPatch(raw: unknown): raw is LevelCapSquadFixPatch {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const value = raw as Record<string, unknown>;
+  return (
+    (value.name === undefined || typeof value.name === "string") &&
+    (value.frame === undefined || typeof value.frame === "string") &&
+    (value.notSquadmate === undefined || value.notSquadmate === true)
+  );
+}
+
+/** Electron decodes PNG and JPEG only; a WebP or BMP screenshot goes through sharp. */
+async function loadScreenshotImage(file: string): Promise<NativeImage | null> {
+  const image = nativeImage.createFromPath(file);
+  if (!image.isEmpty()) return image;
+  try {
+    const png = await loadSharp()(file).png().toBuffer();
+    const decoded = nativeImage.createFromBuffer(png);
+    return decoded.isEmpty() ? null : decoded;
+  } catch (err) {
+    log.warn("[LevelCap] screenshot unreadable:", normalizeErrorMessage(err));
+    return null;
+  }
+}
+
 function register(): void {
   setLevelCapRefresh(pushUpdate);
   tracker.initLevelCapTracker({
     getInventory: () => ctx.currentInventoryData,
     frameName,
+    squadFrame,
     async capture() {
       const shot = await captureScreenFast();
       return shot && !shot.image.isEmpty() ? shot.image.toPNG() : null;
@@ -441,15 +536,79 @@ function register(): void {
     return payload();
   });
 
-  handleAuthorized(LEVEL_CAP_THUMBNAIL, assertMainRendererSender, (_e, id: unknown) => {
+  handleAuthorized(LEVEL_CAP_THUMBNAIL, assertMainRendererSender, async (_e, id: unknown) => {
     const runId = asRunId(id);
     const file = store.getRuns().find((run) => run.id === runId)?.screenshot;
     if (!file) return null;
-    const image = nativeImage.createFromPath(file);
-    if (image.isEmpty()) return null;
+    const image = await loadScreenshotImage(file);
+    if (!image) return null;
     const { width } = image.getSize();
     return (width > THUMBNAIL_WIDTH ? image.resize({ width: THUMBNAIL_WIDTH }) : image).toDataURL();
   });
+
+  // The whole picture for the in-app viewer; the file's own bytes, so nothing is re-encoded.
+  handleAuthorized(LEVEL_CAP_SCREENSHOT, assertMainRendererSender, (_e, id: unknown) => {
+    const runId = asRunId(id);
+    const file = store.getRuns().find((run) => run.id === runId)?.screenshot;
+    if (!file) return null;
+    const mime = SCREENSHOT_MIME[path.extname(file).toLowerCase()];
+    if (!mime) return null;
+    try {
+      return `data:${mime};base64,${fs.readFileSync(file).toString("base64")}`;
+    } catch {
+      return null;
+    }
+  });
+
+  // The squad list's corner, at full size, so a person can read the names off it.
+  handleAuthorized(LEVEL_CAP_SQUAD_CROP, assertMainRendererSender, async (_e, id: unknown) => {
+    const runId = asRunId(id);
+    const file = store.getRuns().find((run) => run.id === runId)?.screenshot;
+    if (!file) return null;
+    const image = await loadScreenshotImage(file);
+    if (!image) return null;
+    const { width, height } = image.getSize();
+    const scale = height / 1080;
+    const x = Math.max(0, Math.round(width - SQUAD_CROP.width * scale));
+    const y = Math.round(height * SQUAD_CROP.top);
+    return image
+      .crop({ x, y, width: width - x, height: Math.round(height * SQUAD_CROP.bottom) - y })
+      .toDataURL();
+  });
+
+  handleAuthorized(
+    LEVEL_CAP_FIX_SQUADMATE,
+    assertMainRendererSender,
+    (_e, id: unknown, slot: unknown, fix: unknown) => {
+      const runId = asRunId(id);
+      if (runId && Number.isInteger(slot) && (fix === null || isSquadFixPatch(fix))) {
+        store.fixSquadmate(runId, slot as number, fix);
+      }
+      return payload();
+    },
+  );
+
+  handleAuthorized(
+    LEVEL_CAP_PORTRAIT_THUMB,
+    assertMainRendererSender,
+    (_e, id: unknown, slot: unknown) => {
+      const runId = asRunId(id);
+      const png =
+        runId && Number.isInteger(slot) ? store.portraitThumb(runId, slot as number) : null;
+      return png ? `data:image/png;base64,${png.toString("base64")}` : null;
+    },
+  );
+
+  handleAuthorized(
+    LEVEL_CAP_LABEL_PORTRAIT,
+    assertMainRendererSender,
+    (_e, portrait: unknown, frame: unknown) => {
+      if (typeof portrait === "string" && typeof frame === "string") {
+        store.labelPortrait(portrait, frame);
+      }
+      return payload();
+    },
+  );
 
   handleAuthorized(LEVEL_CAP_OPEN_SCREENSHOT, assertMainRendererSender, (_e, id: unknown) => {
     const runId = asRunId(id);
@@ -458,6 +617,40 @@ function register(): void {
     void shell.openPath(path.resolve(file));
     return { ok: true };
   });
+
+  handleAuthorized(LEVEL_CAP_UNDERFRAME_PREWARM, assertMainRendererSender, () => {
+    prewarmUnderframe();
+    return { ok: true };
+  });
+
+  handleAuthorized(
+    LEVEL_CAP_UNDERFRAME_DPS,
+    assertMainRendererSender,
+    async (_e, frame: unknown, companion: unknown, weapon: unknown, fallbackUrl: unknown) => {
+      const weaponBuild = sanitizeUnderframeBuild(weapon);
+      const frameBuild = sanitizeUnderframeBuild(frame);
+      const companionBuild = sanitizeUnderframeBuild(companion);
+      if (
+        !weaponBuild ||
+        !UNDERFRAME_WEAPON_TYPES.includes(weaponBuild.type) ||
+        typeof fallbackUrl !== "string" ||
+        !fallbackUrl.startsWith(UNDERFRAME_SHARE_BASE) ||
+        fallbackUrl.length > 16_000
+      ) {
+        return { ok: false, withFrame: false };
+      }
+      const partnerFrame = frameBuild?.type === "Warframe" ? frameBuild : null;
+      const partnerCompanion =
+        companionBuild?.type === "Sentinel" || companionBuild?.type === "Beast"
+          ? companionBuild
+          : null;
+      const opened =
+        (partnerFrame || partnerCompanion) &&
+        (await openUnderframeDpsWindow(partnerFrame, partnerCompanion, weaponBuild));
+      if (!opened) void shell.openExternal(fallbackUrl);
+      return { ok: true, withFrame: !!opened };
+    },
+  );
 }
 
 export { register };

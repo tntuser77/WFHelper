@@ -46,9 +46,14 @@ function spec(overrides: Partial<AnalyticsChartSpec> = {}): AnalyticsChartSpec {
     range: "all",
     squad: "all",
     frames: [],
+    tags: [],
     squadConditions: [],
+    exclude: [],
     limit: 10,
-    wide: false,
+    cols: 2,
+    height: "normal",
+    row: 0,
+    col: 0,
     ...overrides,
   };
 }
@@ -68,6 +73,37 @@ describe("analyticsResult", () => {
     expect(result.categories).toEqual(["Titania", "Dante", ANALYTICS_OTHER]);
     expect(result.values).toEqual([[2, 1, 2]]);
     expect(result.total).toBe(5);
+  });
+
+  it("leaves excluded values out before ranking, so they never reach Other", () => {
+    const runs = [
+      run({ frame: "Titania" }),
+      run({ frame: "Titania" }),
+      run({ frame: "Mesa" }),
+      run({ frame: "Saryn" }),
+    ];
+    const result = analyticsResult(runs, spec({ exclude: ["Titania"], limit: 1 }), ctx);
+    expect(result.categories).toEqual(["Mesa", ANALYTICS_OTHER]);
+    expect(result.values).toEqual([[1, 1]]);
+  });
+
+  it("shows every category when the limit is All", () => {
+    const runs = ["A", "B", "C", "D", "E", "F", "G"].map((frame) => run({ frame }));
+    expect(analyticsResult(runs, spec({ limit: 0 }), ctx).categories).toHaveLength(7);
+  });
+
+  it("totals Exolizers, skipping runs without a count", () => {
+    const runs = [run({ exolizers: 110 }), run({ exolizers: 108 }), run({ exolizers: null })];
+    const result = analyticsResult(runs, spec({ measure: "exolizersTotal", chart: "stat" }), ctx);
+    expect(result.total).toBe(218);
+  });
+
+  it("stops a pie at five slices plus Other", () => {
+    const runs = ["A", "B", "C", "D", "E", "F", "G"].map((frame) => run({ frame }));
+    const result = analyticsResult(runs, spec({ chart: "donut", limit: 10 }), ctx);
+    expect(result.categories).toHaveLength(6);
+    expect(result.categories[5]).toBe(ANALYTICS_OTHER);
+    expect(result.values[0][5]).toBe(2);
   });
 
   it("fills quiet weeks with zero and starts weeks on Monday", () => {
@@ -107,6 +143,47 @@ describe("analyticsResult", () => {
     expect(result.categories.sort()).toEqual(["Alaric", "Kemani", "WealthyPoet"]);
     // Solo runs have nobody to count, so the chart only covers squad runs.
     expect(result.runCount).toBe(3);
+  });
+
+  it("totals Exolizers per squadmate, crediting each run to everyone in it", () => {
+    const runs = [
+      run({ players: ["Me", "Kemani", "Alaric"], squadSize: 3, exolizers: 110 }),
+      run({ players: ["Me", "Kemani"], squadSize: 2, exolizers: 120 }),
+      run({ players: ["Me", "Alaric"], squadSize: 2, exolizers: null }),
+    ];
+    const result = analyticsResult(
+      runs,
+      spec({ measure: "exolizersTotal", splitBy: "squadmate" }),
+      ctx,
+    );
+    expect(result.categories).toEqual(["Kemani", "Alaric"]);
+    expect(result.totals).toEqual([230, 110]);
+  });
+
+  it("keeps only runs with every picked tag, from the build or the run", () => {
+    const builds = [
+      { id: "b1", frame: "Dante", name: "WP", tags: ["weapons platform"] },
+    ] as unknown as AnalyticsContext["builds"];
+    const runs = [
+      run({ buildId: "b1", tags: ["melee"] }),
+      run({ buildId: "b1", tags: ["primary"] }),
+      run({ buildId: "b1", tags: ["melee"] }),
+      run({ tags: ["melee"] }),
+      run({ tags: ["weapons platform", "secondary"] }),
+    ];
+    const result = analyticsResult(
+      runs,
+      spec({
+        splitBy: "tag",
+        chart: "pie",
+        tags: ["weapons platform"],
+        exclude: ["weapons platform"],
+      }),
+      { ...ctx, builds },
+    );
+    expect(result.categories).toEqual(["melee", "primary", "secondary"]);
+    expect(result.totals).toEqual([2, 1, 1]);
+    expect(result.runCount).toBe(4);
   });
 
   it("names squadmates' frames and keeps unlabelled ones as unknown", () => {

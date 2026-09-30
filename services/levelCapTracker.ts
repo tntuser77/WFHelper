@@ -9,6 +9,7 @@ import {
   LEVEL_CAP_EXOLIZER_TARGET,
   type LevelCapBuild,
   type LevelCapHotkeyOutcome,
+  type LevelCapLogSquadmate,
   type LevelCapRun,
   type LevelCapStatus,
 } from "../config/shared/levelCapTypes";
@@ -22,6 +23,9 @@ interface LevelCapDeps {
   getInventory(): unknown;
   /** Display name of a frame path, e.g. "Dante" for /Lotus/Powersuits/Pagemaster/Pagemaster. */
   frameName(type: string): string;
+  /** Base frame for a suit path, else for its Powersuits folder ("Cowgirl" ->
+   *  "Mesa"); null when neither is a warframe. */
+  squadFrame(folder: string, type: string | null): string | null;
   /** PNG of the game window, or null when capture failed. */
   capture(): Promise<Buffer | null>;
   onChanged(): void;
@@ -78,6 +82,34 @@ function squadSize(mission: LevelCapMission): number | null {
   return mission.players.length || null;
 }
 
+/** The squad as the log told it; your frame is the run's own, so only others get one. */
+function squadLogOf(
+  mission: LevelCapMission,
+  ownType: string | null,
+): { squadLog?: LevelCapLogSquadmate[] } {
+  const deps = _deps;
+  if (!deps || mission.squad.length < 2) return {};
+  const ownFolder = ownType?.split("/")[3] ?? null;
+  const squadLog = [...mission.squad]
+    .sort((a, b) => a.slot - b.slot)
+    .map((entry) => {
+      const mate: LevelCapLogSquadmate = { name: entry.name, slot: entry.slot };
+      if (entry.host) mate.host = true;
+      if (entry.local) {
+        mate.you = true;
+        return mate;
+      }
+      const loaded = entry.suitFolder ? deps.squadFrame(entry.suitFolder, entry.suitType) : null;
+      const levelFolder = entry.levelLoadFolders.find((folder) => folder !== ownFolder);
+      const guessed = !loaded && levelFolder ? deps.squadFrame(levelFolder, null) : null;
+      const frame = loaded ?? guessed;
+      if (frame) mate.frame = frame;
+      if (frame && frame === guessed) mate.frameGuess = true;
+      return mate;
+    });
+  return { squadLog };
+}
+
 /** Loadouts always name the equipped archgun; a build only keeps one it used. */
 function withoutArchgun(build: LevelCapBuild | null): LevelCapBuild | null {
   return build && { ...build, archgun: null };
@@ -102,6 +134,8 @@ function finishMission(mission: LevelCapMission): void {
       run.durationSec = durationSec;
       run.squadSize = squadSize(mission) ?? run.squadSize;
       if (mission.players.length) run.players = [...mission.players];
+      const { squadLog } = squadLogOf(mission, playedType ?? run.frameType);
+      if (squadLog) run.squadLog = squadLog;
       run.tile = mission.tile ?? run.tile;
       run.archgunUsed = archgunUsed;
       // The XP line names the frame that actually played; trust it over the
@@ -137,6 +171,7 @@ function finishMission(mission: LevelCapMission): void {
     durationSec,
     squadSize: squadSize(mission),
     ...playersOf(mission),
+    ...squadLogOf(mission, frameOf(build).frameType),
     tile: mission.tile,
     archgunUsed,
     build,
@@ -158,7 +193,7 @@ export function processLevelCapLine(line: string, source: "dbwin" | "file"): voi
       _inMission = true;
       changed = true;
     } else {
-      // Squadmates' frames are not read from the log yet; keep samples to learn from.
+      // Squad samples to check the squad parser against.
       if (event.mission.players.length > 1) store.saveSquadLog(_logLines.join("\n"));
       _logLines = [];
       _inMission = false;
@@ -248,6 +283,7 @@ async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome |
     durationSec: null,
     squadSize: squadSize(mission),
     ...playersOf(mission),
+    ...squadLogOf(mission, frameType),
     tile: mission.tile,
     archgunUsed: false,
     build,

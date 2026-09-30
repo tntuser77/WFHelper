@@ -28,6 +28,8 @@
   let importing = $state(false);
   let frameSearch = $state("");
   let openFrame = $state<string | null>(null);
+  /** Build and slot to open the frame window's editor on, from a gear click. */
+  let openBuild = $state<{ id: string; slot: string } | null>(null);
 
   onMount(() => {
     void loadLevelCap().catch((err) => log.warn("[LevelCap] load failed", String(err)));
@@ -237,7 +239,14 @@
         builds={buildsByFrame[row.frame] ?? []}
         {searchTerms}
         tagOrder={tagSuggestions}
-        onOpen={() => (openFrame = row.frame)}
+        onOpen={() => {
+          openBuild = null;
+          openFrame = row.frame;
+        }}
+        onOpenBuild={(id, slot) => {
+          openBuild = { id, slot };
+          openFrame = row.frame;
+        }}
         onSearchTag={searchTag}
         onClearTag={clearTag}
       />
@@ -254,6 +263,8 @@
     {searchTerms}
     {tagSuggestions}
     {abilityNames}
+    initialBuild={openBuild?.id ?? null}
+    initialSlot={openBuild?.slot ?? null}
     onClose={() => (openFrame = null)}
   />
 {/if}

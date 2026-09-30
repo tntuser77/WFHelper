@@ -7,6 +7,8 @@ import {
   ANALYTICS_UNKNOWN,
   type AnalyticsChartKind,
   type AnalyticsChartSpec,
+  type AnalyticsCols,
+  type AnalyticsHeight,
   type AnalyticsMeasure,
   type AnalyticsRange,
   type AnalyticsSplit,
@@ -17,6 +19,7 @@ import {
 export const MEASURE_LABEL: Record<AnalyticsMeasure, MessageKey> = {
   runs: "analytics.measure.runs",
   squadmates: "analytics.measure.squadmates",
+  exolizersTotal: "analytics.measure.exolizersTotal",
   exolizersAvg: "analytics.measure.exolizersAvg",
   exolizersBest: "analytics.measure.exolizersBest",
   durationAvg: "analytics.measure.durationAvg",
@@ -41,8 +44,31 @@ export const CHART_LABEL: Record<AnalyticsChartKind, MessageKey> = {
   columns: "analytics.chart.columns",
   line: "analytics.chart.line",
   ranked: "analytics.chart.ranked",
+  pie: "analytics.chart.pie",
+  donut: "analytics.chart.donut",
   stat: "analytics.chart.stat",
   table: "analytics.chart.table",
+};
+
+export const HEIGHT_LABEL: Record<AnalyticsHeight, MessageKey> = {
+  short: "analytics.height.short",
+  normal: "common.normal",
+  tall: "analytics.height.tall",
+};
+
+/** Chart area per card height, the same for every chart kind so cards in a
+ *  row line up. Each fits whole ranked rows (28px apart): 6, 9 and 14. */
+export const ANALYTICS_PLOT_PX: Record<AnalyticsHeight, number> = {
+  short: 164,
+  normal: 248,
+  tall: 388,
+};
+
+export const WIDTH_LABEL: Record<AnalyticsCols, MessageKey> = {
+  1: "analytics.width.quarter",
+  2: "analytics.halfWidth",
+  3: "analytics.width.threeQuarters",
+  4: "layout.spanFull",
 };
 
 export const RANGE_LABEL: Record<AnalyticsRange, MessageKey> = {

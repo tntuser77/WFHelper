@@ -2,6 +2,7 @@ import { unwrapInventoryPayload } from "../config/shared/inventoryPayload";
 import { asRecord } from "../config/shared/objectValidation";
 import { toNonEmptyString } from "../config/shared/stringValidation";
 import { decodeRivenUpgrade } from "./rivenFingerprint";
+import { NON_PERCENTAGE_TAGS } from "./rivenConstants";
 import { isLevelCapRivenType } from "../config/shared/levelCapBuild";
 import type {
   LevelCapBuild,
@@ -72,6 +73,15 @@ function decodeRiven(type: string | null, fingerprint: unknown) {
   return decodeRivenUpgrade({ ItemType: type, UpgradeFingerprint: fingerprint });
 }
 
+/** The card's number as a plain fraction: a multiplier shows x1.3 for +0.3, and
+ *  only the range-like stats skip the percent. */
+function rawBonus(stat: { tag: string; displayValue: number; multiplier: boolean }): number {
+  if (stat.multiplier) return Math.round((stat.displayValue - 1) * 1e4) / 1e4;
+  return NON_PERCENTAGE_TAGS.has(stat.tag)
+    ? stat.displayValue
+    : Math.round(stat.displayValue * 10) / 1000;
+}
+
 /** A riven's rolled stats from its inventory entry, for freezing into the build. */
 function rivenOf(type: string | null, fingerprint: unknown): LevelCapRiven | undefined {
   const decoded = decodeRiven(type, fingerprint);
@@ -86,7 +96,11 @@ function rivenOf(type: string | null, fingerprint: unknown): LevelCapRiven | und
       value: stat.displayValue,
       positive: stat.positive,
       multiplier: stat.multiplier,
+      tag: stat.tag,
+      raw: rawBonus(stat),
     })),
+    rank: decoded.currentRank,
+    disposition: decoded.disposition,
   };
 }
 
@@ -138,7 +152,45 @@ function indexInventory(inventory: Json) {
       if (id && item) items.set(`${category}:${id}`, item);
     }
   }
-  return { upgrades, items };
+  // Highest evolution per weapon; a Genesis weapon's sits on its base weapon.
+  const evolutions = new Map<string, number>();
+  for (const entry of array(inventory.EvolutionProgress).slice(0, 1000)) {
+    const row = asRecord(entry);
+    const type = lotusPath(row?.ItemType);
+    if (type && typeof row?.Rank === "number" && Number.isFinite(row.Rank)) {
+      evolutions.set(type, row.Rank);
+    }
+  }
+  return { upgrades, items, evolutions };
+}
+
+let weaponParents: Record<string, { parentName?: string }> | null = null;
+
+function weaponParent(type: string): string | undefined {
+  try {
+    weaponParents ??=
+      (
+        require("warframe-public-export-plus") as {
+          ExportWeapons?: Record<string, { parentName?: string }>;
+        }
+      ).ExportWeapons ?? {};
+  } catch {
+    weaponParents = {};
+  }
+  return weaponParents[type]?.parentName;
+}
+
+/** Perk picks from the weapon's SkillTree, one digit per evolution starting at I
+ *  (whose digit is always 0): four for a Genesis weapon, five for a Zariman one.
+ *  Only the evolutions unlocked so far count; with no progress row the weapon is
+ *  taken as complete. */
+function incarnonPerks(index: InventoryIndex, type: string, skillTree: unknown): number[] | null {
+  if (typeof skillTree !== "string" || !/^[0-9]{4,5}$/.test(skillTree)) return null;
+  const parent = weaponParent(type);
+  const rank = index.evolutions.get(type) ?? (parent ? index.evolutions.get(parent) : undefined);
+  // Rank counts from 0 and runs one past the last evolution once it is done.
+  const unlocked = rank === undefined ? skillTree.length : Math.min(skillTree.length, rank + 1);
+  return [...skillTree].map(Number).slice(0, unlocked);
 }
 
 type InventoryIndex = ReturnType<typeof indexInventory>;
@@ -197,6 +249,10 @@ function readItem(
         : [];
     });
     if (shards.length) item.shards = shards;
+  }
+  if (kind === "primary" || kind === "secondary" || kind === "melee") {
+    const perks = incarnonPerks(index, type, raw.SkillTree);
+    if (perks) item.incarnon = perks;
   }
   return item;
 }

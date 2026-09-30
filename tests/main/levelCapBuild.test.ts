@@ -160,6 +160,12 @@ describe("levelCapBuild", () => {
     const riven = snapshotEquippedBuild(inventory)?.secondary?.upgrades.find((u) => u.riven)?.riven;
     expect(riven?.name).toMatch(/^Braton /);
     expect(riven?.stats.map((s) => s.positive)).toEqual([true, false]);
+    // Enough to rebuild the roll elsewhere: its rank, disposition, and each bonus as a fraction.
+    expect(riven?.rank).toBe(8);
+    expect(riven?.disposition).toBeGreaterThan(0);
+    expect(riven?.stats.map((s) => s.tag)).toEqual(["WeaponFireDamageMod", "WeaponFireRateMod"]);
+    for (const stat of riven?.stats ?? []) expect(stat.raw).toBeCloseTo(stat.value / 100, 2);
+    expect(riven?.stats[1].raw).toBeLessThan(0);
     expect([...rivensByWeapon(inventory).keys()]).toEqual(["braton"]);
   });
 
@@ -181,5 +187,47 @@ describe("levelCapBuild", () => {
     expect(snapshotEquippedBuild(null)).toBeNull();
     expect(snapshotEquippedBuild({ LoadOutPresets: "nope" })).toBeNull();
     expect(ownedSuitTypes(undefined)).toEqual([]);
+  });
+});
+
+describe("levelCapBuild incarnon evolutions", () => {
+  const LAETUM = "/Lotus/Weapons/Tenno/Zariman/Pistols/HeavyPistol/ZarimanHeavyPistol";
+  const LEX_PRIME = "/Lotus/Weapons/Tenno/Pistols/PrimeLex/PrimeLex";
+  // The export names Lex Prime's parent, which is where its progress row sits.
+  const LEX = "/Lotus/Weapons/Tenno/Pistol/HeavyPistol";
+  const inventory = (evolutions: unknown[], weapons: Array<[string, string]>) => ({
+    Suits: [],
+    EvolutionProgress: evolutions,
+    Pistols: weapons.map(([type, tree], n) => ({
+      ItemType: type,
+      ItemId: { $oid: `pistol${n}` },
+      // The editor only offers copies carrying mods.
+      Configs: [{ Upgrades: ["/Lotus/Upgrades/Mods/Pistol/WeaponDamageAmountMod"] }],
+      SkillTree: tree,
+    })),
+  });
+  const perks = (inv: unknown, type: string) =>
+    snapshotItemConfigs(inv, "secondary", type)[0]?.incarnon;
+
+  it("reads the perk picked at each evolution", () => {
+    const inv = inventory(
+      [{ ItemType: LAETUM, Rank: 5 }],
+      [
+        [LAETUM, "00022"],
+        [LEX_PRIME, "0102"],
+      ],
+    );
+    expect(perks(inv, LAETUM)).toEqual([0, 0, 0, 2, 2]);
+    // A Genesis tree stops at IV, and no progress row means it is complete.
+    expect(perks(inv, LEX_PRIME)).toEqual([0, 1, 0, 2]);
+  });
+
+  it("stops at the evolutions unlocked so far, looking at the parent for a Genesis weapon", () => {
+    const inv = inventory([{ ItemType: LEX, Rank: 2 }], [[LEX_PRIME, "0102"]]);
+    expect(perks(inv, LEX_PRIME)).toEqual([0, 1, 0]);
+  });
+
+  it("ignores weapons without an Incarnon", () => {
+    expect(perks(inventory([], [[LAETUM, ""]]), LAETUM)).toBeUndefined();
   });
 });

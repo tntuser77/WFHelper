@@ -8,7 +8,7 @@ import { fallbackNameFromUniqueName } from "../../config/shared/displayName.js";
 import { itemLabel } from "./itemLabel.js";
 
 /** What names and pictures a build item: its type, plus the parts of a modular build. */
-export type LevelCapItemRef = Pick<LevelCapItem, "type" | "parts" | "customName">;
+type LevelCapItemRef = Pick<LevelCapItem, "type" | "parts" | "customName">;
 
 type ItemArt = Record<
   string,
@@ -58,10 +58,29 @@ const LEVEL_CAP_CARD_SLOTS = ["primary", "secondary", "melee", "archgun", "compa
 
 type LevelCapCardSlot = (typeof LEVEL_CAP_CARD_SLOTS)[number];
 
+export interface LevelCapGearItemUse {
+  item: LevelCapItemRef;
+  count: number;
+  /** Builds that ran it, most-used first; a run without a build counts under null. */
+  builds: Array<{ id: string | null; count: number }>;
+  /** Whether every run had the same mods on it; ranks aside, as builds compare. */
+  sameMods: boolean;
+  /** Weapons a companion carried, most-used first; empty for anything else. */
+  weapons: LevelCapItemRef[];
+}
+
 interface LevelCapGearUse {
   slot: LevelCapCardSlot;
   /** Every item run in this slot, most-used first; empty when the slot was never filled. */
-  items: Array<{ item: LevelCapItemRef; count: number }>;
+  items: LevelCapGearItemUse[];
+}
+
+/** An item's mods by slot, ranks left out, to tell two builds' copies apart. */
+function modsKey(item: LevelCapItem): string {
+  return [...item.upgrades]
+    .sort((a, b) => a.slot - b.slot)
+    .map((u) => `${u.slot}:${u.type ?? ""}:${u.riven?.name ?? ""}`)
+    .join("|");
 }
 
 /** What a frame's runs carried in each card slot. A frame run with several
@@ -69,18 +88,51 @@ interface LevelCapGearUse {
  * archgun slot only shows when some build carries one. */
 export function levelCapGearUse(runs: readonly LevelCapRun[]): LevelCapGearUse[] {
   const gear = LEVEL_CAP_CARD_SLOTS.map((slot) => {
-    const counts = new Map<string, { item: LevelCapItemRef; count: number }>();
+    const counts = new Map<
+      string,
+      {
+        item: LevelCapItemRef;
+        count: number;
+        byBuild: Map<string | null, number>;
+        mods: Set<string>;
+        weapons: Map<string, { item: LevelCapItemRef; count: number }>;
+      }
+    >();
     for (const run of runs) {
       const item = run.build?.[slot];
       if (!item) continue;
       const key = levelCapItemKey(item);
-      const entry = counts.get(key) ?? { item, count: 0 };
+      const entry = counts.get(key) ?? {
+        item,
+        count: 0,
+        byBuild: new Map(),
+        mods: new Set(),
+        weapons: new Map(),
+      };
       entry.count++;
+      const buildId = run.buildId ?? null;
+      entry.byBuild.set(buildId, (entry.byBuild.get(buildId) ?? 0) + 1);
+      entry.mods.add(modsKey(item));
+      if (item.weapon) {
+        const weaponKey = levelCapItemKey(item.weapon);
+        const weapon = entry.weapons.get(weaponKey) ?? { item: item.weapon, count: 0 };
+        weapon.count++;
+        entry.weapons.set(weaponKey, weapon);
+      }
       counts.set(key, entry);
     }
-    const items = [...counts.values()].sort(
-      (a, b) => b.count - a.count || levelCapItemKey(a.item).localeCompare(levelCapItemKey(b.item)),
-    );
+    const items = [...counts.values()]
+      .sort(
+        (a, b) =>
+          b.count - a.count || levelCapItemKey(a.item).localeCompare(levelCapItemKey(b.item)),
+      )
+      .map(({ item, count, byBuild, mods, weapons }) => ({
+        item,
+        count,
+        builds: [...byBuild].map(([id, n]) => ({ id, count: n })).sort((a, b) => b.count - a.count),
+        sameMods: mods.size === 1,
+        weapons: [...weapons.values()].sort((a, b) => b.count - a.count).map((w) => w.item),
+      }));
     return { slot, items };
   });
   return gear.filter(({ slot, items }) => slot !== "archgun" || items.length);

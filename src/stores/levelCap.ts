@@ -6,6 +6,7 @@ import type {
   LevelCapBuildSource,
   LevelCapItem,
   LevelCapSlotKind,
+  LevelCapSquadFixPatch,
 } from "../../config/shared/levelCapTypes.js";
 import type { LevelCapCatalog, LevelCapPayload, LevelCapSettings } from "../types/ipc.js";
 
@@ -62,6 +63,20 @@ export function loadLevelCapCatalog(): Promise<LevelCapCatalog> {
     throw err;
   });
   return _catalog;
+}
+
+/** Corrects one squad row of a run; null hands the row back to the screenshot read. */
+export async function fixLevelCapSquadmate(
+  id: string,
+  slot: number,
+  fix: LevelCapSquadFixPatch | null,
+): Promise<void> {
+  levelCap.set(await invoke("fixLevelCapSquadmate", id, slot, fix));
+}
+
+/** Names a portrait look's frame; every squadmate with a portrait like it follows. */
+export async function labelLevelCapPortrait(portrait: string, frame: string): Promise<void> {
+  levelCap.set(await invoke("labelLevelCapPortrait", portrait, frame));
 }
 
 export async function deleteLevelCapRun(id: string): Promise<void> {

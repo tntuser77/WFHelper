@@ -3,9 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 
-import { resolveSquadNames } from "./levelCapSquadNames";
+import { cleanSquadRead, matchRowsToPlayers, resolveSquadNames } from "./levelCapSquadNames";
 import type { SquadScreenshotRead } from "./levelCapSquadOcr";
 import { groupPortraits, isPortrait } from "./levelCapSquadPortraits";
+import { guessLevelCapTags, newlyGuessedLevelCapTags } from "./levelCapTagGuess";
 import { userDataPath } from "./userDataPath";
 import { writeFileAtomicSync } from "./atomicFile";
 import { normalizeRunNotes, normalizeRunTags } from "./runAnnotations";
@@ -22,6 +23,7 @@ import type {
   LevelCapBuildPatch,
   LevelCapImportResult,
   LevelCapItem,
+  LevelCapLogSquadmate,
   LevelCapNamedBuild,
   LevelCapPortraitLabel,
   LevelCapSquadFix,
@@ -35,7 +37,7 @@ const log = withScope("levelCapStore");
 
 const INDEX_FILE = "level-cap-runs.json";
 // 2: builds are named records runs point at; 1 kept a loose copy per run.
-const INDEX_SCHEMA_VERSION = 2;
+const INDEX_SCHEMA_VERSION = 5;
 const MAX_BUILD_NAME = 48;
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp"]);
 /** Folders the old sorter script left beside the frame folders. */
@@ -120,8 +122,13 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
     out.squadPortraits = run.squadPortraits.slice(0, 4).map((p) => (isPortrait(p) ? p : null));
   }
   if (Array.isArray(run.squadmates)) out.squadmates = normalizeSquadmates(run.squadmates);
+  delete out.squadLog;
+  const squadLog = Array.isArray(run.squadLog) ? normalizeSquadLog(run.squadLog) : [];
+  if (squadLog.length) out.squadLog = squadLog;
   delete out.squadReader;
   if (typeof run.squadReader === "number") out.squadReader = run.squadReader;
+  delete out.squadRows;
+  if (Array.isArray(run.squadRows)) out.squadRows = normalizeSquadRows(run.squadRows);
   delete out.squadFixes;
   const fixes = Array.isArray(run.squadFixes) ? normalizeSquadFixes(run.squadFixes) : [];
   if (fixes.length) out.squadFixes = fixes;
@@ -155,9 +162,44 @@ function normalizeSquadReads(raw: unknown[]): string[][] {
 
 function normalizeSquadmates(raw: unknown[]): LevelCapSquadmate[] {
   const text = (value: unknown) => (typeof value === "string" && value ? value.slice(0, 64) : null);
-  return raw.slice(0, 4).map((entry) => {
+  return raw.slice(0, 8).map((entry) => {
     const value = (entry ?? {}) as Record<string, unknown>;
-    return { name: text(value.name), portrait: text(value.portrait), frame: text(value.frame) };
+    const mate: LevelCapSquadmate = {
+      name: text(value.name),
+      portrait: text(value.portrait),
+      frame: text(value.frame),
+    };
+    if (Number.isInteger(value.slot)) mate.slot = value.slot as number;
+    return mate;
+  });
+}
+
+function normalizeSquadLog(raw: unknown[]): LevelCapLogSquadmate[] {
+  return raw.slice(0, 8).flatMap((entry) => {
+    const value = (entry ?? {}) as Record<string, unknown>;
+    if (typeof value.name !== "string" || !value.name.trim()) return [];
+    if (!Number.isInteger(value.slot)) return [];
+    const mate: LevelCapLogSquadmate = {
+      name: value.name.trim().slice(0, 64),
+      slot: value.slot as number,
+    };
+    if (value.host === true) mate.host = true;
+    if (value.you === true) mate.you = true;
+    if (typeof value.frame === "string" && value.frame) mate.frame = value.frame.slice(0, 64);
+    if (value.frameGuess === true && mate.frame) mate.frameGuess = true;
+    return [mate];
+  });
+}
+
+function normalizeSquadRows(raw: unknown[]): Array<{ top: number; bottom: number }> {
+  const fraction = (v: unknown) => typeof v === "number" && v >= 0 && v <= 1;
+  return raw.slice(0, 4).flatMap((entry) => {
+    const value = (entry ?? {}) as Record<string, unknown>;
+    return fraction(value.top) &&
+      fraction(value.bottom) &&
+      (value.bottom as number) > (value.top as number)
+      ? [{ top: value.top as number, bottom: value.bottom as number }]
+      : [];
   });
 }
 
@@ -228,8 +270,16 @@ function newBuild(frame: string, build: LevelCapBuild, name?: string): LevelCapN
     name: buildName(name) ?? nextLevelCapBuildName(taken),
     build: structuredClone(build),
   };
+  addBuildTags(record, guessLevelCapTags(build));
   _builds.push(record);
   return record;
+}
+
+/** Adds tags after the build's own; a tag it already has keeps the player's casing. */
+function addBuildTags(record: LevelCapNamedBuild, tags: string[]): void {
+  if (!tags.length) return;
+  const merged = normalizeRunTags([...(record.tags ?? []), ...tags]);
+  if (merged.length) record.tags = merged;
 }
 
 function stamp(run: LevelCapRun, record: LevelCapNamedBuild): void {
@@ -244,10 +294,21 @@ function stamp(run: LevelCapRun, record: LevelCapNamedBuild): void {
 function linkByLoadout(run: LevelCapRun): void {
   if (!run.build) return;
   const key = levelCapBuildKey(run.build);
-  const record =
-    _builds.find((b) => b.frame === run.frame && levelCapBuildKey(b.build) === key) ??
-    newBuild(run.frame, run.build);
-  stamp(run, record);
+  const found = _builds.find((b) => b.frame === run.frame && levelCapBuildKey(b.build) === key);
+  if (found) fillIncarnon(found.build, run.build);
+  stamp(run, found ?? newBuild(run.frame, run.build));
+}
+
+/** Builds saved before Incarnon perks were read pick them up from the next run
+ *  on that loadout; perks the player set stay. */
+function fillIncarnon(target: LevelCapBuild, source: LevelCapBuild): void {
+  for (const kind of ["primary", "secondary", "melee"] as const) {
+    const item = target[kind];
+    const perks = source[kind]?.incarnon;
+    if (item && perks?.length && !item.incarnon && source[kind]?.type === item.type) {
+      item.incarnon = [...perks];
+    }
+  }
 }
 
 /** Run tags move to the build a checked run belongs to. */
@@ -288,13 +349,17 @@ function ensureLoaded(): void {
     _frameNotes = normalizeFrameNotes(parsed.frameNotes);
     _portraitLabels = normalizePortraitLabels(parsed.portraitLabels);
     const version = typeof parsed.schemaVersion === "number" ? parsed.schemaVersion : 1;
-    if (version < 2) {
-      // Keep the pre-migration index untouched in case the grouping is ever wrong.
+    if (version < INDEX_SCHEMA_VERSION) {
+      // Keep the pre-migration index untouched in case a migration is ever wrong.
       const legacy = userDataPath(`level-cap-runs.v${version}.json`);
       if (!fs.existsSync(legacy)) fs.copyFileSync(userDataPath(INDEX_FILE), legacy);
-      migrateLooseBuilds();
+      if (version < 2) {
+        migrateLooseBuilds();
+        log.info(`[LevelCap] grouped ${_runs.length} runs into ${_builds.length} named builds`);
+      }
+      // Versions 3+: builds get the tags that guessing rules newer than the index imply.
+      for (const record of _builds) addBuildTags(record, guessLevelCapTags(record.build, version));
       save();
-      log.info(`[LevelCap] grouped ${_runs.length} runs into ${_builds.length} named builds`);
     }
     // A build deleted by hand leaves its runs unassigned, never pointing nowhere.
     const known = new Set(_builds.map((b) => b.id));
@@ -339,10 +404,51 @@ function namesFromLiveRuns(): string[] {
     .map(([name]) => name);
 }
 
+/** Your own name: the log marks it, else it is the one name every live run has. */
+function selfNames(): Set<string> {
+  const marked = _runs.flatMap(
+    (run) => run.squadLog?.flatMap((mate) => (mate.you ? [mate.name] : [])) ?? [],
+  );
+  if (marked.length) return new Set(marked);
+  const live = _runs.filter((run) => run.players?.length && !run.playersFromScreenshot);
+  if (live.length < 2) return new Set();
+  const counts = new Map<string, number>();
+  for (const run of live)
+    for (const name of new Set(run.players)) counts.set(name, (counts.get(name) ?? 0) + 1);
+  return new Set([...counts].filter(([, count]) => count === live.length).map(([name]) => name));
+}
+
+/** The exact names a run's log gave for your squadmates; empty for runs with no log. */
+function loggedSquadmates(run: LevelCapRun, self: Set<string>): string[] {
+  if (run.squadLog?.length) return run.squadLog.flatMap((mate) => (mate.you ? [] : [mate.name]));
+  if (!run.players?.length || run.playersFromScreenshot) return [];
+  return run.players.filter((name) => !self.has(name));
+}
+
+/** The frame the log gave a player; a host's guessed one only when nothing better is known. */
+function logFrame(run: LevelCapRun, name: string | null, guesses: boolean): string | null {
+  const mate = name ? run.squadLog?.find((entry) => entry.name === name) : undefined;
+  if (!mate?.frame || (mate.frameGuess === true) !== guesses) return null;
+  return mate.frame;
+}
+
+/** Log players no screenshot row was pinned to, so their names and frames still count. */
+function unplacedLogSquadmates(run: LevelCapRun, placed: Set<string>): LevelCapSquadmate[] {
+  return (run.squadLog ?? []).flatMap((mate) =>
+    mate.you || placed.has(mate.name)
+      ? []
+      : [{ name: mate.name, portrait: null, frame: mate.frame ?? null }],
+  );
+}
+
 /** Re-pins every screenshot run's squad, since each learned name can fix old reads. */
 function resolveScreenshotSquads(): void {
+  for (const run of _runs) {
+    if (!run.squadReads && run.squadLog) run.squadmates = unplacedLogSquadmates(run, new Set());
+  }
   const read = _runs.filter((run) => run.squadReads);
   if (!read.length) return;
+  const self = selfNames();
   const known = [...new Set([...getSettings().knownPlayers, ...namesFromLiveRuns()])];
   const resolved = resolveSquadNames(
     read.map((run) => run.squadReads ?? []),
@@ -359,24 +465,46 @@ function resolveScreenshotSquads(): void {
   const groups = groupPortraits(portraits, _portraitLabels);
   read.forEach((run, i) => {
     const fixes = fixesOf(run);
-    run.squadmates = resolved[i].slots.flatMap((name, slot) => {
+    // A logged run's rows can only be the players its log named.
+    const own = loggedSquadmates(run, self);
+    const names = own.length ? matchRowsToPlayers(run.squadReads ?? [], own) : resolved[i].slots;
+    const allPlaced = own.length > 0 && own.every((name) => names.includes(name));
+    run.squadmates = names.flatMap((read, slot) => {
       const fix = fixes.get(slot);
       if (fix?.notSquadmate) return [];
+      const name = fix?.name ?? read;
+      // On a logged run an unnamed row is a companion or nametag once every
+      // logged player is placed, or when nothing on it reads as a name.
+      const noName = !run.squadReads?.[slot]?.some((raw) => cleanSquadRead(raw));
+      if (own.length && name === null && !fix && (allPlaced || noName)) return [];
       const group = groups.get(`${run.id}:${slot}`);
       return [
         {
-          name: fix?.name ?? name,
+          name,
           portrait: group?.group ?? null,
-          frame: fix?.frame ?? group?.frame ?? null,
+          frame:
+            fix?.frame ??
+            logFrame(run, name, false) ??
+            group?.frame ??
+            logFrame(run, name, true) ??
+            null,
+          slot,
         },
       ];
     });
     // Fixes past the rows read are squadmates the reader missed outright.
-    const readRows = resolved[i].slots.length;
+    const readRows = names.length;
     for (const fix of run.squadFixes ?? []) {
       if (fix.slot < readRows || fix.notSquadmate) continue;
-      run.squadmates.push({ name: fix.name ?? null, portrait: null, frame: fix.frame ?? null });
+      run.squadmates.push({
+        name: fix.name ?? null,
+        portrait: null,
+        frame: fix.frame ?? null,
+        slot: fix.slot,
+      });
     }
+    const placed = new Set(run.squadmates.flatMap((mate) => (mate.name ? [mate.name] : [])));
+    run.squadmates.push(...unplacedLogSquadmates(run, placed));
     if (run.players?.length && !run.playersFromScreenshot) return;
     const players = [...new Set(run.squadmates.flatMap((mate) => (mate.name ? [mate.name] : [])))];
     if (players.length) {
@@ -515,11 +643,12 @@ export function updateRun(id: string, mutate: (run: LevelCapRun) => void): Level
   return run;
 }
 
-/** Imported runs whose screenshot has not been read for the Exolizer count yet. */
+/** Runs without an Exolizer count whose screenshot has not been read for it yet:
+ *  imports, and hotkey runs from a squad client's log, which never has the count. */
 export function runsAwaitingExolizerRead(): Array<{ id: string; screenshot: string }> {
   ensureLoaded();
   return _runs.flatMap((run) =>
-    run.source === "import" && run.exolizers === null && !run.exolizerOcr && run.screenshot
+    run.exolizers === null && !run.exolizerOcr && run.screenshot
       ? [{ id: run.id, screenshot: run.screenshot }]
       : [],
   );
@@ -568,12 +697,35 @@ export function runsAwaitingSquadRead(): Array<{ id: string; screenshot: string 
   );
 }
 
+/** Screenshot runs read before row positions were kept. */
+export function runsAwaitingSquadRows(): Array<{ id: string; screenshot: string }> {
+  ensureLoaded();
+  return _runs.flatMap((run) =>
+    run.screenshot && run.squadOcr === "read" && run.squadReads && !run.squadRows
+      ? [{ id: run.id, screenshot: run.screenshot }]
+      : [],
+  );
+}
+
+/** Takes only the row positions from a fresh read, and only when it found the
+ *  same rows as the saved read: fixes are pinned to rows by their order. */
+export function recordSquadRows(id: string, read: SquadScreenshotRead | null): void {
+  updateRun(id, (run) => {
+    const same =
+      !!read &&
+      !!read.rows &&
+      JSON.stringify(normalizeSquadReads(read.names)) === JSON.stringify(run.squadReads);
+    run.squadRows = same ? normalizeSquadRows(read.rows ?? []) : [];
+  });
+}
+
 /** Keeps the raw reads and portraits; who and what they are is worked out on
  *  every save. A failed read is remembered so it is not retried. */
 export function recordSquadRead(id: string, read: SquadScreenshotRead | null): LevelCapRun | null {
   return updateRun(id, (run) => {
     run.squadOcr = read ? "read" : "unreadable";
     run.squadReader = SQUAD_READER;
+    if (read?.rows) run.squadRows = normalizeSquadRows(read.rows);
     if (!read) return;
     run.squadReads = normalizeSquadReads(read.names);
     run.squadPortraits = read.portraits.slice(0, 4);
@@ -589,6 +741,16 @@ function writePortraitThumb(name: string, png: Buffer): void {
     fs.writeFileSync(userDataPath(PORTRAIT_DIR, name), png);
   } catch (err) {
     log.warn("[LevelCap] portrait not saved:", normalizeErrorMessage(err));
+  }
+}
+
+/** The thumbnail saved beside a squad row when it was read, if there is one. */
+export function portraitThumb(id: string, slot: number): Buffer | null {
+  if (!/^[\w-]+$/.test(id) || !Number.isInteger(slot) || slot < 0 || slot > 3) return null;
+  try {
+    return fs.readFileSync(userDataPath(PORTRAIT_DIR, `${id}-${slot}.png`));
+  } catch {
+    return null;
   }
 }
 
@@ -696,6 +858,7 @@ export function updateBuild(id: string, patch: LevelCapBuildPatch): LevelCapName
   }
   const build = patch.build === undefined ? null : normalizeLevelCapBuild(patch.build);
   if (build) {
+    addBuildTags(record, newlyGuessedLevelCapTags(record.build, build));
     record.build = build;
     for (const run of _runs) if (run.buildId === id) stamp(run, record);
   }
@@ -717,17 +880,21 @@ function itemsOf(build: LevelCapBuild | null): LevelCapItem[] {
   return items.filter((item): item is LevelCapItem => item !== null);
 }
 
-/** Builds from before rivens were captured name the riven but not its stats; fill
- * them from the inventory when the lookup is sure which riven it was. */
-export function backfillRivens(find: (weaponType: string) => LevelCapRiven | null): boolean {
+/** Builds from before rivens were captured name the riven but not its stats, and
+ * later ones lack the full roll; fill both from the inventory when the lookup is
+ * sure which riven it was. `named` is the saved riven's name, when it has one. */
+export function backfillRivens(
+  find: (weaponType: string, named?: string) => LevelCapRiven | null,
+): boolean {
   ensureLoaded();
   let changed = false;
   for (const build of [..._builds.map((b) => b.build), ..._runs.map((r) => r.build)]) {
     for (const item of itemsOf(build)) {
       for (const upgrade of item.upgrades) {
-        if (upgrade.riven || !isLevelCapRivenType(upgrade.type)) continue;
-        const riven = find(item.type);
-        if (!riven) continue;
+        const partial = upgrade.riven && upgrade.riven.rank === undefined;
+        if ((upgrade.riven && !partial) || !isLevelCapRivenType(upgrade.type)) continue;
+        const riven = find(item.type, partial ? upgrade.riven?.name : undefined);
+        if (!riven || (partial && riven.rank === undefined)) continue;
         upgrade.riven = structuredClone(riven);
         changed = true;
       }

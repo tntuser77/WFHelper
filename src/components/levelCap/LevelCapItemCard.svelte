@@ -12,15 +12,26 @@
     archonShardUpgradeLabel,
     parseArchonShardSlot,
   } from "../../lib/inventory/archonShards.js";
-  import { underframeUrl } from "../../lib/underframe.js";
+  import LevelCapIncarnon from "./LevelCapIncarnon.svelte";
   import LevelCapModGrid from "./LevelCapModGrid.svelte";
+  import LevelCapUnderframeButton from "./LevelCapUnderframeButton.svelte";
   import Self from "./LevelCapItemCard.svelte";
 
   let {
     item,
     label,
     abilityNames = {},
-  }: { item: LevelCapItem; label: MessageKey; abilityNames?: Record<string, string> } = $props();
+    frame = null,
+    companion = null,
+  }: {
+    item: LevelCapItem;
+    label: MessageKey;
+    abilityNames?: Record<string, string>;
+    /** The run's warframe, whose buffs a weapon takes to Underframe. */
+    frame?: LevelCapItem | null;
+    /** The run's companion, whose bond mods a weapon takes to Underframe. */
+    companion?: LevelCapItem | null;
+  } = $props();
 
   let catalog = $state<LevelCapCatalog | null>(null);
   $effect(() => {
@@ -34,8 +45,6 @@
       ? (abilityNames[item.helminth.ability] ?? fallbackNameFromUniqueName(item.helminth.ability))
       : null,
   );
-  // Underframe matches English names, which is what `name` holds in every locale.
-  const link = $derived(underframeUrl(item, (type) => $itemDb[type]?.name ?? null, helminth));
 </script>
 
 <div
@@ -59,14 +68,7 @@
       {item.configName ||
         $t("levelCap.build.config", { letter: String.fromCharCode(65 + item.config) })}
     </span>
-    {#if link}
-      <button
-        type="button"
-        class="cursor-pointer rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-info hover:border-info"
-        title={$t("levelCap.underframeTitle")}
-        onclick={() => window.api?.openExternal?.(link)}>Underframe</button
-      >
-    {/if}
+    <LevelCapUnderframeButton {item} {frame} {companion} {abilityNames} />
   </div>
 
   {#if helminth || item.shards?.length}
@@ -88,6 +90,10 @@
         </span>
       {/each}
     </div>
+  {/if}
+
+  {#if item.incarnon?.length}
+    <LevelCapIncarnon perks={item.incarnon} />
   {/if}
 
   {#if item.upgrades.length}
