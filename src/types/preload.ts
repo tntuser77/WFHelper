@@ -137,6 +137,15 @@ export interface PreloadAPI {
   testNotificationWebhook: (
     channel: IpcInvokeMap["testNotificationWebhook"]["args"][0],
   ) => Promise<IpcInvokeMap["testNotificationWebhook"]["return"]>;
+  getPhoneSync: () => Promise<IpcInvokeMap["getPhoneSync"]["return"]>;
+  setPhoneSyncConfig: (
+    url: IpcInvokeMap["setPhoneSyncConfig"]["args"][0],
+    key: IpcInvokeMap["setPhoneSyncConfig"]["args"][1],
+  ) => Promise<IpcInvokeMap["setPhoneSyncConfig"]["return"]>;
+  clearPhoneSync: () => Promise<IpcInvokeMap["clearPhoneSync"]["return"]>;
+  pairPhone: () => Promise<IpcInvokeMap["pairPhone"]["return"]>;
+  unpairPhone: () => Promise<IpcInvokeMap["unpairPhone"]["return"]>;
+  syncPhoneNow: () => Promise<IpcInvokeMap["syncPhoneNow"]["return"]>;
   marketAlertsList: () => Promise<IpcInvokeMap["marketAlertsList"]["return"]>;
   marketAlertsSave: (
     payload: IpcInvokeMap["marketAlertsSave"]["args"][0],
@@ -353,9 +362,28 @@ export interface PreloadAPI {
   getLevelCapThumbnail: (
     id: IpcInvokeMap["getLevelCapThumbnail"]["args"][0],
   ) => Promise<IpcInvokeMap["getLevelCapThumbnail"]["return"]>;
+  getLevelCapSquadCrop: (
+    id: IpcInvokeMap["getLevelCapSquadCrop"]["args"][0],
+  ) => Promise<IpcInvokeMap["getLevelCapSquadCrop"]["return"]>;
+  getLevelCapScreenshot: (
+    id: IpcInvokeMap["getLevelCapScreenshot"]["args"][0],
+  ) => Promise<IpcInvokeMap["getLevelCapScreenshot"]["return"]>;
+  fixLevelCapSquadmate: (
+    ...args: IpcInvokeMap["fixLevelCapSquadmate"]["args"]
+  ) => Promise<IpcInvokeMap["fixLevelCapSquadmate"]["return"]>;
+  getLevelCapPortraitThumb: (
+    ...args: IpcInvokeMap["getLevelCapPortraitThumb"]["args"]
+  ) => Promise<IpcInvokeMap["getLevelCapPortraitThumb"]["return"]>;
+  labelLevelCapPortrait: (
+    ...args: IpcInvokeMap["labelLevelCapPortrait"]["args"]
+  ) => Promise<IpcInvokeMap["labelLevelCapPortrait"]["return"]>;
   openLevelCapScreenshot: (
     id: IpcInvokeMap["openLevelCapScreenshot"]["args"][0],
   ) => Promise<IpcInvokeMap["openLevelCapScreenshot"]["return"]>;
+  openUnderframeDps: (
+    ...args: IpcInvokeMap["openUnderframeDps"]["args"]
+  ) => Promise<IpcInvokeMap["openUnderframeDps"]["return"]>;
+  prewarmUnderframe: () => Promise<IpcInvokeMap["prewarmUnderframe"]["return"]>;
   onLevelCapUpdated: (callback: (payload: IpcEventMap["level-cap-updated"]) => void) => () => void;
   onLevelCapHotkey: (callback: (payload: IpcEventMap["level-cap-hotkey"]) => void) => () => void;
   workbenchGetState: () => Promise<IpcInvokeMap["workbenchGetState"]["return"]>;

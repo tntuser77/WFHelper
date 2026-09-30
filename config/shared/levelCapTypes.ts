@@ -1,3 +1,7 @@
+/** The squad list's corner of a screenshot, as the name review shows it: 1080p
+ *  pixels in from the right edge, and fractions of the height top and bottom. */
+export const LEVEL_CAP_SQUAD_CROP = { width: 460, top: 0.05, bottom: 0.45 };
+
 /** Exolizers retired before a Void Cascade counts as a level cap run. */
 export const LEVEL_CAP_EXOLIZER_TARGET = 107;
 
@@ -11,12 +15,18 @@ interface LevelCapRivenStat {
   value: number;
   positive: boolean;
   multiplier: boolean;
+  /** The game's stat tag and the bonus as a plain fraction (metres for range
+   *  stats), signed as shown; enough to rebuild the roll in another tool. */
+  tag?: string;
+  raw?: number;
 }
 
 /** The rolled stats of a riven in a slot, frozen with the build. */
 export interface LevelCapRiven {
   name: string;
   stats: LevelCapRivenStat[];
+  rank?: number;
+  disposition?: number;
 }
 
 export interface LevelCapUpgrade {
@@ -38,6 +48,9 @@ export interface LevelCapItem {
   helminth?: { ability: string; index: number };
   /** Archon shard upgrade paths, suits only. */
   shards?: Array<{ color: string; type: string }>;
+  /** Incarnon perk picked at each unlocked evolution, 0-based, evolution I first
+   *  (its one perk, the Incarnon form). Weapons with an Incarnon only. */
+  incarnon?: number[];
   /** Companion weapon riding with a companion. */
   weapon?: LevelCapItem;
   /** Fitted parts of a zaw, kitgun or MOA, whose `type` every build of its kind shares. */
@@ -105,11 +118,17 @@ export interface LevelCapRun {
   squadPortraits?: Array<string | null>;
   /** Version of the squad reader behind `squadReads`; a newer one reads runs again. */
   squadReader?: number;
+  /** Where each `squadReads` row sits on the screenshot, as fractions of its
+   *  height; empty when a later read no longer matched the saved rows. */
+  squadRows?: Array<{ top: number; bottom: number }>;
   /** Corrections the user made to squad rows the screenshot read got wrong. */
   squadFixes?: LevelCapSquadFix[];
   /** Who was in each squad row and what they played, as far as the screenshot
    *  tells; redone as names and portrait labels are learned. For analytics. */
   squadmates?: LevelCapSquadmate[];
+  /** The squad as EE.log told it, you included: exact names, HUD slots, and
+   *  the frame where the log gave it away. */
+  squadLog?: LevelCapLogSquadmate[];
   tile: LevelCapTile | null;
   /** The archgun got kills this run, so it belongs in the build. */
   archgunUsed: boolean;
@@ -166,8 +185,16 @@ export interface LevelCapCatalog {
       rarity: string;
       family: string;
       stats: string;
+      /** Capacity at max rank; auras give it back, so theirs is negative. */
+      drain: number;
+      /** Fits an exilus slot; every other mod is barred from it. */
+      exilus?: boolean;
       /** Set on augments: the base suit they fit and the ability they change. */
       augment?: { suit: string; ability: string | null };
+      /** Set on weapon mods only some weapons take: a single weapon's (Thundermiter,
+       *  `weapon`), a pet's claws (also `weapon`), or a class's (shotgun, sniper, bow).
+       *  Weapons list theirs in `weaponTargets`. */
+      target?: { type: string; weapon: boolean };
     }
   >;
   arcanes: Array<LevelCapCatalogEntry & { maxRank: number; rarity: string; stats: string }>;
@@ -175,6 +202,8 @@ export interface LevelCapCatalog {
   abilities: LevelCapCatalogEntry[];
   /** Frame type -> the base suit its augments name, e.g. HydroidPrime -> PirateBaseSuit. */
   suitParents: Record<string, string>;
+  /** Weapon type -> the mod `target` types it takes, e.g. Sobek -> itself and shotguns. */
+  weaponTargets: Record<string, string[]>;
 }
 
 export interface LevelCapSquadmate {
@@ -184,6 +213,21 @@ export interface LevelCapSquadmate {
   portrait: string | null;
   /** Frame the portrait group was labelled with, once someone labels it. */
   frame: string | null;
+  /** The row in `squadReads` (or past them, for one the read missed) it came from. */
+  slot?: number;
+}
+
+/** One player of a logged run's squad. */
+export interface LevelCapLogSquadmate {
+  name: string;
+  /** The digit the HUD shows by the name: the host is 1, then join order. */
+  slot: number;
+  host?: true;
+  you?: true;
+  /** Base frame name ("Ember"); only when the log loaded their frame by name. */
+  frame?: string;
+  /** `frame` is the host's, guessed from what their level loaded first. */
+  frameGuess?: true;
 }
 
 /** A correction to one squad row, by its place in `squadReads`; a slot past the
@@ -195,6 +239,9 @@ export interface LevelCapSquadFix {
   /** The row was HUD text or a nametag, not a player. */
   notSquadmate?: true;
 }
+
+/** What a squad row's correction says, without which row it is. */
+export type LevelCapSquadFixPatch = Omit<LevelCapSquadFix, "slot">;
 
 /** A portrait someone named; every portrait like it gets the same frame. */
 export interface LevelCapPortraitLabel {

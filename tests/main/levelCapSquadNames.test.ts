@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   cleanSquadRead,
+  matchRowsToPlayers,
   resolveSquadNames,
   squadNameDistance,
 } from "../../services/levelCapSquadNames";
@@ -86,6 +87,29 @@ describe("resolveSquadNames", () => {
     ]);
     // A one-off stays unknown rather than getting a guessed name.
     expect(out[0].unknown).toBe(1);
+  });
+
+  it("pins a logged run's rows to its own players, however garbled", () => {
+    // A real run's reads, with the exact names its EE.log gave.
+    const rows = [
+      ["Utroc", "-Uiros?", "Utroc"],
+      ["imha", "inbaE", "Yimba"],
+      ["NouRess he", "Nouresstee", "NouRsSs"],
+    ];
+    expect(matchRowsToPlayers(rows, ["NouRsSs", "Utroc", ".imba"])).toEqual([
+      "Utroc",
+      ".imba",
+      "NouRsSs",
+    ]);
+  });
+
+  it("matches a name the HUD cut short, and leaves a companion row unnamed", () => {
+    const rows = [["Foxy [30]"], ["Zoolander1...0"], ["KvltFvckr e"]];
+    expect(matchRowsToPlayers(rows, ["Zoolander157", "KvltFvckr", "kingleojr"])).toEqual([
+      null,
+      "Zoolander157",
+      "KvltFvckr",
+    ]);
   });
 
   it("marks a regular only ever seen cut off", () => {

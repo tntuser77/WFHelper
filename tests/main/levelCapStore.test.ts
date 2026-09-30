@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LevelCapBuild, LevelCapRun } from "../../config/shared/levelCapTypes";
+import type { LevelCapBuild, LevelCapRiven, LevelCapRun } from "../../config/shared/levelCapTypes";
 
 let tmpDir: string;
 
@@ -90,20 +90,24 @@ describe("levelCapStore", () => {
     expect(b.id).toBe(`${a.id}-2`);
   });
 
-  it("reads each imported screenshot for Exolizers once", async () => {
+  it("reads each screenshot without an Exolizer count once", async () => {
     const store = await freshStore();
     const shot = path.join(tmpDir, "shot.png");
     const a = store.addRun(run({ source: "import", exolizers: null, screenshot: shot }));
     const b = store.addRun(run({ source: "import", exolizers: null, screenshot: shot }));
+    // A squad client's hotkey run: the log had rounds but no Exolizers.
+    const c = store.addRun(run({ exolizers: null, rounds: 27, screenshot: shot }));
     store.addRun(run({ screenshot: shot }));
-    expect(store.runsAwaitingExolizerRead().map((r) => r.id)).toEqual([a.id, b.id]);
+    expect(store.runsAwaitingExolizerRead().map((r) => r.id)).toEqual([a.id, b.id, c.id]);
 
     store.recordExolizerRead(a.id, { exolizers: 112, rounds: 29 });
     store.recordExolizerRead(b.id, null);
+    store.recordExolizerRead(c.id, { exolizers: 108, rounds: 28 });
     expect(store.runsAwaitingExolizerRead()).toEqual([]);
     const byId = new Map(store.getRuns().map((r) => [r.id, r]));
     expect(byId.get(a.id)).toMatchObject({ exolizers: 112, rounds: 29, exolizerOcr: "read" });
     expect(byId.get(b.id)).toMatchObject({ exolizers: null, exolizerOcr: "unreadable" });
+    expect(byId.get(c.id)).toMatchObject({ exolizers: 108, rounds: 27, exolizerOcr: "read" });
   });
 
   it("names screenshot squads from known players and live runs", async () => {
@@ -147,6 +151,10 @@ describe("levelCapStore", () => {
     expect(
       fs.existsSync(path.join(tmpDir, "userData", "level-cap-portraits", `${a.id}-0.png`)),
     ).toBe(true);
+
+    expect(store.portraitThumb(a.id, 0)).toEqual(Buffer.from("png"));
+    expect(store.portraitThumb(a.id, 1)).toBeNull();
+    expect(store.portraitThumb("../escape", 0)).toBeNull();
 
     const mates = () => new Map(store.getRuns().map((r) => [r.id, r.squadmates]));
     const [first, second] = [mates().get(a.id)!, mates().get(b.id)!];
@@ -254,6 +262,56 @@ describe("levelCapStore", () => {
     expect(fixed.players).toEqual(["xSavxage"]);
   });
 
+  it("names a logged run's rows from its own log, and gives them the log's frames", async () => {
+    const store = await freshStore();
+    const portrait = (shade: number) => Buffer.alloc(16 * 16 * 3, shade).toString("base64");
+    const a = store.addRun(
+      run({
+        screenshot: "a.png",
+        players: ["Me", "Host", "Joiner", "Quiet"],
+        squadLog: [
+          { name: "Host", slot: 1, host: true, frame: "Inaros", frameGuess: true },
+          { name: "Me", slot: 2, you: true },
+          { name: "Joiner", slot: 3, frame: "Ember" },
+          { name: "Quiet", slot: 4 },
+        ],
+      }),
+    );
+    store.recordSquadRead(a.id, {
+      names: [["Foxy [30]"], ["Hosl ne"], ["Jolner"]],
+      portraits: [null, portrait(10), portrait(200)],
+      thumbs: [null, null, null],
+    });
+    store.labelPortrait(portrait(10), "Nidus");
+    store.labelPortrait(portrait(200), "Saryn");
+    const fixed = store.getRuns().find((r) => r.id === a.id)!;
+    // A labelled portrait beats the host's guessed frame; a loaded one beats the
+    // portrait; the player no row showed still counts, without a slot.
+    expect(fixed.squadmates?.map((m) => [m.name, m.frame, m.slot])).toEqual([
+      ["Host", "Nidus", 1],
+      ["Joiner", "Ember", 2],
+      ["Quiet", null, undefined],
+    ]);
+    expect(fixed.players).toEqual(["Me", "Host", "Joiner", "Quiet"]);
+  });
+
+  it("gives a logged run with no screenshot its squad from the log", async () => {
+    const store = await freshStore();
+    const a = store.addRun(
+      run({
+        players: ["Me", "Joiner"],
+        squadLog: [
+          { name: "Me", slot: 1, host: true, you: true },
+          { name: "Joiner", slot: 2, frame: "Mesa" },
+        ],
+      }),
+    );
+    store.updateRun(a.id, () => {});
+    expect(store.getRuns()[0].squadmates).toEqual([
+      { name: "Joiner", portrait: null, frame: "Mesa" },
+    ]);
+  });
+
   it("counts a run as solo once every squad row is ruled out", async () => {
     const store = await freshStore();
     const a = store.addRun(run({ source: "import", squadSize: null, screenshot: "a.png" }));
@@ -263,6 +321,36 @@ describe("levelCapStore", () => {
     expect(fixed.squadmates).toEqual([]);
     expect(fixed.squadSize).toBe(1);
     expect(fixed.players).toBeUndefined();
+  });
+
+  it("learns where squad rows sit, but only off a read that matches the saved one", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const shot = (id: string) => ({
+      ...run({ source: "import", squadSize: null, screenshot: `${id}.png` }),
+      id,
+      squadOcr: "read",
+      squadReads: [["Kemani"], ["Alaric"]],
+      squadPortraits: [null, null],
+      squadReader: 2,
+    });
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ schemaVersion: 2, runs: [shot("same"), shot("moved")] }),
+    );
+    const store = await freshStore();
+    expect(store.runsAwaitingSquadRows().map((r) => r.id)).toEqual(["same", "moved"]);
+    const rows = [
+      { top: 0.2, bottom: 0.23 },
+      { top: 0.26, bottom: 0.29 },
+    ];
+    const read = { names: [["Kemani"], ["Alaric"]], portraits: [null, null], thumbs: [null, null] };
+    store.recordSquadRows("same", { ...read, rows });
+    // A read that found other rows would put the highlight on the wrong player.
+    store.recordSquadRows("moved", { ...read, names: [["Kemani"]], rows: rows.slice(0, 1) });
+    const byId = new Map(store.getRuns().map((r) => [r.id, r]));
+    expect(byId.get("same")?.squadRows).toEqual(rows);
+    expect(byId.get("moved")?.squadRows).toEqual([]);
+    expect(store.runsAwaitingSquadRows()).toEqual([]);
   });
 
   it("reads a squad again once when an older reader found no portraits", async () => {
@@ -312,6 +400,21 @@ describe("levelCapStore", () => {
     expect(store.getBuilds().map((b) => b.name)).toEqual(["Build A", "Build B"]);
   });
 
+  it("fills Incarnon perks into a build saved before they were read", async () => {
+    const store = await freshStore();
+    const gun = { kind: "secondary" as const, type: "/Laetum", config: 0, upgrades: [] };
+    const first = store.addRun(run({ build: { ...BUILD, secondary: gun } }));
+    const second = store.addRun(
+      run({ build: { ...BUILD, secondary: { ...gun, incarnon: [0, 1, 2, 0, 1] } } }),
+    );
+    expect(second.buildId).toBe(first.buildId);
+    const saved = store.getBuilds().find((b) => b.id === first.buildId);
+    expect(saved?.build.secondary?.incarnon).toEqual([0, 1, 2, 0, 1]);
+    // Perks already on the build are the player's and stay.
+    store.addRun(run({ build: { ...BUILD, secondary: { ...gun, incarnon: [0, 0, 0] } } }));
+    expect(store.getBuilds()[0].build.secondary?.incarnon).toEqual([0, 1, 2, 0, 1]);
+  });
+
   it("editing a build rewrites every run that uses it", async () => {
     const store = await freshStore();
     const a = store.addRun(run({ build: BUILD }));
@@ -341,7 +444,8 @@ describe("levelCapStore", () => {
     const store = await freshStore();
     const builds = store.getBuilds();
     expect(builds.map((b) => [b.name, b.tags])).toEqual([
-      ["Build A", ["caster", "comfy"]],
+      // Vazarin focus guesses Vaz Dash when the build is made; run tags follow.
+      ["Build A", ["Vaz Dash", "caster", "comfy"]],
       // A guessed loadout gets a build but keeps its tags until it is confirmed.
       ["Build B", undefined],
     ]);
@@ -349,9 +453,64 @@ describe("levelCapStore", () => {
     expect(byId.get("a")?.tags).toBeUndefined();
     expect(byId.get("c")).toMatchObject({ buildId: builds[1].id, buildUnverified: true });
     expect(byId.get("c")?.tags).toEqual(["?"]);
-    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(2);
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(5);
     const legacy = JSON.parse(fs.readFileSync(file.replace(".json", ".v1.json"), "utf8"));
     expect(legacy.schemaVersion).toBe(1);
+  });
+
+  it("guesses tags on version 2 builds once, keeping the player's own", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const build = (id: string, tags?: string[]) => ({
+      id,
+      frame: "Dante",
+      name: id,
+      tags,
+      build: BUILD,
+    });
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ schemaVersion: 2, builds: [build("a", ["vaz dash", "Slam"]), build("b")] }),
+    );
+    const store = await freshStore();
+    expect(store.getBuilds().map((b) => b.tags)).toEqual([["vaz dash", "Slam"], ["Vaz Dash"]]);
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).schemaVersion).toBe(5);
+    expect(fs.existsSync(file.replace(".json", ".v2.json"))).toBe(true);
+  });
+
+  it("a version 3 index only gets the tags of rules added since", async () => {
+    const file = path.join(tmpDir, "userData", "level-cap-runs.json");
+    const magistar: LevelCapBuild = {
+      ...BUILD,
+      melee: {
+        kind: "melee",
+        type: "/Lotus/Weapons/Tenno/Melee/Maces/PaladinMace/PaladinMaceWeapon",
+        config: 0,
+        upgrades: [],
+      },
+    };
+    // Vaz Dash was guessed at version 3 and removed by hand; it stays off.
+    const builds = [{ id: "a", frame: "Dante", name: "a", build: magistar }];
+    fs.writeFileSync(file, JSON.stringify({ schemaVersion: 3, builds }));
+    const store = await freshStore();
+    expect(store.getBuilds()[0].tags).toEqual(["Slam"]);
+  });
+
+  it("a loadout change adds only the tags it newly implies", async () => {
+    const store = await freshStore();
+    const record = store.createBuild("Dante", BUILD, "Caster");
+    expect(record.tags).toEqual(["Vaz Dash"]);
+    // Removed by hand: a later loadout that is still Vazarin leaves it off.
+    store.updateBuild(record.id, { tags: [] });
+    const huras: LevelCapBuild = {
+      ...BUILD,
+      companion: {
+        kind: "companion",
+        type: "/Lotus/Types/Game/KubrowPet/FurtiveKubrowPetPowerSuit",
+        config: 0,
+        upgrades: [],
+      },
+    };
+    expect(store.updateBuild(record.id, { build: huras })?.tags).toEqual(["Invisible"]);
   });
 
   it("fills in riven stats on builds saved before rivens were captured", async () => {
@@ -377,6 +536,33 @@ describe("levelCapStore", () => {
     expect(store.getRuns()[0].build?.secondary?.upgrades[0].riven).toEqual(riven);
     // Already filled, so a second pass changes nothing.
     expect(store.backfillRivens(() => riven)).toBe(false);
+  });
+
+  it("upgrades a riven saved without its full roll when the inventory has it", async () => {
+    const store = await freshStore();
+    const stat = { name: "Critical Chance", value: 120, positive: true, multiplier: false };
+    const melee = (riven: LevelCapRiven) => ({
+      kind: "melee" as const,
+      type: "/Magistar",
+      config: 0,
+      upgrades: [{ slot: 1, type: "/Mods/Randomized/X", rank: 8, riven }],
+    });
+    store.addRun(
+      run({ build: { ...BUILD, melee: melee({ name: "Magistar Toxicron", stats: [stat] }) } }),
+    );
+    const full = {
+      name: "Magistar Toxicron",
+      rank: 8,
+      disposition: 1.25,
+      stats: [{ ...stat, tag: "WeaponCritChanceMod", raw: 1.2 }],
+    };
+    // Another riven for the weapon is not the one saved.
+    expect(store.backfillRivens((_t, named) => (named === "Magistar Other" ? full : null))).toBe(
+      false,
+    );
+    expect(store.backfillRivens((_t, named) => (named === full.name ? full : null))).toBe(true);
+    expect(store.getBuilds()[0].build.melee?.upgrades[0].riven).toEqual(full);
+    expect(store.backfillRivens(() => full)).toBe(false);
   });
 
   it("deleting a build sends its runs back to needing one", async () => {
@@ -428,7 +614,7 @@ describe("levelCapStore", () => {
     expect(byId.get(a.id)).toMatchObject({ buildId: target.id, frameType: BUILD.suit!.type });
     expect(byId.get(a.id)?.buildUnverified).toBeUndefined();
     expect(byId.get(a.id)?.tags).toBeUndefined();
-    expect(store.getBuilds()[0].tags).toEqual(["caster"]);
+    expect(store.getBuilds()[0].tags).toEqual(["Vaz Dash", "caster"]);
     expect(byId.get(b.id)?.buildUnverified).toBe(true);
   });
 

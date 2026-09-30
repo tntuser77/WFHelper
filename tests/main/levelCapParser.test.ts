@@ -121,6 +121,68 @@ describe("levelCapParser", () => {
     ]);
   });
 
+  // Three squads cut from one real EE.log (names replaced): a public mission you
+  // hosted, a Void Cascade you joined by invite, and a public mission you joined.
+  const SQUAD = fs
+    .readFileSync(path.join(__dirname, "..", "fixtures", "levelcap", "squad.log"), "utf8")
+    .split("\n");
+  const upTo = (text: string) => SQUAD.slice(0, SQUAD.findIndex((l) => l.includes(text)) + 1);
+  const slots = (entries: readonly { name: string; slot: number }[]) =>
+    entries.map((entry) => `${entry.slot}:${entry.name}`);
+
+  it("makes you slot 1 when you host", () => {
+    const parser = createLevelCapParser();
+    for (const line of upTo("OtherPlayer1_JoinerDeep")) parser.feedLine(line);
+    const squad = parser.squad();
+    expect(slots(squad)).toEqual(["1:MeLocal", "2:JoinerDeep"]);
+    expect(squad[0]).toMatchObject({ host: true, local: true });
+  });
+
+  it("puts the host first and you second when you join them", () => {
+    const { parser } = run(upTo("OtherPlayer3_JoinerNou"));
+    // Spot-loads print after the loader line, before the loader starts.
+    for (const line of SQUAD.slice(upTo("OtherPlayer3_JoinerNou").length)) {
+      parser.feedLine(line);
+      if (line.includes("(/Temp/OtherPlayer3_JoinerNou")) break;
+    }
+    const squad = parser.current()?.squad ?? [];
+    expect(slots(squad)).toEqual(["1:HostUt", "2:MeLocal", "3:.dotted", "4:JoinerNou"]);
+    const byName = new Map(squad.map((entry) => [entry.name, entry]));
+    expect(byName.get("HostUt")).toMatchObject({ host: true, local: false, suitFolder: null });
+    expect(byName.get("MeLocal")).toMatchObject({ host: false, local: true });
+    expect(byName.get(".dotted")).toMatchObject({ suitFolder: "Volt", suitType: null });
+    expect(byName.get("JoinerNou")).toMatchObject({
+      suitFolder: "Ember",
+      suitType: "/Lotus/Powersuits/Ember/EmberPrime",
+    });
+  });
+
+  it("notes the frame a host's level load touched, and players joining mid-mission", () => {
+    const parser = createLevelCapParser();
+    for (const line of upTo("RemoveSquadMember: JoinerKv")) parser.feedLine(line);
+    const squad = parser.squad();
+    expect(slots(squad)).toEqual(["1:HostZoo", "2:MeLocal", "4:JoinerKi"]);
+    expect(squad[0].levelLoadFolders[0]).toBe("Sandman");
+    expect(squad[2]).toMatchObject({
+      suitFolder: "Ranger",
+      suitType: "/Lotus/Powersuits/Ranger/RangerBaseSuit",
+    });
+  });
+
+  it("gives a leaver's slot to the next player to join", () => {
+    const parser = createLevelCapParser();
+    for (const line of upTo("RemoveSquadMember: JoinerKv")) parser.feedLine(line);
+    parser.feedLine("8900.000 Net [Info]: AddSquadMember: Late, mm=ABC, squadCount=4");
+    expect(slots(parser.squad())).toEqual(["1:HostZoo", "2:MeLocal", "3:Late", "4:JoinerKi"]);
+  });
+
+  it("forgets the squad when you leave it", () => {
+    const parser = createLevelCapParser();
+    for (const line of SQUAD) parser.feedLine(line);
+    parser.feedLine("9000.000 Net [Info]: MatchingService::LeaveSquad");
+    expect(parser.squad()).toEqual([]);
+  });
+
   it("flags only the lines the parser reads", () => {
     expect(CLIENT.every((line) => isLevelCapLine(line) || line.includes("late join"))).toBe(true);
     expect(isLevelCapLine("12.0 Net [Info]: NAT bound for client")).toBe(false);

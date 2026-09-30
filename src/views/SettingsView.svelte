@@ -22,6 +22,7 @@
   import AboutCard from "../components/settings/AboutCard.svelte";
   import SupportersCard from "../components/settings/SupportersCard.svelte";
   import FissureAlerts from "../components/settings/FissureAlerts.svelte";
+  import PhoneSyncSettings from "../components/settings/PhoneSyncSettings.svelte";
   import ProtonLaunchOption from "../components/ProtonLaunchOption.svelte";
   import LinuxDisplayBackend from "../components/LinuxDisplayBackend.svelte";
   import LinuxCaptureSetup from "../components/LinuxCaptureSetup.svelte";
@@ -935,6 +936,8 @@
               </SettingsRow>
             </div>
           </SettingsSection>
+
+          <PhoneSyncSettings />
 
           <SettingsSection
             title={$tr("common.reset")}

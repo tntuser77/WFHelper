@@ -105,6 +105,13 @@ export const NOTIFICATION_CHANNELS_SET_GAME_GATE = "notification-channels:set-ga
 export const NOTIFICATION_CHANNELS_SET_DISCORD_PING = "notification-channels:set-discord-ping";
 export const NOTIFICATION_CHANNELS_TEST = "notification-channels:test";
 
+export const PHONE_SYNC_GET = "phone-sync:get";
+export const PHONE_SYNC_SET_CONFIG = "phone-sync:set-config";
+export const PHONE_SYNC_CLEAR = "phone-sync:clear";
+export const PHONE_SYNC_PAIR = "phone-sync:pair";
+export const PHONE_SYNC_UNPAIR = "phone-sync:unpair";
+export const PHONE_SYNC_NOW = "phone-sync:now";
+
 export const STATS_GET_HISTORY = "stats:get-history";
 export const STATS_GET_CURRENT = "stats:get-current";
 export const STATS_IMPORT = "stats:import";
@@ -232,7 +239,14 @@ export const LEVEL_CAP_IMPORT_FOLDERS = "level-cap:import-folders";
 export const LEVEL_CAP_UPDATE_SETTINGS = "level-cap:update-settings";
 export const LEVEL_CAP_PICK_FOLDER = "level-cap:pick-folder";
 export const LEVEL_CAP_THUMBNAIL = "level-cap:thumbnail";
+export const LEVEL_CAP_SCREENSHOT = "level-cap:screenshot";
 export const LEVEL_CAP_OPEN_SCREENSHOT = "level-cap:open-screenshot";
+export const LEVEL_CAP_UNDERFRAME_DPS = "level-cap:underframe-dps";
+export const LEVEL_CAP_UNDERFRAME_PREWARM = "level-cap:underframe-prewarm";
+export const LEVEL_CAP_SQUAD_CROP = "level-cap:squad-crop";
+export const LEVEL_CAP_FIX_SQUADMATE = "level-cap:fix-squadmate";
+export const LEVEL_CAP_PORTRAIT_THUMB = "level-cap:portrait-thumb";
+export const LEVEL_CAP_LABEL_PORTRAIT = "level-cap:label-portrait";
 export const LEVEL_CAP_UPDATED = "level-cap-updated";
 export const LEVEL_CAP_HOTKEY = "level-cap-hotkey";
 

@@ -20,6 +20,7 @@ import type {
 } from "./market.js";
 import type { DropRow, DropSearchMode, DropSearchResult } from "../../config/shared/dropTypes.js";
 import type { SpawnNode } from "../../config/shared/spawnNodeTypes.js";
+import type { UnderframeBuild } from "../../config/shared/underframe.js";
 import type {
   WorkbenchExecuteResult,
   WorkbenchOverrideAck,
@@ -67,6 +68,11 @@ import type {
   WebhookChannel,
   WebhookTestResult,
 } from "../../config/shared/notifications.js";
+import type {
+  PhonePairing,
+  PhoneSyncResult,
+  PhoneSyncState,
+} from "../../config/shared/phoneSnapshot.js";
 import type {
   MarketAlertEngineStatus,
   MarketAlertHit,
@@ -501,6 +507,30 @@ export interface IpcInvokeMap {
     args: [channel: WebhookChannel];
     return: WebhookTestResult;
   };
+  getPhoneSync: {
+    args: [];
+    return: PhoneSyncState;
+  };
+  setPhoneSyncConfig: {
+    args: [url: string, key: string];
+    return: PhoneSyncResult;
+  };
+  clearPhoneSync: {
+    args: [];
+    return: PhoneSyncState;
+  };
+  pairPhone: {
+    args: [];
+    return: PhoneSyncResult<PhonePairing>;
+  };
+  unpairPhone: {
+    args: [];
+    return: PhoneSyncResult;
+  };
+  syncPhoneNow: {
+    args: [];
+    return: PhoneSyncState;
+  };
   marketAlertsList: {
     args: [];
     return: MarketAlertListResult;
@@ -821,8 +851,49 @@ export interface IpcInvokeMap {
     args: [id: string];
     return: string | null;
   };
+  /** A run's whole screenshot at full size, as a data URL, for the in-app viewer. */
+  getLevelCapScreenshot: {
+    args: [id: string];
+    return: string | null;
+  };
+  /** Full-size PNG data URL of the squad list's corner of a run's screenshot. */
+  getLevelCapSquadCrop: {
+    args: [id: string];
+    return: string | null;
+  };
+  fixLevelCapSquadmate: {
+    args: [id: string, slot: number, fix: LevelCapSquadFixPatch | null];
+    return: LevelCapPayload;
+  };
+  /** PNG data URL of the portrait saved beside one squad row, if any. */
+  getLevelCapPortraitThumb: {
+    args: [id: string, slot: number];
+    return: string | null;
+  };
+  /** Names the frame of a portrait look; every portrait like it follows. */
+  labelLevelCapPortrait: {
+    args: [portrait: string, frame: string];
+    return: LevelCapPayload;
+  };
   openLevelCapScreenshot: {
     args: [id: string];
+    return: { ok: boolean };
+  };
+  /** Opens the weapon on underframe.site with the frame's and companion's buffs
+   *  worked in, or on its own (`withFrame` false) when that fails and
+   *  `fallbackUrl` opens instead. */
+  openUnderframeDps: {
+    args: [
+      frame: UnderframeBuild | null,
+      companion: UnderframeBuild | null,
+      weapon: UnderframeBuild,
+      fallbackUrl: string,
+    ];
+    return: { ok: boolean; withFrame: boolean };
+  };
+  /** Loads the Underframe page in the background so `openUnderframeDps` is quick. */
+  prewarmUnderframe: {
+    args: [];
     return: { ok: boolean };
   };
   workbenchGetState: {
@@ -1002,6 +1073,7 @@ import type {
   LevelCapRun,
   LevelCapSettings,
   LevelCapSlotKind,
+  LevelCapSquadFixPatch,
 } from "../../config/shared/levelCapTypes.js";
 export type { LevelCapCatalog, LevelCapNamedBuild, LevelCapPayload, LevelCapRun, LevelCapSettings };
 

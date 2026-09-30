@@ -1,0 +1,283 @@
+969.983 Script [Info]: CheckInventoryOwnership.lua: [CheckInventoryOwnership] /Lotus/Powersuits/Geode/CitrinePrime is not there. Fail
+969.984 Net [Info]: MatchingService::LeaveSquad
+969.989 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+969.989 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+969.994 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorPowerUltimateAbility.lua
+969.994 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorPowerUltimateAbility.lua
+970.000 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorWardUltimateAbility.lua
+970.000 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorWardUltimateAbility.lua
+970.253 Net [Info]: AddSquadMember: MeLocal, mm=A464FDDF0D0D14C583F98ABB, squadCount=1
+972.682 Sys [Info]: Spot-loading /Lotus/Powersuits/Revenant/RevenantPassive.lua (root-type: /Lotus/Powersuits/Revenant/RevenantBaseSuit)
+973.981 Sys [Info]: Spot-loading /Lotus/Powersuits/Excalibur/ExcaliburPassive.lua (root-type: /Lotus/Powersuits/Excalibur/DarkExcalibur)
+973.987 Sys [Info]: Spot-loading /Lotus/Powersuits/Excalibur/Abilities/SwordOfDoom.lua (root-type: /Lotus/Powersuits/Excalibur/DoomSwordUmbra)
+974.770 Sys [Info]: Spot-loading /Lotus/Powersuits/DemonFrame/DemonFramePassive.lua (root-type: /Lotus/Powersuits/DemonFrame/DemonFrameBaseSuit)
+974.781 Sys [Info]: Spot-loading /Lotus/Scripts/Effects/DemonFrameIdles.lua (root-type: /Lotus/Powersuits/DemonFrame/DemonFrameBaseSuit)
+974.785 Sys [Info]: Spot-loading /Lotus/Powersuits/DemonFrame/Abilities/DemonFrameFireBall.lua (root-type: /Lotus/Powersuits/DemonFrame/DemonFrameBaseSuit)
+995.369 Script [Info]: ThemedSquadOverlay.lua: Mission name: Exterminate: Scaldra (Höllvania) - THE STEEL PATH
+996.423 Sys [Info]: Spot-loading /Lotus/Powersuits/Sentient/SentientPassive.lua (root-type: /Lotus/Powersuits/Sentient/SentientBaseSuit)
+996.541 Sys [Error]: Required by lotus black hole /Lotus/Powersuits/Sentient/WhirlwindAugmentBlackHole
+1001.043 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+1001.047 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/AttackChargeAbility.lua
+1001.052 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorGhostWave.lua
+1001.057 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+1001.061 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+1001.087 Game [Info]: OnStateStarted, mission type=MT_EXTERMINATION
+1001.095 Game [Info]: MeLocal loadout loader finished.
+1019.336 Input [Info]: InitMapping for all devices with bindings /Configs/EE.cfg/LotusWindows_KeyBindings and filter /Lotus/Powersuits/PowersuitAbilities/TransferenceInputFilter
+1019.449 Game [Info]: AdultOperatorAvatar1006 removing invis request from /Lotus/Powersuits/PowersuitAbilities/OperatorTransference.lua
+1019.753 Input [Info]: InitMapping for all devices with bindings /Configs/EE.cfg/LotusWindows_KeyBindings and filter /Lotus/Powersuits/PowersuitAbilities/TransferenceInputFilter
+1048.530 Net [Info]: AddSquadMember: JoinerDeep, mm=A35A5DB60D0D14BFE8B26941, squadCount=2
+1054.957 Sys [Info]: Creating loader for /Temp/OtherPlayer1_JoinerDeep_17 loadout... Flags=0xA50007F7
+1054.985 Sys [Info]: Spot-loading /Lotus/Powersuits/NpcPowersuits/NpcPowersuitAbilities/ActivateAura.lua
+1055.008 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+1055.014 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+1055.019 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/AttackChargeAbility.lua
+1055.023 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorGhostWave.lua
+1055.027 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+1055.032 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+1055.039 Sys [Info]: ResourceLoader 0x0000017273B1D750 (/Temp/OtherPlayer1_JoinerDeep_17) Found 18,287 items to load (1ms) [Heap: 1,387,074,400/1,396,310,016 Footprint: 6,853,787,648 Handles: 1,291]
+1055.045 Sys [Info]: Resloader 0x0000017273B1D750 (/Temp/OtherPlayer1_JoinerDeep_17) starting
+1056.575 Sys [Info]: Resource load completed 0x0000017273B1D750 (/Temp/OtherPlayer1_JoinerDeep_17) in one pass and 1.5s (I/O ~= 77%, inherited 16,159 of 18,287)
+1056.592 Game [Info]: JoinerDeep loadout loader finished.
+1060.896 Game [Info]: TennoAvatar1065 - set damage controller: /Lotus/Powersuits/Wraith/WraithDamageController
+1063.841 Game [Info]: AdultOperatorAvatar1068 removing invis request from /Lotus/Powersuits/PowersuitAbilities/OperatorTransference.lua
+1081.331 Game [Info]: AdultOperatorAvatar1068 removing invis request from /Lotus/Powersuits/PowersuitAbilities/OperatorTransference.lua
+1155.459 Game [Info]: AdultOperatorAvatar1068 removing invis request from /Lotus/Powersuits/PowersuitAbilities/OperatorTransference.lua
+1227.087 Game [Info]: AdultOperatorAvatar1068 removing invis request from /Lotus/Powersuits/PowersuitAbilities/OperatorTransference.lua
+1229.751 Sys [Info]: EOM missionLocationUnlocked=0
+1237.499 Game [Info]: /Lotus/Powersuits/Operator/ChildOperatorSuitRemaster
+1237.499 Game [Info]: /Lotus/Powersuits/Wisp/WispPrime
+1240.227 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/AttackChargeAbility.lua
+1240.227 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/AttackChargeAbility.lua
+1240.232 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorGhostWave.lua
+1240.232 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorGhostWave.lua
+1240.236 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+1240.236 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+1240.241 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+1240.241 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+1240.246 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseShield.lua
+1240.246 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseShield.lua
+1240.251 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseUltimateAbility.lua
+1240.251 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseUltimateAbility.lua
+1241.059 Game [Info]: MeLocal loadout loader finished.
+1242.856 Script [Info]: Background.lua: EliteAlert: generated boosts for MeLocal: suitType=/Lotus/Powersuits/AntiMatter/Nova wepTypes=/Lotus/Weapons/Tenno/Pistols/TnPriestPistolScope/TnPriestPistolWeapon, /Lotus/Weapons/Tenno/LongGuns/PaxDuviricusShotgun/PaxDuviricusShotgun, /Lotus/Weapons/Grineer/GrineerPistol/GrineerLightPistol, 
+1242.863 Script [Info]: Background.lua: EliteAlert: generated boosts for MeLocal: suitType=/Lotus/Powersuits/DemonFrame/DemonFrame wepTypes=/Lotus/Weapons/Tenno/Melee/Swords/QuillSword/QuillDualSwords, /Lotus/Weapons/Corpus/Pistols/CrpSentExperimentPistol/CrpSentExperimentPistol, /Lotus/Weapons/Tenno/Melee/Fist/Fist, 
+1242.940 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/AttackChargeAbility.lua
+1242.945 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorGhostWave.lua
+1242.949 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+1242.954 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+1242.960 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseShield.lua
+1242.965 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseUltimateAbility.lua
+1242.982 Script [Info]: CheckInventoryOwnership.lua: [CheckInventoryOwnership] /Lotus/Powersuits/Geode/CitrinePrime is not there. Fail
+1242.988 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorWardUltimateAbility.lua
+1242.988 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorWardUltimateAbility.lua
+1245.661 Net [Info]: RemoveSquadMember: JoinerDeep has been removed from the squad , squadCount=1
+1245.663 Script [Info]: ThemedSquadOverlay.lua: OnSquadMemberLeft(JoinerDeep)
+
+3048.149 Net [Info]: JoinSquadSessionCallback. Session id=6abbaaf4d2eb7a80ab0e6dd1, host name=HostUt
+3048.164 Game [Info]: MeLocal loadout loader finished.
+3048.944 Net [Info]: AddSquadMember: MeLocal, mm=A464FDDF0D0D14C583F98ABB, squadCount=1
+3048.945 Net [Info]: AddSquadMember: HostUt, mm=A20C8EE3335DAEC4239E96FD, squadCount=2
+3048.989 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+3048.989 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+3048.994 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+3048.994 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+3048.999 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+3048.999 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+3049.004 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorProjectionExecution.lua
+3049.004 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorProjectionExecution.lua
+3049.010 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorLiftWave.lua
+3049.010 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorLiftWave.lua
+3051.592 Sys [Info]: Spot-loading /Lotus/Powersuits/Dragon/Abilities/DragonBreath.lua during batch loading!
+3052.402 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/LaunchFabricator.lua during batch loading!
+3052.697 Sys [Info]: Spot-loading /Lotus/Powersuits/Dragon/Abilities/DragonBreath.lua during batch loading!
+3056.807 Sys [Info]: GameRulesImpl::OnStateStarted when WaitingForPlayers; assuming late join and starting session
+3056.807 Game [Info]: OnStateStarted, mission type=MT_VOID_CASCADE
+3056.831 Sys [Info]: Spot-loading /Lotus/Powersuits/EntratiMech/EntratiMechTurretModeAbility.lua during batch loading!
+3056.866 Sys [Info]: Spot-building /Lotus/Powersuits/EntratiMech/ShockingIronAbility.lua
+3056.866 Sys [Info]: Spot-loading /Lotus/Powersuits/EntratiMech/ShockingIronAbility.lua
+3056.873 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/BrawlerPunch.lua
+3056.873 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BrawlerPunch.lua
+3056.882 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+3056.882 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+3056.886 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/AttackChargeAbility.lua
+3056.886 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/AttackChargeAbility.lua
+3056.892 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorGhostWave.lua
+3056.892 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorGhostWave.lua
+3056.897 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+3056.897 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+3056.902 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+3056.902 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+3057.183 Game [Info]: MeLocal loadout loader finished.
+3057.598 Sys [Info]: Creating loader for /Temp/OtherPlayer0_HostUt_39 loadout... Flags=0xA50007F7
+3057.601 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+3057.601 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+3057.619 Sys [Info]: ResourceLoader 0x000001724D095D50 (/Temp/OtherPlayer0_HostUt_39) Found 15,512 items to load (1ms) [Heap: 1,222,978,736/1,546,780,672 Footprint: 4,825,841,664 Handles: 1,199]
+3057.624 Sys [Info]: Resloader 0x000001724D095D50 (/Temp/OtherPlayer0_HostUt_39) starting
+3057.636 Sys [Info]: Resource load completed 0x000001724D095D50 (/Temp/OtherPlayer0_HostUt_39) in one pass and 0.0s (I/O ~= 80%, inherited 15,511 of 15,512)
+3057.645 Game [Info]: HostUt loadout loader finished.
+3059.430 Script [Info]: Background.lua: EliteAlert: generated boosts for MeLocal: suitType=/Lotus/Powersuits/AntiMatter/Nova wepTypes=/Lotus/Weapons/Tenno/Pistols/TnPriestPistolScope/TnPriestPistolWeapon, /Lotus/Weapons/Tenno/LongGuns/PaxDuviricusShotgun/PaxDuviricusShotgun, /Lotus/Weapons/Grineer/GrineerPistol/GrineerLightPistol, 
+3059.444 Script [Info]: Background.lua: EliteAlert: generated boosts for MeLocal: suitType=/Lotus/Powersuits/Koumei/Koumei wepTypes=/Lotus/Weapons/Corpus/LongGuns/CrpRubanRifle/CrpRubanRifle, /Lotus/Weapons/Grineer/Pistols/GrineerMicrowavegun/GrnMicrowavePistol, /Lotus/Weapons/Grineer/Pistols/GrnTorpedoPistol/GrnTorpedoPistol, 
+3064.656 Net [Info]: AddSquadMember: .dotted, mm=9F7DB2E08EF422DE478BD071, squadCount=3
+3070.491 Sys [Info]: Creating loader for /Temp/OtherPlayer2_.dotted_40 loadout... Flags=0xA50007F7
+3070.497 Sys [Info]: Spot-building /Lotus/Powersuits/Volt/Abilities/Shield.lua
+3070.497 Sys [Info]: Spot-loading /Lotus/Powersuits/Volt/Abilities/Shield.lua
+3070.503 Sys [Info]: Spot-building /Lotus/Powersuits/Volt/Abilities/OverLoad.lua
+3070.503 Sys [Info]: Spot-loading /Lotus/Powersuits/Volt/Abilities/OverLoad.lua
+3070.521 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+3070.525 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+3070.529 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorGhostWave.lua
+3070.535 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/AttackChargeAbility.lua
+3070.539 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+3070.543 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+3070.548 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorPowerUltimateAbility.lua
+3070.548 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorPowerUltimateAbility.lua
+3070.552 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorWardUltimateAbility.lua
+3070.552 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorWardUltimateAbility.lua
+3070.558 Sys [Info]: ResourceLoader 0x0000017280063090 (/Temp/OtherPlayer2_.dotted_40) Found 15,740 items to load (1ms) [Heap: 991,189,664/1,436,811,264 Footprint: 5,040,414,720 Handles: 1,183]
+3070.560 Sys [Info]: Resloader 0x0000017280063090 (/Temp/OtherPlayer2_.dotted_40) starting
+3070.560 Sys [Error]: Could not choose resource bucket for: /Temp/OtherPlayer2_.dotted_40
+3071.261 Sys [Info]: Resource load completed 0x0000017280063090 (/Temp/OtherPlayer2_.dotted_40) in one pass and 0.7s (I/O ~= 77%, inherited 13,800 of 15,740)
+3071.274 Game [Info]: .dotted loadout loader finished.
+3106.889 Input [Info]: InitMapping for all devices with bindings /Configs/EE.cfg/LotusWindows_KeyBindings and filter /Lotus/Powersuits/PowersuitAbilities/TransferenceInputFilter
+3107.757 Input [Info]: InitMapping for all devices with bindings /Configs/EE.cfg/LotusWindows_KeyBindings and filter /Lotus/Powersuits/PowersuitAbilities/TransferenceInputFilter
+3120.042 Net [Info]: AddSquadMember: JoinerNou, mm=A2C46FB2335DAE68C5C41D99, squadCount=4
+3127.843 Sys [Info]: Creating loader for /Temp/OtherPlayer3_JoinerNou_41 loadout... Flags=0xA50007F7
+3127.844 Sys [Info]: Spot-building /Lotus/Powersuits/Ember/EmberPassive.lua
+3127.844 Sys [Info]: Spot-loading /Lotus/Powersuits/Ember/EmberPassive.lua (root-type: /Lotus/Powersuits/Ember/EmberPrime)
+3127.849 Sys [Info]: Spot-building /Lotus/Powersuits/Ember/Abilities/EmberImmolation.lua
+3127.849 Sys [Info]: Spot-loading /Lotus/Powersuits/Ember/Abilities/EmberImmolation.lua (root-type: /Lotus/Powersuits/Ember/EmberPrime)
+3127.854 Sys [Info]: Spot-building /Lotus/Powersuits/Ember/Abilities/FireBlastAbility.lua
+3127.854 Sys [Info]: Spot-loading /Lotus/Powersuits/Ember/Abilities/FireBlastAbility.lua
+3127.858 Sys [Info]: Spot-building /Lotus/Powersuits/Ember/Abilities/EmberInferno.lua
+3127.858 Sys [Info]: Spot-loading /Lotus/Powersuits/Ember/Abilities/EmberInferno.lua
+3127.890 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+3127.894 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+3127.899 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+3127.904 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+3127.908 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorPowerUltimateAbility.lua
+3127.916 Sys [Info]: ResourceLoader 0x000001737CA80E90 (/Temp/OtherPlayer3_JoinerNou_41) Found 17,123 items to load (1ms) [Heap: 1,018,534,528/1,436,811,264 Footprint: 5,396,307,968 Handles: 1,175]
+3127.918 Sys [Info]: Resloader 0x000001737CA80E90 (/Temp/OtherPlayer3_JoinerNou_41) starting
+3128.364 Input [Info]: InitMapping for all devices with bindings /Configs/EE.cfg/LotusWindows_KeyBindings and filter /Lotus/Powersuits/PowersuitAbilities/TransferenceInputFilter
+3128.466 Game [Info]: AdultOperatorAvatar89 removing invis request from /Lotus/Powersuits/PowersuitAbilities/OperatorTransference.lua
+3128.707 Sys [Info]: Resource load completed 0x000001737CA80E90 (/Temp/OtherPlayer3_JoinerNou_41) in one pass and 0.8s (I/O ~= 78%, inherited 15,392 of 17,123)
+3128.720 Game [Info]: JoinerNou loadout loader finished.
+3129.710 Input [Info]: InitMapping for all devices with bindings /Configs/EE.cfg/LotusWindows_KeyBindings and filter /Lotus/Powersuits/PowersuitAbilities/TransferenceInputFilter
+
+8618.924 Net [Info]: MatchingService::LeaveSquad
+8619.808 Net [Info]: JoinSquadSessionCallback. Session id=6abbbd34f4e60bc3a30afc7b, host name=HostZoo
+8620.041 Net [Info]: AddSquadMember: MeLocal, mm=A464FDDF0D0D14C583F98ABB, squadCount=1
+8620.066 Net [Info]: AddSquadMember: HostZoo, mm=A609F692C52180F443A5E0AF, squadCount=2
+8623.641 Script [Info]: ThemedSquadOverlay.lua: Mission name: Carpo (Jupiter) - STEEL PATH INCURSION
+8623.955 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+8623.955 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+8623.960 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+8623.960 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+8623.965 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+8623.965 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+8625.687 Script [Info]: Progress.lua: Remote player HostZoo
+8625.698 Sys [Error]: Could not find object: /Lotus/Powersuits/Sandman/SandManAlt02HelmetSuitSimCollision
+8627.383 Sys [Error]: Required by lotus black hole /Lotus/Powersuits/Sandman/StormBlackHole
+8627.387 Sys [Error]: Could not find sim collision: /Lotus/Powersuits/Sandman/SandManAlt02HelmetSuitSimCollision
+8627.443 Sys [Info]: Spot-loading /Lotus/Powersuits/NpcPowersuits/NpcPowersuitAbilities/DeployVenusBeacon.lua during batch loading!
+8627.480 Sys [Info]: Spot-loading /Lotus/Powersuits/Jade/Abilities/PsychicDagger.lua during batch loading!
+8632.228 Sys [Info]: Spot-loading /Lotus/Powersuits/Rhino/RhinoPassive.lua during batch loading!
+8632.271 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+8632.271 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+8632.275 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+8632.275 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+8632.280 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+8632.280 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+8632.285 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseShield.lua
+8632.285 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseShield.lua
+8632.289 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorProjectionExecution.lua
+8632.289 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorProjectionExecution.lua
+8632.293 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseUltimateAbility.lua
+8632.293 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseUltimateAbility.lua
+8632.297 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorLiftWave.lua
+8632.297 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorLiftWave.lua
+8632.478 Sys [Info]: Creating loader for /Temp/OtherPlayer0_HostZoo_46 loadout... Flags=0xB50007F7
+8632.590 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+8632.590 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+8632.622 Sys [Info]: ResourceLoader 0x0000017347DFD1E0 (/Temp/OtherPlayer0_HostZoo_46) Found 18,244 items to load (1ms) [Heap: 1,032,289,344/1,424,097,280 Footprint: 4,452,569,088 Handles: 1,197]
+8632.993 Game [Info]: MeLocal loadout loader finished.
+8633.014 Sys [Info]: Resloader 0x0000017347DFD1E0 (/Temp/OtherPlayer0_HostZoo_46) starting
+8634.718 Sys [Info]: Resource load completed 0x0000017347DFD1E0 (/Temp/OtherPlayer0_HostZoo_46) in one pass and 2.1s (I/O ~= 34%, inherited 17,725 of 18,244)
+8634.733 Game [Info]: HostZoo loadout loader finished.
+8639.222 Script [Info]: Background.lua: EliteAlert: generated boosts for MeLocal: suitType=/Lotus/Powersuits/AntiMatter/Nova wepTypes=/Lotus/Weapons/Tenno/Pistols/TnPriestPistolScope/TnPriestPistolWeapon, /Lotus/Weapons/Tenno/LongGuns/PaxDuviricusShotgun/PaxDuviricusShotgun, /Lotus/Weapons/Grineer/GrineerPistol/GrineerLightPistol, 
+8639.891 Script [Info]: Background.lua: EliteAlert: generated boosts for MeLocal: suitType=/Lotus/Powersuits/Alchemist/Alchemist wepTypes=/Lotus/Weapons/Tenno/Akimbo/AkLexPistols, /Lotus/Weapons/Infested/Melee/Swords/Mire/MireSword, /Lotus/Weapons/Grineer/Pistols/GrnTorpedoPistol/GrnTorpedoPistol, 
+8639.921 Game [Info]: OnStateStarted, mission type=MT_EXTERMINATION
+8640.309 Game [Info]: TennoAvatar1454 - set damage controller: /Lotus/Powersuits/Sandman/SandmanDamageController
+8642.277 Input [Info]: InitMapping for all devices with bindings /Configs/EE.cfg/LotusWindows_KeyBindings and filter /Lotus/Powersuits/PowersuitAbilities/TransferenceInputFilter
+8642.697 Input [Info]: InitMapping for all devices with bindings /Configs/EE.cfg/LotusWindows_KeyBindings and filter /Lotus/Powersuits/PowersuitAbilities/TransferenceInputFilter
+8644.937 Net [Info]: AddSquadMember: JoinerKv, mm=60AF0AE4-4B03-4393-82C5-720F582336D2, squadCount=3
+8651.319 Sys [Info]: Creating loader for /Temp/OtherPlayer5_JoinerKv_47 loadout... Flags=0xA50007F7
+8651.319 Sys [Info]: Spot-building /Lotus/Powersuits/Cowgirl/CowgirlPassive.lua
+8651.319 Sys [Info]: Spot-loading /Lotus/Powersuits/Cowgirl/CowgirlPassive.lua
+8651.323 Sys [Info]: Spot-building /Lotus/Powersuits/Cowgirl/Abilities/BallisticBattery.lua
+8651.323 Sys [Info]: Spot-loading /Lotus/Powersuits/Cowgirl/Abilities/BallisticBattery.lua
+8651.329 Sys [Info]: Spot-building /Lotus/Powersuits/Cowgirl/Abilities/RussianRoulette.lua
+8651.329 Sys [Info]: Spot-loading /Lotus/Powersuits/Cowgirl/Abilities/RussianRoulette.lua
+8651.333 Sys [Info]: Spot-building /Lotus/Powersuits/Cowgirl/Abilities/RicochetArmor.lua
+8651.333 Sys [Info]: Spot-loading /Lotus/Powersuits/Cowgirl/Abilities/RicochetArmor.lua
+8651.337 Sys [Info]: Spot-building /Lotus/Powersuits/Cowgirl/Abilities/GunFu.lua
+8651.337 Sys [Info]: Spot-loading /Lotus/Powersuits/Cowgirl/Abilities/GunFu.lua
+8651.453 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+8651.459 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+8651.464 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseShield.lua
+8651.468 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorLiftWave.lua
+8651.474 Sys [Info]: ResourceLoader 0x0000017280BEE520 (/Temp/OtherPlayer5_JoinerKv_47) Found 14,971 items to load (1ms) [Heap: 1,083,137,328/1,428,357,120 Footprint: 4,970,983,424 Handles: 1,188]
+8651.480 Sys [Info]: Resloader 0x0000017280BEE520 (/Temp/OtherPlayer5_JoinerKv_47) starting
+8652.925 Sys [Info]: Resource load completed 0x0000017280BEE520 (/Temp/OtherPlayer5_JoinerKv_47) in one pass and 1.5s (I/O ~= 68%, inherited 13,424 of 14,971)
+8652.938 Game [Info]: JoinerKv loadout loader finished.
+8656.014 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+8656.019 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+8656.023 Sys [Info]: Spot-building /Lotus/Powersuits/PowersuitAbilities/OperatorWardUltimateAbility.lua
+8656.023 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorWardUltimateAbility.lua
+8674.391 Net [Info]: AddSquadMember: JoinerKi, mm=JoinerKi, squadCount=4
+8680.622 Sys [Info]: Creating loader for /Temp/OtherPlayer6_JoinerKi_48 loadout... Flags=0xA50007F7
+8680.622 Sys [Info]: Spot-loading /Lotus/Powersuits/Ranger/RangerPassive.lua (root-type: /Lotus/Powersuits/Ranger/RangerBaseSuit)
+8680.658 Sys [Info]: Spot-building /Lotus/Powersuits/Ranger/Abilities/RangerQuiver.lua
+8680.658 Sys [Info]: Spot-loading /Lotus/Powersuits/Ranger/Abilities/RangerQuiver.lua
+8680.664 Sys [Info]: Spot-loading /Lotus/Powersuits/Ranger/Abilities/RangerControl.lua (root-type: /Lotus/Powersuits/Ranger/Abilities/RangerControlAbility)
+8680.669 Sys [Info]: Spot-loading /Lotus/Powersuits/Ranger/Abilities/RangerSteal.lua (root-type: /Lotus/Powersuits/Ranger/Abilities/RangerStealAbility)
+8680.674 Sys [Info]: Spot-loading /Lotus/Powersuits/Ranger/Abilities/RangerBow.lua (root-type: /Lotus/Powersuits/Ranger/Abilities/RangerBowAbility)
+8680.739 Sys [Info]: Spot-building /Lotus/Powersuits/NpcPowersuits/NpcPowersuitAbilities/ActivateAura.lua
+8680.739 Sys [Info]: Spot-loading /Lotus/Powersuits/NpcPowersuits/NpcPowersuitAbilities/ActivateAura.lua
+8680.774 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorDefenseShield.lua
+8680.779 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorLiftWave.lua
+8680.783 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/BlastSlowAbility.lua
+8680.789 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/FreeAbilityCasts.lua
+8680.794 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/MagneticField.lua
+8680.801 Sys [Info]: Spot-loading /Lotus/Powersuits/PowersuitAbilities/OperatorSunderingDissipation.lua
+8680.806 Sys [Info]: ResourceLoader 0x00000172791F3050 (/Temp/OtherPlayer6_JoinerKi_48) Found 18,318 items to load (2ms) [Heap: 1,121,262,432/1,424,097,280 Footprint: 5,253,283,840 Handles: 1,189]
+8680.812 Sys [Info]: Resloader 0x00000172791F3050 (/Temp/OtherPlayer6_JoinerKi_48) starting
+8683.122 Sys [Info]: Resource load completed 0x00000172791F3050 (/Temp/OtherPlayer6_JoinerKi_48) in one pass and 2.3s (I/O ~= 5.4%, inherited 15,366 of 18,318)
+8683.134 Game [Info]: JoinerKi loadout loader finished.
+8732.485 Game [Info]: AdultOperatorAvatar1486 removing invis request from /Lotus/Powersuits/PowersuitAbilities/OperatorTransference.lua
+8739.075 Game [Info]: TennoAvatar1522 removing invis request from /Lotus/Powersuits/Ranger/Abilities/RangerSteal.lua
+8739.075 Game [Info]: SentinelAvatar1523 removing invis request from /Lotus/Powersuits/Ranger/Abilities/RangerSteal.lua
+8815.592 Sys [Info]: EOM missionLocationUnlocked=1
+8836.714 Net [Info]: RemoveSquadMember: JoinerKv has been removed from the squad , squadCount=3
+8836.848 Net [Info]: RemoveSquadMember: JoinerKi has been removed from the squad , squadCount=2
+8837.072 Sys [Info]: Spot-building /Lotus/Powersuits/Pagemaster/PagemasterPassive.lua
+8837.072 Sys [Info]: Spot-loading /Lotus/Powersuits/Pagemaster/PagemasterPassive.lua
+8837.077 Sys [Info]: Spot-building /Lotus/Powersuits/Pagemaster/Abilities/PagemasterBook.lua
+8837.077 Sys [Info]: Spot-loading /Lotus/Powersuits/Pagemaster/Abilities/PagemasterBook.lua
+8837.082 Sys [Info]: Spot-building /Lotus/Powersuits/Pagemaster/Abilities/PagemasterLife.lua
+8837.082 Sys [Info]: Spot-loading /Lotus/Powersuits/Pagemaster/Abilities/PagemasterLife.lua
+8837.087 Sys [Info]: Spot-building /Lotus/Powersuits/Pagemaster/Abilities/PagemasterDeath.lua
+8837.087 Sys [Info]: Spot-loading /Lotus/Powersuits/Pagemaster/Abilities/PagemasterDeath.lua
+8837.092 Sys [Info]: Spot-building /Lotus/Powersuits/Pagemaster/Abilities/PagemasterFinalChapter.lua
+8837.092 Sys [Info]: Spot-loading /Lotus/Powersuits/Pagemaster/Abilities/PagemasterFinalChapter.lua
+8837.103 Sys [Info]: Spot-building /Lotus/Powersuits/Archwing/ArchwingAbilities/SupportDrones.lua
+8837.103 Sys [Info]: Spot-loading /Lotus/Powersuits/Archwing/ArchwingAbilities/SupportDrones.lua
+8837.132 Sys [Info]: Spot-building /Lotus/Powersuits/Archwing/ArchwingAbilities/SupportAnchors.lua
+8837.132 Sys [Info]: Spot-loading /Lotus/Powersuits/Archwing/ArchwingAbilities/SupportAnchors.lua
+8837.137 Sys [Info]: Spot-building /Lotus/Powersuits/Archwing/ArchwingAbilities/SupportWard.lua
+8837.137 Sys [Info]: Spot-loading /Lotus/Powersuits/Archwing/ArchwingAbilities/SupportWard.lua
+8837.141 Sys [Info]: Spot-building /Lotus/Powersuits/Archwing/ArchwingAbilities/SupportEnergy.lua
+8837.141 Sys [Info]: Spot-loading /Lotus/Powersuits/Archwing/ArchwingAbilities/SupportEnergy.lua
+8837.150 Sys [Info]: Spot-building /Lotus/Powersuits/Rhino/RhinoPassive.lua
+8837.150 Sys [Info]: Spot-loading /Lotus/Powersuits/Rhino/RhinoPassive.lua
+8837.157 Sys [Info]: Spot-building /Lotus/Powersuits/Rhino/Abilities/RhinoChargeAbility.lua

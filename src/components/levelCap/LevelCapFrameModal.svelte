@@ -1,7 +1,7 @@
 <script lang="ts">
   import { SvelteSet } from "svelte/reactivity";
 
-  import type { LevelCapBuild } from "../../../config/shared/levelCapTypes.js";
+  import type { LevelCapBuild, LevelCapItem } from "../../../config/shared/levelCapTypes.js";
   import type { LevelCapNamedBuild, LevelCapRun } from "../../types/ipc.js";
   import { locale, tr as t } from "../../lib/i18n.js";
   import {
@@ -32,6 +32,8 @@
     searchTerms,
     tagSuggestions,
     abilityNames,
+    initialBuild = null,
+    initialSlot = null,
     onClose,
   }: {
     row: LevelCapFrameRow;
@@ -44,18 +46,27 @@
     searchTerms: string[];
     tagSuggestions: string[];
     abilityNames: Record<string, string>;
+    /** Build to open the editor on, e.g. from a weapon picked on the frame card;
+     *  its runs stay filtered after going back. */
+    initialBuild?: string | null;
+    /** Slot of that build to open and scroll to. */
+    initialSlot?: string | null;
     onClose: () => void;
   } = $props();
 
   const GEAR = ["primary", "secondary", "melee", "archgun", "companion"] as const;
   /** The archgun box only shows when the build carries one. */
-  const gearSlots = (build: LevelCapBuild | null) =>
-    GEAR.filter((slot) => slot !== "archgun" || build?.archgun);
+  /** Only the slots the build fills; an empty slot says nothing worth a box. */
+  const gearSlots = (build: LevelCapBuild | null) => GEAR.filter((slot) => build?.[slot]);
   const UNVERIFIED = "unverified";
 
-  let editingId = $state<string | null>(null);
+  // svelte-ignore state_referenced_locally
+  let editingId = $state<string | null>(initialBuild);
+  // svelte-ignore state_referenced_locally
+  let focusSlot = $state<string | null>(initialSlot);
   /** A build id, UNVERIFIED, or null for every run. */
-  let filter = $state<string | null>(null);
+  // svelte-ignore state_referenced_locally
+  let filter = $state<string | null>(initialBuild);
   let moveTarget = $state("");
   let showNew = $state(false);
   const expanded = new SvelteSet<string>();
@@ -67,6 +78,15 @@
     for (const run of runs) if (run.buildId) counts[run.buildId] = (counts[run.buildId] ?? 0) + 1;
     return counts;
   });
+  /** Exolizers summed per build; squad-client runs with only a round count add nothing. */
+  const exoTotals = $derived.by(() => {
+    const totals: Record<string, number> = {};
+    for (const run of runs)
+      if (run.buildId) totals[run.buildId] = (totals[run.buildId] ?? 0) + (run.exolizers ?? 0);
+    return totals;
+  });
+  const exoTotal = $derived(runs.reduce((sum, run) => sum + (run.exolizers ?? 0), 0));
+  const formatCount = (n: number) => n.toLocaleString($locale);
   const unverified = $derived(runs.filter((run) => run.buildUnverified || !run.buildId));
   const playerTerms = $derived(levelCapPlayerTerms(runs, searchTerms));
   const shownRuns = $derived(
@@ -77,9 +97,20 @@
         : runs.filter((run) => run.buildId === filter)
     ).filter((run) => playerTerms.every((term) => levelCapRunHasPlayer(run, term))),
   );
+  // Rows fill fewer slots than others; a shared width keeps the build pickers aligned.
+  const rowGearWidth = $derived.by(() => {
+    const most = Math.max(0, ...shownRuns.map((run) => gearSlots(run.build).length));
+    return `calc(${most} * 2.25rem + ${Math.max(0, most - 1)} * 0.25rem)`;
+  });
   const checkedRuns = $derived(runs.filter((run) => checked.has(run.id)));
   const buildName = (id: string | undefined) => builds.find((b) => b.id === id)?.name ?? "";
   const killsPending = $derived(new Set($levelCap?.status.killsPending ?? []));
+
+  /** Opens a build's editor, scrolled to a slot when one was clicked. */
+  function edit(id: string, slot: string | null = null): void {
+    focusSlot = slot;
+    editingId = id;
+  }
 
   function toggle(set: SvelteSet<string>, id: string): void {
     if (set.has(id)) set.delete(id);
@@ -89,7 +120,7 @@
   async function newBuild(source: { kind: "equipped" } | { kind: "build"; id: string }) {
     showNew = false;
     const id = await createLevelCapBuild(row.frame, source);
-    if (id) editingId = id;
+    if (id) edit(id);
     else
       addToast({
         level: "warning",
@@ -146,6 +177,31 @@
   }
 </script>
 
+{#snippet gearBox(
+  gear: LevelCapItem | null | undefined,
+  buildId: string | undefined,
+  slot: string,
+  size: string,
+)}
+  {@const art = gear ? levelCapItemImage(gear, $itemDb) : null}
+  <button
+    type="button"
+    class="flex {size} shrink-0 items-center justify-center rounded bg-bg-raised {buildId
+      ? 'cursor-pointer hover:bg-bg-surface hover:ring-1 hover:ring-accent/60'
+      : 'cursor-default'}"
+    title={gear ? levelCapItemName(gear, $itemDb) : ""}
+    disabled={!buildId}
+    onclick={(event) => {
+      event.stopPropagation();
+      if (buildId) edit(buildId, slot);
+    }}
+  >
+    {#if art}
+      <img src={art} alt="" class="h-4/5 w-4/5 object-contain" />
+    {/if}
+  </button>
+{/snippet}
+
 <ModalShell ariaLabel={row.frame} {onClose}>
   <div class="detail-panel level-cap-frame-panel flex flex-col" data-level-cap-modal={row.frame}>
     <div class="detail-panel-top-actions">
@@ -175,7 +231,20 @@
           >
         {/if}
       </div>
-      <span class="font-mono text-3xl font-bold text-accent">{runs.length}</span>
+      <div class="flex items-end gap-5" data-level-cap-frame-stats>
+        <div class="flex flex-col items-end leading-none">
+          <span class="font-mono text-3xl font-bold text-accent">{runs.length}</span>
+          <span class="mt-1 text-[10px] uppercase tracking-wide text-text-muted"
+            >{$t("levelCap.stat.runs")}</span
+          >
+        </div>
+        <div class="flex flex-col items-end leading-none">
+          <span class="font-mono text-3xl font-bold text-accent">{formatCount(exoTotal)}</span>
+          <span class="mt-1 text-[10px] uppercase tracking-wide text-text-muted"
+            >{$t("levelCap.col.exolizers")}</span
+          >
+        </div>
+      </div>
     </div>
 
     <div class="flex flex-col gap-3 p-4">
@@ -186,6 +255,7 @@
             runCount={runCounts[editing.id] ?? 0}
             {tagSuggestions}
             {abilityNames}
+            {focusSlot}
             onDone={() => (editingId = null)}
           />
         {/key}
@@ -202,7 +272,7 @@
                 ? 'border-accent bg-[color-mix(in_srgb,var(--accent)_8%,transparent)]'
                 : 'border-border/60 bg-bg-raised/40'}"
               title={$t("levelCap.builds.editHint")}
-              ondblclick={() => (editingId = build.id)}
+              ondblclick={() => edit(build.id)}
             >
               <button
                 type="button"
@@ -213,29 +283,21 @@
                 <span class="min-w-0 flex-1 truncate text-sm font-bold text-text-primary"
                   >{build.name}</span
                 >
+                <span
+                  class="font-mono text-xs text-text-secondary"
+                  title={$t("levelCap.col.exolizers")}
+                  >{formatCount(exoTotals[build.id] ?? 0)} {$t("levelCap.exo")}</span
+                >
                 <span class="font-mono text-lg font-bold text-accent"
                   >{runCounts[build.id] ?? 0}</span
                 >
               </button>
               <div class="flex items-center gap-1.5">
                 {#each gearSlots(build.build) as slot (slot)}
-                  {@const gear = build.build[slot]}
-                  {@const art = gear ? levelCapItemImage(gear, $itemDb) : null}
-                  <div
-                    class="flex h-8 w-8 items-center justify-center rounded bg-bg-raised {gear
-                      ? ''
-                      : 'border border-dashed border-border'}"
-                    title={gear ? levelCapItemName(gear, $itemDb) : ""}
-                  >
-                    {#if art}
-                      <img src={art} alt="" class="h-4/5 w-4/5 object-contain" />
-                    {/if}
-                  </div>
+                  {@render gearBox(build.build[slot], build.id, slot, "h-8 w-8")}
                 {/each}
-                <ThemedButton
-                  size="compact"
-                  className="ml-auto"
-                  onClick={() => (editingId = build.id)}>{$t("levelCap.builds.edit")}</ThemedButton
+                <ThemedButton size="compact" className="ml-auto" onClick={() => edit(build.id)}
+                  >{$t("levelCap.builds.edit")}</ThemedButton
                 >
               </div>
               {#if build.tags?.length}
@@ -355,20 +417,9 @@
                   onchange={() => toggle(checked, run.id)}
                 />
                 <div class="flex w-[22rem] shrink-0 items-center gap-2">
-                  <div class="flex shrink-0 items-center gap-1">
+                  <div class="flex shrink-0 items-center gap-1" style:width={rowGearWidth}>
                     {#each gearSlots(run.build) as slot (slot)}
-                      {@const gear = run.build?.[slot]}
-                      {@const art = gear ? levelCapItemImage(gear, $itemDb) : null}
-                      <div
-                        class="flex h-9 w-9 items-center justify-center rounded bg-bg-raised {gear
-                          ? ''
-                          : 'border border-dashed border-border'}"
-                        title={gear ? levelCapItemName(gear, $itemDb) : ""}
-                      >
-                        {#if art}
-                          <img src={art} alt="" class="h-4/5 w-4/5 object-contain" />
-                        {/if}
-                      </div>
+                      {@render gearBox(run.build?.[slot], run.buildId, slot, "h-9 w-9")}
                     {/each}
                   </div>
                   <select

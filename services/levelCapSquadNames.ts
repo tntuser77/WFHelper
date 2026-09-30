@@ -117,6 +117,59 @@ function consensus(reads: readonly SquadRead[]): string {
   return cut ? `${out}…` : out;
 }
 
+/** Looser than KNOWN_MATCH: a logged run's rows can only be its own few players. */
+const OWN_MATCH = 0.5;
+
+/** Pins a logged run's squad rows to the exact names its log gave: the pairing
+ *  with the least misreading wins, one row per name, and a row far from every
+ *  name (a companion, a nametag) stays null. */
+export function matchRowsToPlayers(
+  rows: SquadSlots,
+  names: readonly string[],
+): Array<string | null> {
+  const cost = rows.map((variants) => {
+    const reads = variants.flatMap((raw) => {
+      const read = cleanSquadRead(raw);
+      return read ? [read] : [];
+    });
+    return names.map((name) => {
+      const known = { text: name, truncated: false };
+      const d = Math.min(1, ...reads.map((read) => knownNameDistance(read, known)));
+      return d <= OWN_MATCH ? d : null;
+    });
+  });
+  let best: { total: number; pick: Array<number | null> } | null = null;
+  const pick: Array<number | null> = [];
+  const used = new Set<number>();
+  // Four rows and three names at most: trying every pairing is cheap.
+  const search = (row: number, total: number) => {
+    if (best && total >= best.total) return;
+    if (row === rows.length) {
+      best = { total, pick: [...pick] };
+      return;
+    }
+    for (let n = 0; n < names.length; n++) {
+      const d = cost[row][n];
+      if (d === null || used.has(n)) continue;
+      used.add(n);
+      pick.push(n);
+      search(row + 1, total + d);
+      pick.pop();
+      used.delete(n);
+    }
+    // Leaving a row unnamed costs more than any accepted misreading.
+    pick.push(null);
+    search(row + 1, total + 1);
+    pick.pop();
+  };
+  search(0, 0);
+  const chosen = (best as { pick: Array<number | null> } | null)?.pick ?? [];
+  return rows.map((_, row) => {
+    const n = chosen[row];
+    return n === null || n === undefined ? null : names[n];
+  });
+}
+
 /** Resolves every screenshot's slots at once, since a player only counts as a
  *  regular by turning up in more than one run. `known` are exact names. */
 export function resolveSquadNames(

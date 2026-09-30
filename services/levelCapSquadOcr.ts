@@ -54,6 +54,8 @@ export interface SquadScreenshotRead {
   portraits: Array<string | null>;
   /** Small PNG of each portrait, kept so a person can name the frame later. */
   thumbs: Array<Buffer | null>;
+  /** Where each row sits, top and bottom as fractions of the image's height. */
+  rows?: Array<{ top: number; bottom: number }>;
 }
 
 // The portrait ring's centre, in 1080p pixels from the slot disk's centre.
@@ -326,7 +328,9 @@ async function readBand(
   const rows = [...byDisk, ...scanned.slice(0, MAX_SLOTS - byDisk.length)].sort(
     (a, b) => a.y0 - b.y0,
   );
-  if (!rows.length) return { read: { names: [], portraits: [], thumbs: [] }, disks: 0 };
+  if (!rows.length) {
+    return { read: { names: [], portraits: [], thumbs: [], rows: [] }, disks: 0 };
+  }
   const crops = await Promise.all([
     ...masks.flatMap((mask) => rows.map((row) => rowCrop(mask, width, row))),
     ...rows.map((row) => plainCrop(img, row)),
@@ -358,6 +362,9 @@ async function readBand(
       names: reads.filter((_, i) => keep[i]),
       portraits: faces.flatMap((face, i) => (keep[i] ? [face?.portrait ?? null] : [])),
       thumbs: faces.flatMap((face, i) => (keep[i] ? [face?.thumb ?? null] : [])),
+      rows: rows.flatMap((row, i) =>
+        keep[i] ? [{ top: (top + row.y0) / H, bottom: (top + row.y1) / H }] : [],
+      ),
     },
     disks: byDisk.length,
   };

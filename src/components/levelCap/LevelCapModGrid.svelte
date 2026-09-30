@@ -16,6 +16,7 @@
     catalog,
     selected = null,
     onSelect,
+    onClear,
   }: {
     kind: LevelCapSlotKind;
     item: LevelCapItem;
@@ -24,6 +25,8 @@
     selected?: number | null;
     /** Absent in read-only views. */
     onSelect?: (slot: number) => void;
+    /** Right-click on a filled slot empties it. */
+    onClear?: (slot: number) => void;
   } = $props();
 
   const layout = $derived(levelCapSlotLayout(kind, item));
@@ -56,6 +59,7 @@
     rarity={meta?.rarity ?? null}
     selected={selected === spec.slot}
     onSelect={onSelect ? () => onSelect(spec.slot) : undefined}
+    onClear={onClear && upgrade?.type ? () => onClear(spec.slot) : undefined}
   />
 {/snippet}
 

@@ -56,6 +56,65 @@ describe("levelCapCatalog", () => {
     expect(mod("Continuity")?.augment).toBeUndefined();
   });
 
+  it("marks mods only some weapons take, and which weapons take them", () => {
+    const mod = (name: string) => catalog.mods.find((m) => m.name === name);
+    const weapon = (name: string) =>
+      [...catalog.primary, ...catalog.secondary].find((w) => w.name === name)?.type ?? "";
+    const takes = (gun: string, name: string) => {
+      const target = mod(name)?.target;
+      return !target || (catalog.weaponTargets[weapon(gun)] ?? []).includes(target.type);
+    };
+    expect(mod("Thundermiter")?.target?.weapon).toBe(true);
+    expect(mod("Point Blank")?.target?.weapon).toBe(false);
+    expect(mod("Vigilante Armaments")?.target).toBeUndefined();
+
+    expect(takes("Miter", "Thundermiter")).toBe(true);
+    expect(takes("Soma Prime", "Thundermiter")).toBe(false);
+    expect(takes("Kuva Sobek", "Shattering Justice")).toBe(true);
+    expect(takes("Soma Prime", "Serration")).toBe(true);
+    expect(takes("Soma Prime", "Point Blank")).toBe(false);
+    expect(takes("Hek", "Point Blank")).toBe(true);
+    expect(takes("Hek", "Serration")).toBe(false);
+    // The export's holster calls Phage a wide rifle; WFCD knows it is a shotgun.
+    expect(takes("Phage", "Point Blank")).toBe(true);
+    expect(takes("Paris Prime", "Split Flights")).toBe(true);
+    expect(takes("Paris Prime", "Serration")).toBe(true);
+    expect(takes("Rubico Prime", "Split Flights")).toBe(false);
+    expect(takes("Lex Prime", "Stinging Truth")).toBe(false);
+    expect(takes("Lex Prime", "Hornet Strike")).toBe(true);
+  });
+
+  it("keeps beast claw mods off player melee", () => {
+    const melee = catalog.melee.find((w) => w.name === "Nikana Prime")?.type ?? "";
+    const claw = catalog.mods.find((m) => m.name === "Maul");
+    expect(claw?.target?.weapon).toBe(true);
+    expect(catalog.weaponTargets[melee]).not.toContain(claw?.target?.type);
+  });
+
+  it("drops the export's dev copies of real mods", () => {
+    const molten = catalog.mods.filter((m) => m.name === "Molten Impact");
+    expect(molten).toHaveLength(1);
+    expect(molten[0]).toMatchObject({ maxRank: 5, drain: 11 });
+    expect(molten[0].stats).toContain("90%");
+    expect(catalog.mods.filter((m) => m.name === "Rush")).toHaveLength(1);
+  });
+
+  it("marks the mods an exilus slot takes", () => {
+    const exilus = (name: string) => catalog.mods.find((m) => m.name === name)?.exilus;
+    expect(exilus("Power Drift")).toBe(true);
+    expect(exilus("Primed Point Blank")).toBeUndefined();
+    expect(exilus("Serration")).toBeUndefined();
+    expect(exilus("Vigilante Supplies")).toBe(true);
+    // The export misses this one; WFCD has it.
+    expect(exilus("Shock Absorbers")).toBe(true);
+  });
+
+  it("carries each mod's max-rank drain, negative for auras", () => {
+    const mod = (name: string) => catalog.mods.find((m) => m.name === name);
+    expect(mod("Serration")?.drain).toBe(14);
+    expect(mod("Corrosive Projection")?.drain).toBeLessThan(0);
+  });
+
   it("offers only what the Helminth can graft, once each", () => {
     expect(has(catalog.abilities, "Roar")).toBe(true);
     expect(has(catalog.abilities, "Radial Blind")).toBe(true);

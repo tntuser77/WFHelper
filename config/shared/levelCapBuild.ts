@@ -72,16 +72,28 @@ function riven(raw: unknown): LevelCapRiven | null {
     const statName = text(stat?.name, 80);
     const amount = stat?.value;
     if (!statName || typeof amount !== "number" || !Number.isFinite(amount)) return [];
+    const tag = text(stat?.tag, 80);
+    const raw = stat?.raw;
     return [
       {
         name: statName,
         value: amount,
         positive: stat?.positive !== false,
         multiplier: stat?.multiplier === true,
+        ...(tag && typeof raw === "number" && Number.isFinite(raw) ? { tag, raw } : {}),
       },
     ];
   });
-  return { name, stats };
+  const rank = int(value.rank, 0, 8);
+  const disposition = value.disposition;
+  return {
+    name,
+    stats,
+    ...(rank !== null ? { rank } : {}),
+    ...(typeof disposition === "number" && disposition > 0 && disposition <= 3
+      ? { disposition }
+      : {}),
+  };
 }
 
 function upgrade(raw: unknown): LevelCapUpgrade | null {
@@ -93,6 +105,11 @@ function upgrade(raw: unknown): LevelCapUpgrade | null {
   if (rolled) out.riven = rolled;
   return out;
 }
+
+const LEVEL_CAP_INCARNON_TIERS = 5;
+/** Most perks any evolution offers. */
+export const LEVEL_CAP_INCARNON_PERKS = 3;
+const INCARNON_KINDS = new Set<LevelCapSlotKind>(["primary", "secondary", "melee"]);
 
 /** Riven upgrade paths; the stats live on the owned copy, not the type. */
 export function isLevelCapRivenType(type: string | null): boolean {
@@ -128,6 +145,16 @@ function item(raw: unknown, kind: LevelCapSlotKind, depth = 0): LevelCapItem | n
       return shardType ? [{ color: text(shard?.color, 64) ?? "", type: shardType }] : [];
     });
     if (shards.length) out.shards = shards.slice(0, MAX_SHARDS);
+  }
+  if (INCARNON_KINDS.has(kind) && Array.isArray(value.incarnon)) {
+    // Evolutions unlock in order, so keep picks up to the first bad one.
+    const perks: number[] = [];
+    for (const raw of value.incarnon.slice(0, LEVEL_CAP_INCARNON_TIERS)) {
+      const perk = int(raw, 0, LEVEL_CAP_INCARNON_PERKS - 1);
+      if (perk === null) break;
+      perks.push(perk);
+    }
+    if (perks.length) out.incarnon = perks;
   }
   if (kind === "companion" && depth === 0) {
     const weapon = item(value.weapon, "companion", 1);

@@ -219,7 +219,7 @@ function qualityCountsRow(): OwnedCountRow {
   };
 }
 
-function parseOwnedRelicCounts(
+export function parseOwnedRelicCounts(
   inventoryData: Record<string, unknown> | null,
   byUniqueName: Record<string, { groupKey: string; quality: keyof OwnedCountRow }>,
 ): Record<string, OwnedCountRow> {
@@ -281,7 +281,7 @@ function computeSquadExpected(
 
 const SNAPSHOT_PRICE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
-function loadPersistedCacheMaps(
+export function loadPersistedCacheMaps(
   fs: typeof import("node:fs"),
   cacheFilePath: string,
 ): { prices: Map<string, number>; ducats: Map<string, number> } {
@@ -355,7 +355,7 @@ function loadPersistedCacheMaps(
   return { prices, ducats };
 }
 
-function getCacheFileMtimeMs(fs: typeof import("node:fs"), cacheFilePath: string): number {
+export function getCacheFileMtimeMs(fs: typeof import("node:fs"), cacheFilePath: string): number {
   try {
     if (!fs.existsSync(cacheFilePath)) return 0;
     const stat = fs.statSync(cacheFilePath);
