@@ -12,7 +12,9 @@ export const ANALYTICS_MEASURES = [
   "exolizersAvg",
   "exolizersBest",
   "durationAvg",
+  "killsTotal",
   "killsAvg",
+  "killsBest",
   "killsPerMin",
 ] as const;
 export type AnalyticsMeasure = (typeof ANALYTICS_MEASURES)[number];
@@ -159,7 +161,7 @@ const counts = (measure: AnalyticsMeasure) => measure === "runs" || measure === 
 
 /** Slices and stacks only make a whole when the measure counts or totals something. */
 export function analyticsMeasureAddsUp(measure: AnalyticsMeasure): boolean {
-  return counts(measure) || measure === "exolizersTotal";
+  return counts(measure) || measure === "exolizersTotal" || measure === "killsTotal";
 }
 
 export function isAnalyticsPie(chart: AnalyticsChartKind): boolean {
@@ -168,7 +170,9 @@ export function isAnalyticsPie(chart: AnalyticsChartKind): boolean {
 
 function measureOf(run: LevelCapRun, measure: AnalyticsMeasure): number | null {
   if (measure === "durationAvg") return run.durationSec;
-  if (measure === "killsAvg") return run.kills ?? null;
+  if (measure === "killsTotal" || measure === "killsAvg" || measure === "killsBest") {
+    return run.kills ?? null;
+  }
   if (measure === "killsPerMin") return levelCapKillsPerMin(run);
   if (counts(measure)) return null;
   return run.exolizers;
@@ -186,8 +190,8 @@ function add(acc: Acc, { run }: Unit, measure: AnalyticsMeasure): void {
 function read(acc: Acc | undefined, measure: AnalyticsMeasure): number | null {
   if (!acc) return analyticsMeasureAddsUp(measure) ? 0 : null;
   if (counts(measure)) return acc.runs;
-  if (measure === "exolizersBest") return acc.max;
-  if (measure === "exolizersTotal") return acc.sum;
+  if (measure === "exolizersBest" || measure === "killsBest") return acc.max;
+  if (measure === "exolizersTotal" || measure === "killsTotal") return acc.sum;
   return acc.n ? acc.sum / acc.n : null;
 }
 

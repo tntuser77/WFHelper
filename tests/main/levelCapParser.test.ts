@@ -215,6 +215,15 @@ describe("levelCapParser", () => {
     expect(after.starts[1].accountIds).toEqual([]);
   });
 
+  it("reads both ids off a host's reward lines", () => {
+    const { accounts } = run([
+      "10.0 Game [Info]: OnStateStarted, mission type=MT_VOID_CASCADE",
+      "20.0 Sys [Info]: VoidProjections: Host got reward info from 5b9b0220f2f2eb3a7c067544",
+      "20.1 Sys [Info]: VoidProjections: Host sending reward info for 5b9b0220f2f2eb3a7c067544 to 66ccde192a203d71870a46e2",
+    ]);
+    expect(accounts).toEqual(["5b9b0220f2f2eb3a7c067544", "66ccde192a203d71870a46e2"]);
+  });
+
   it("flags only the lines the parser reads", () => {
     expect(CLIENT.every((line) => isLevelCapLine(line) || line.includes("late join"))).toBe(true);
     expect(isLevelCapLine("12.0 Net [Info]: NAT bound for client")).toBe(false);

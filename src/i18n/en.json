@@ -2924,6 +2924,8 @@
   "analytics.measure.exolizersBest": "Best Exolizers",
   "analytics.measure.durationAvg": "Average run time",
   "analytics.measure.killsAvg": "Average kills",
+  "analytics.measure.killsTotal": "Total kills",
+  "analytics.measure.killsBest": "Best kills",
   "analytics.measure.killsPerMin": "Kills per minute",
   "analytics.split.week": "Week",
   "analytics.split.month": "Month",

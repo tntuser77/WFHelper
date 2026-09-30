@@ -2904,6 +2904,8 @@
   "analytics.measure.exolizersBest": "最多无垢装置数",
   "analytics.measure.durationAvg": "平均单局用时",
   "analytics.measure.killsAvg": "平均击杀数",
+  "analytics.measure.killsTotal": "总击杀数",
+  "analytics.measure.killsBest": "最高击杀数",
   "analytics.measure.killsPerMin": "每分钟击杀数",
   "analytics.split.week": "周",
   "analytics.split.month": "月",

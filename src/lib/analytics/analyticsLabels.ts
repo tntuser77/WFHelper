@@ -23,7 +23,9 @@ export const MEASURE_LABEL: Record<AnalyticsMeasure, MessageKey> = {
   exolizersAvg: "analytics.measure.exolizersAvg",
   exolizersBest: "analytics.measure.exolizersBest",
   durationAvg: "analytics.measure.durationAvg",
+  killsTotal: "analytics.measure.killsTotal",
   killsAvg: "analytics.measure.killsAvg",
+  killsBest: "analytics.measure.killsBest",
   killsPerMin: "analytics.measure.killsPerMin",
 };
 

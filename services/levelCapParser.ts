@@ -48,8 +48,10 @@ const LEVEL_HINTS_MAX = 4;
 // Joining someone else's mission names the host's.
 const CONNECT = /Trying to connect to .+?, flags: \d+, id=([0-9a-f]{24})/;
 // Every player's relic reward is logged by account id: Cascade is always a
-// fissure, and no one can join once the first relic is open.
-const VOID_PROJECTIONS = /VoidProjections: .*?\b([0-9a-f]{24})\b/;
+// fissure, and no one can join once the first relic is open. A host's lines
+// can name two ("Host sending reward info for <id> to <id>").
+const VOID_PROJECTIONS = "VoidProjections: ";
+const ACCOUNT_ID = /\b[0-9a-f]{24}\b/g;
 
 interface LevelCapSquadEntry {
   name: string;
@@ -315,12 +317,14 @@ export function createLevelCapParser() {
 
     if (feedSquad(line)) return events ?? NO_EVENTS;
 
-    const account = line.match(CONNECT) ?? line.match(VOID_PROJECTIONS);
-    if (account) {
-      if (CONNECT.test(line)) hostAccountId = account[1];
-      if (active && active.endSec == null && !active.accountIds.has(account[1])) {
-        active.accountIds.add(account[1]);
-        out().push({ type: "account", accountId: account[1] });
+    const connect = line.match(CONNECT);
+    if (connect || line.includes(VOID_PROJECTIONS)) {
+      if (connect) hostAccountId = connect[1];
+      const ids = connect ? [connect[1]] : (line.match(ACCOUNT_ID) ?? []);
+      for (const id of ids) {
+        if (!active || active.endSec != null || active.accountIds.has(id)) continue;
+        active.accountIds.add(id);
+        out().push({ type: "account", accountId: id });
       }
       return events ?? NO_EVENTS;
     }
