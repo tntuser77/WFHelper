@@ -23,6 +23,10 @@ export const MEASURE_LABEL: Record<AnalyticsMeasure, MessageKey> = {
   exolizersAvg: "analytics.measure.exolizersAvg",
   exolizersBest: "analytics.measure.exolizersBest",
   durationAvg: "analytics.measure.durationAvg",
+  killsTotal: "analytics.measure.killsTotal",
+  killsAvg: "analytics.measure.killsAvg",
+  killsBest: "analytics.measure.killsBest",
+  killsPerMin: "analytics.measure.killsPerMin",
 };
 
 export const SPLIT_LABEL: Record<AnalyticsSplit, MessageKey> = {
@@ -153,6 +157,6 @@ export function formatAnalyticsValue(
 ): string {
   if (value === null) return "–";
   if (measure === "durationAvg") return formatLevelCapDuration(Math.round(value));
-  const digits = measure === "exolizersAvg" ? 1 : 0;
+  const digits = measure === "exolizersAvg" || measure === "killsPerMin" ? 1 : 0;
   return value.toLocaleString(locale, { maximumFractionDigits: digits });
 }

@@ -101,6 +101,9 @@ export interface LevelCapRun {
   /** Rounds completed; the only progress a squad client's log carries. */
   rounds?: number | null;
   durationSec: number | null;
+  /** Enemies you killed, from your profile's lifetime kills before and after the
+   *  run; absent on runs from before this was counted or when a read failed. */
+  kills?: number;
   /** Players in the mission including you; null when the log never said. */
   squadSize: number | null;
   /** Names the log gave for the squad, you included; on screenshot runs, the
@@ -225,6 +228,10 @@ export interface LevelCapLogSquadmate {
   frame?: string;
   /** `frame` is the host's, guessed from what their level loaded first. */
   frameGuess?: true;
+  /** Enemies they killed, from their profile's lifetime kills before and after
+   *  the run; absent when unknown or their profile is private. Never on you:
+   *  your kills are the run's `kills`. */
+  kills?: number;
 }
 
 /** A correction to one squad row, by its place in `squadReads`; a slot past the
@@ -265,6 +272,8 @@ export interface LevelCapStatus {
   rounds: number | null;
   /** Id of the run F12 already logged for this mission, if any. */
   runId: string | null;
+  /** Runs whose kills are still waiting for the profile to catch up. */
+  killsPending: string[];
 }
 
 export interface LevelCapPayload {

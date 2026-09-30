@@ -170,6 +170,14 @@ export function formatLevelCapDuration(sec: number | null): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 
+/** Your kills per minute of run time; null when either is unknown. */
+export function levelCapKillsPerMin(
+  run: Pick<LevelCapRun, "kills" | "durationSec">,
+): number | null {
+  if (run.kills == null || !run.durationSec || run.durationSec <= 0) return null;
+  return run.kills / (run.durationSec / 60);
+}
+
 /** "Melee, Influence" -> ["melee", "influence"]; every term has to match. */
 export function levelCapSearchTerms(query: string): string[] {
   return query
@@ -188,6 +196,15 @@ export function levelCapSquad(
   const known = fromShot ? names.length + 1 : names.length;
   const size = run.squadSize ?? (fromShot ? (run.squadReads?.length ?? 0) + 1 : names.length);
   return { names, others: Math.max(0, size - known) };
+}
+
+/** Squadmates' kills on the run by lowercased name, for those whose profile told. */
+export function levelCapSquadKills(run: Pick<LevelCapRun, "squadLog">): Map<string, number> {
+  const kills = new Map<string, number>();
+  for (const mate of run.squadLog ?? []) {
+    if (mate.kills != null) kills.set(mate.name.toLowerCase(), mate.kills);
+  }
+  return kills;
 }
 
 /** Whether a squad player's name contains the (lowercased) search term. */

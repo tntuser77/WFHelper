@@ -27,7 +27,11 @@ const FOLDERS: Record<string, string> = { Ember: "Ember", Sandman: "Inaros", Pag
 let outcomes: LevelCapHotkeyOutcome[];
 let captureResult: Buffer | null;
 
-async function setup(): Promise<{ tracker: Tracker; store: Store }> {
+async function setup(
+  lifetimeStats?: (
+    accountId: string,
+  ) => Promise<{ kills: number; missionsEnded: number; name?: string } | null>,
+): Promise<{ tracker: Tracker; store: Store }> {
   const store = await import("../../services/levelCapStore");
   const tracker = await import("../../services/levelCapTracker");
   store.__resetLevelCapStoreForTest();
@@ -39,6 +43,8 @@ async function setup(): Promise<{ tracker: Tracker; store: Store }> {
     capture: async () => captureResult,
     onChanged: () => {},
     onHotkey: (outcome) => outcomes.push(outcome),
+    accountId: () => "me",
+    lifetimeStats,
   });
   return { tracker, store };
 }
@@ -135,6 +141,7 @@ describe("levelCapTracker", () => {
       exolizers: 108,
       rounds: null,
       runId: logged.id,
+      killsPending: [],
     });
 
     feed(tracker, [exo(4100, 110), ...END(4212, true)]);
@@ -232,6 +239,63 @@ describe("levelCapTracker", () => {
     await settle();
     expect(outcomes[0]?.type).toBe("logged");
     expect(store.getRuns()[0]).toMatchObject({ exolizers: null, rounds: 27 });
+  });
+
+  it("counts your kills on a run from the profile before and after it", async () => {
+    vi.useFakeTimers();
+    try {
+      const readings = [
+        { kills: 1_979_602, missionsEnded: 7739 },
+        { kills: 1_979_715, missionsEnded: 7740 },
+      ];
+      const { tracker, store } = await setup(async () => readings[0]);
+      feed(tracker, [...START, exo(4000, 108), ...END(4100, false)]);
+      const [run] = store.getRuns();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(tracker.getStatus().killsPending).toEqual([run.id]);
+
+      readings.shift();
+      await vi.advanceTimersByTimeAsync(90_000);
+      expect(store.getRuns()[0].kills).toBe(113);
+      expect(tracker.getStatus().killsPending).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("puts each squadmate's kills on their row of the run's squad", async () => {
+    vi.useFakeTimers();
+    try {
+      const HOST = "6ab92b4d61dc54d6b009e00b";
+      const posted = { value: false };
+      const { tracker, store } = await setup(async (accountId) => {
+        const bump = posted.value ? 1 : 0;
+        if (accountId === "me") return { kills: 100 + bump * 50, missionsEnded: 10 + bump };
+        return { kills: 7000 + bump * 400, missionsEnded: 115 + bump, name: "L7ese" };
+      });
+      feed(tracker, [
+        "1.0 Net [Info]: JoinSquadSessionCallback. Session id=abc123, host name=l7ese",
+        "1.1 Net [Info]: AddSquadMember: Me, mm=A1, squadCount=1",
+        "1.2 Net [Info]: AddSquadMember: l7ese, mm=A2, squadCount=2",
+        `1.3 Net [Info]: Trying to connect to l7ese, flags: 0, id=${HOST}`,
+        ...START,
+        `200.0 Sys [Info]: VoidProjections: Still waiting on response from ${HOST}`,
+        exo(4000, 108),
+        ...END(4100, false),
+      ]);
+      await vi.advanceTimersByTimeAsync(10_000);
+      posted.value = true;
+      await vi.advanceTimersByTimeAsync(90_000);
+      const run = store.getRuns()[0];
+      expect(run.kills).toBe(50);
+      expect(run.squadLog).toEqual([
+        { name: "l7ese", slot: 1, host: true, kills: 400 },
+        { name: "Me", slot: 2, you: true },
+      ]);
+      expect(tracker.getStatus().killsPending).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps the log's squad: HUD slots, host, and frames it loaded by name", async () => {

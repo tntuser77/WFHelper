@@ -104,6 +104,8 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
     screenshot: typeof run.screenshot === "string" ? run.screenshot : null,
   };
   delete out.tags;
+  delete out.kills;
+  if (Number.isSafeInteger(run.kills) && (run.kills as number) >= 0) out.kills = run.kills;
   delete out.players;
   delete out.exolizerOcr;
   if (run.exolizerOcr === "read" || run.exolizerOcr === "unreadable") {
@@ -187,6 +189,9 @@ function normalizeSquadLog(raw: unknown[]): LevelCapLogSquadmate[] {
     if (value.you === true) mate.you = true;
     if (typeof value.frame === "string" && value.frame) mate.frame = value.frame.slice(0, 64);
     if (value.frameGuess === true && mate.frame) mate.frameGuess = true;
+    if (!mate.you && Number.isSafeInteger(value.kills) && (value.kills as number) >= 0) {
+      mate.kills = value.kills as number;
+    }
     return [mate];
   });
 }

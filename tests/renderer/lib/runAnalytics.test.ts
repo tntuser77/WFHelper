@@ -213,6 +213,24 @@ describe("analyticsResult", () => {
     expect(best.total).toBe(120);
   });
 
+  it("averages kills and kills per minute over the runs that have them", () => {
+    const runs = [
+      run({ kills: 6000, durationSec: 3600 }),
+      run({ kills: 3000, durationSec: 1200 }),
+      run({ durationSec: 3600 }),
+      run({ kills: 500, durationSec: null }),
+    ];
+    const avg = analyticsResult(runs, spec({ measure: "killsAvg", chart: "stat" }), ctx);
+    expect(avg.total).toBe(3166.6666666666665);
+    const perMin = analyticsResult(runs, spec({ measure: "killsPerMin", chart: "stat" }), ctx);
+    // 100/min and 150/min; the run without a duration has no rate.
+    expect(perMin.total).toBe(125);
+    const total = analyticsResult(runs, spec({ measure: "killsTotal", chart: "stat" }), ctx);
+    expect(total.total).toBe(9500);
+    const best = analyticsResult(runs, spec({ measure: "killsBest", chart: "stat" }), ctx);
+    expect(best.total).toBe(6000);
+  });
+
   it("filters by date range, squad and frame", () => {
     const runs = [
       run({ completedAt: day(5, 1) }),

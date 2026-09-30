@@ -29,6 +29,8 @@ import {
   snapshotEquippedBuild,
   snapshotItemConfigs,
 } from "../services/levelCapBuild";
+import { fetchProfileJson, getProfileAccountId } from "../services/codexProfile";
+import { parseLifetimeStats } from "../services/levelCapKills";
 import { captureScreenFast } from "../services/screenCapture";
 import { readExolizersFromScreenshot } from "../services/levelCapExolizerOcr";
 import { readSquadFromScreenshot } from "../services/levelCapSquadOcr";
@@ -392,6 +394,8 @@ function register(): void {
       return shot && !shot.image.isEmpty() ? shot.image.toPNG() : null;
     },
     onChanged: pushUpdate,
+    accountId: getProfileAccountId,
+    lifetimeStats: async (accountId) => parseLifetimeStats(await fetchProfileJson(accountId)),
     onHotkey: (outcome) => {
       broadcastToRenderers(LEVEL_CAP_HOTKEY, outcome);
       showLevelCapNotification(toastCard(outcome));
