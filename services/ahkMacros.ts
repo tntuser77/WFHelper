@@ -197,8 +197,10 @@ function resolvePaths(): MacroPaths {
   return { script, settingsIni, mexianIni: fromIni || defaultMexianIni() };
 }
 
+/** AutoHotkeyUX.exe is the launcher; it names the script too but exits once the
+ * interpreter is up, so stopping it would leave the script running. */
 function isAhkExe(name: string): boolean {
-  return /^autohotkey.*\.exe$/i.test(name);
+  return /^autohotkey.*\.exe$/i.test(name) && !/^autohotkeyux/i.test(name);
 }
 
 function findScriptPid(script: string): number | null {
