@@ -214,6 +214,11 @@ import {
   MISSION_REWARDS_GET,
   MISSION_REWARDS_PAGE,
   MISSION_REWARDS_UPDATED,
+  MACROS_GET,
+  MACROS_SAVE,
+  MACROS_SCRIPT,
+  MACROS_SET_PATHS,
+  MACROS_STATUS,
 } from "./config/shared/ipcChannels";
 
 // invoke() is typed any; this wrapper pins each call's args+return to its IpcInvokeMap entry so drift fails typecheck.
@@ -370,6 +375,12 @@ try {
     pairPhone: inv<"pairPhone">(PHONE_SYNC_PAIR),
     unpairPhone: inv<"unpairPhone">(PHONE_SYNC_UNPAIR),
     syncPhoneNow: inv<"syncPhoneNow">(PHONE_SYNC_NOW),
+
+    getMacros: inv<"getMacros">(MACROS_GET),
+    getMacroStatus: inv<"getMacroStatus">(MACROS_STATUS),
+    saveMacros: inv<"saveMacros">(MACROS_SAVE),
+    setMacroPaths: inv<"setMacroPaths">(MACROS_SET_PATHS),
+    runMacroScript: inv<"runMacroScript">(MACROS_SCRIPT),
 
     marketAlertsList: inv<"marketAlertsList">(MARKET_ALERTS_LIST),
     marketAlertsSave: inv<"marketAlertsSave">(MARKET_ALERTS_SAVE),

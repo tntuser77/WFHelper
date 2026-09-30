@@ -282,3 +282,9 @@ export const INVENTORY_SELECTION_COMPLETE = "inventory-selection-complete";
 export const MISSION_REWARDS_GET = "mission-rewards:get";
 export const MISSION_REWARDS_PAGE = "mission-rewards:page";
 export const MISSION_REWARDS_UPDATED = "mission-rewards-updated";
+
+export const MACROS_GET = "macros:get";
+export const MACROS_STATUS = "macros:status";
+export const MACROS_SAVE = "macros:save";
+export const MACROS_SET_PATHS = "macros:set-paths";
+export const MACROS_SCRIPT = "macros:script";

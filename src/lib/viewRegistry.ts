@@ -30,6 +30,7 @@ export const LAZY_VIEW_LOADERS: Record<
   wiki: () => import("../views/WikiView.svelte"),
   arbi: () => import("../views/ArbiAnalyzeView.svelte"),
   missions: () => import("../views/MissionsView.svelte"),
+  macros: () => import("../views/MacrosView.svelte"),
 };
 
 export const loadBulkSellModalModule = () => import("../components/workbench/BulkSellModal.svelte");
@@ -54,6 +55,7 @@ export const VIEW_LABEL_KEYS: Record<ViewName, MessageKey> = {
   rivens: "common.rivens",
   arbi: "nav.runAnalysis",
   missions: "enemy.missions",
+  macros: "nav.macros",
   settings: "common.settings",
 };
 
@@ -74,6 +76,7 @@ const SIDEBAR_VIEW_HIDEABLE: Record<SidebarViewName, boolean> = {
   rivens: true,
   arbi: true,
   missions: true,
+  macros: true,
   settings: false,
 };
 

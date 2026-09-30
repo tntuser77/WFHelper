@@ -146,6 +146,17 @@ export interface PreloadAPI {
   pairPhone: () => Promise<IpcInvokeMap["pairPhone"]["return"]>;
   unpairPhone: () => Promise<IpcInvokeMap["unpairPhone"]["return"]>;
   syncPhoneNow: () => Promise<IpcInvokeMap["syncPhoneNow"]["return"]>;
+  getMacros: () => Promise<IpcInvokeMap["getMacros"]["return"]>;
+  getMacroStatus: () => Promise<IpcInvokeMap["getMacroStatus"]["return"]>;
+  saveMacros: (
+    ...args: IpcInvokeMap["saveMacros"]["args"]
+  ) => Promise<IpcInvokeMap["saveMacros"]["return"]>;
+  setMacroPaths: (
+    ...args: IpcInvokeMap["setMacroPaths"]["args"]
+  ) => Promise<IpcInvokeMap["setMacroPaths"]["return"]>;
+  runMacroScript: (
+    ...args: IpcInvokeMap["runMacroScript"]["args"]
+  ) => Promise<IpcInvokeMap["runMacroScript"]["return"]>;
   marketAlertsList: () => Promise<IpcInvokeMap["marketAlertsList"]["return"]>;
   marketAlertsSave: (
     payload: IpcInvokeMap["marketAlertsSave"]["args"][0],

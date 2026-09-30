@@ -117,6 +117,7 @@ import * as notificationChannelsIpc from "./ipc/notificationChannelsIpc";
 import * as phoneSyncIpc from "./ipc/phoneSyncIpc";
 import * as marketAlertsIpc from "./ipc/marketAlertsIpc";
 import * as missionRewardsIpc from "./ipc/missionRewardsIpc";
+import * as macrosIpc from "./ipc/macrosIpc";
 import * as inventorySelectionIpc from "./ipc/inventorySelectionIpc";
 import * as tradeWorkflow from "./ipc/tradeWorkflow";
 import * as tradeWorkbenchIpc from "./ipc/tradeWorkbenchIpc";
@@ -550,6 +551,7 @@ function registerIpcHandlers(profileStage: ProfileStage): void {
   popoutIpc.register();
   inventorySelectionIpc.register();
   missionRewardsIpc.register();
+  macrosIpc.register();
 
   const attachInventoryAfterHelperRun = (ok: boolean) => {
     if (!ok || ctx.currentInventoryPath || inventoryIpc.getInventorySource() !== "helper") return;
