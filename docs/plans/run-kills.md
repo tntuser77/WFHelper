@@ -56,15 +56,13 @@ Show how many enemies you killed on each Void Cascade run. Squadmates' kills are
 - If the app is closed when a mission ends, that run gets no kills.
 - Each run makes about 3 before reads plus 1 to 20 after polls, at about 580 KB each.
 
-## Phase 2: squadmates (needs research first)
+## Phase 2: squadmates (built 2026-09-30)
 
-Blocked on mapping squad names to account IDs:
+`mm=` on `AddSquadMember` is a matchmaking id (for some players it is just their name), not the account id. A public fissure run with two others (2026-09-30) showed account ids the profile endpoint accepts. Both were checked against it, and it returns `Results[0].DisplayName`:
 
-- `AddSquadMember: <name>, mm=<id>` is a matchmaking ID, not the account ID. Yours logs as `A464FDDF…` while your account ID is `5b9b0220…`.
-- The endpoint has no lookup by name (`?n=` returns an empty body).
-- Leads for a live squad test:
-  - `SendSessionUpdate ... "memberAccountId":"<id>"`
-  - `VoidProjections` lines (fissures only)
-  - Whatever gets logged when you open a squadmate's profile in game
+- `Net [Info]: Trying to connect to <host>, flags: 0, id=<accountId>`: the host's id, logged when you join someone else's session.
+- `VoidProjections: Client got reward info from <accountId>` and `Still waiting on response from <accountId>`: every player in the squad, you included, when a relic resolves. Void Cascade is always a fissure, and no one can join after the first relic is open (except rejoining after a crash), so the whole squad shows up.
 
-Once names map to IDs, the phase 1 diff works per player. Private profiles show nothing.
+The parser collects these ids per mission (`LevelCapMission.accountIds`, plus an `account` event for ids seen mid-run). The kill counter reads every account's profile during the run, polls each one after it, and applies the same one-mission check as for you. A squadmate's kills go on their `squadLog` row (`kills`), matched by the profile's display name. The squad hover on each run row shows them.
+
+Gaps: private profiles show nothing. A squadmate who played another mission before the after-reading gets skipped. A squadmate who leaves more than two minutes before the end can get their kills absorbed by a baseline re-read.

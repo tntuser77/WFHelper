@@ -12,6 +12,7 @@
     levelCapPlayerTerms,
     levelCapRunHasPlayer,
     levelCapSquad,
+    levelCapSquadKills,
     orderLevelCapTags,
     type LevelCapFrameRow,
   } from "../../lib/levelCap.js";
@@ -408,6 +409,7 @@
           {#each shownRuns as run, index (run.id)}
             {@const open = expanded.has(run.id)}
             {@const squad = levelCapSquad(run)}
+            {@const squadKills = levelCapSquadKills(run)}
             {@const squadUp = shownRuns.length > 2 && index >= shownRuns.length - 2}
             <li class="border-b border-border/50 last:border-b-0">
               <div class="flex min-h-[3.75rem] items-center gap-4 px-3 py-2.5 text-sm">
@@ -518,7 +520,17 @@
                             >{squadLabel(run)}</span
                           >
                           {#each squad.names as name (name)}
-                            <span class="whitespace-nowrap">{name}</span>
+                            {@const kills = squadKills.get(name.toLowerCase())}
+                            <span class="flex justify-between gap-3 whitespace-nowrap"
+                              >{name}
+                              {#if kills != null}
+                                <span class="font-mono text-text-muted" data-level-cap-squad-kills
+                                  >{$t("levelCap.squadKills", {
+                                    count: kills.toLocaleString($locale),
+                                  })}</span
+                                >
+                              {/if}
+                            </span>
                           {/each}
                           {#if squad.others}
                             <span class="whitespace-nowrap text-text-muted"

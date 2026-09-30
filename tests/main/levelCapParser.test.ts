@@ -18,12 +18,14 @@ function run(lines: readonly string[]) {
   const parser = createLevelCapParser();
   const starts: LevelCapMission[] = [];
   const ends: LevelCapMission[] = [];
+  const accounts: string[] = [];
   for (const line of lines) {
     for (const event of parser.feedLine(line)) {
-      (event.type === "start" ? starts : ends).push(event.mission);
+      if (event.type === "account") accounts.push(event.accountId);
+      else (event.type === "start" ? starts : ends).push(event.mission);
     }
   }
-  return { parser, starts, ends };
+  return { parser, starts, ends, accounts };
 }
 
 describe("levelCapParser", () => {
@@ -181,6 +183,36 @@ describe("levelCapParser", () => {
     for (const line of SQUAD) parser.feedLine(line);
     parser.feedLine("9000.000 Net [Info]: MatchingService::LeaveSquad");
     expect(parser.squad()).toEqual([]);
+  });
+
+  it("collects squad account ids from joining the host and from relic rewards", () => {
+    const HOST = "6ab92b4d61dc54d6b009e00b";
+    const MATE = "6ab4ff4ca40bc1f6a101d786";
+    const ME = "5b9b0220f2f2eb3a7c067544";
+    const lines = [
+      "63.502 Net [Info]: JoinSquadSessionCallback. Session id=6abd8aa4f9941e7fcf0a5d8f, host name=l7ese",
+      `64.638 Net [Info]: Trying to connect to l7ese, flags: 0, id=${HOST}`,
+      "70.0 Game [Info]: OnStateStarted, mission type=MT_VOID_CASCADE",
+      `228.406 Sys [Info]: VoidProjections: Client got reward info from ${ME}`,
+      `228.406 Sys [Info]: VoidProjections: Still waiting on response from ${HOST}`,
+      `228.406 Sys [Info]: VoidProjections: Still waiting on response from ${MATE}`,
+      `228.466 Sys [Info]: VoidProjections: Client got reward info from ${HOST}`,
+      `229.556 Sys [Info]: VoidProjections: Client got reward info from ${MATE}`,
+    ];
+    expect(lines.every(isLevelCapLine)).toBe(true);
+    const { parser, starts, accounts } = run(lines);
+    expect(starts[0].accountIds).toEqual([HOST]);
+    // The host was known at the start; each later id is announced once.
+    expect(accounts).toEqual([ME, MATE]);
+    expect(parser.current()?.accountIds).toEqual([HOST, ME, MATE]);
+
+    // Leaving the squad forgets the host, so the next Cascade starts without it.
+    const after = run([
+      ...lines,
+      "300.0 Net [Info]: MatchingService::LeaveSquad",
+      ...lines.slice(2, 3),
+    ]);
+    expect(after.starts[1].accountIds).toEqual([]);
   });
 
   it("flags only the lines the parser reads", () => {

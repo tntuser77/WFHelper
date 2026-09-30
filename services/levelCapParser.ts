@@ -44,6 +44,13 @@ const NOT_A_FRAME = new Set([
 ]);
 const LEVEL_HINTS_MAX = 4;
 
+// Account ids, the ones the profile endpoint takes (mm= ids are not).
+// Joining someone else's mission names the host's.
+const CONNECT = /Trying to connect to .+?, flags: \d+, id=([0-9a-f]{24})/;
+// Every player's relic reward is logged by account id: Cascade is always a
+// fissure, and no one can join once the first relic is open.
+const VOID_PROJECTIONS = /VoidProjections: .*?\b([0-9a-f]{24})\b/;
+
 interface LevelCapSquadEntry {
   name: string;
   slot: number;
@@ -70,10 +77,13 @@ export interface LevelCapMission {
   tile: LevelCapTile | null;
   /** Loadout slot -> item id for every slot that gained XP at mission end. */
   gearXp: Record<string, string>;
+  /** Account ids the log showed for the squad, yours among them. */
+  accountIds: string[];
 }
 
 type LevelCapParserEvent =
   | { type: "start"; mission: LevelCapMission }
+  | { type: "account"; accountId: string }
   | { type: "end"; mission: LevelCapMission };
 
 interface Prelude {
@@ -91,6 +101,7 @@ interface Active {
   squad: Map<string, LevelCapSquadEntry>;
   tile: LevelCapTile | null;
   gearXp: Record<string, string>;
+  accountIds: Set<string>;
 }
 
 const NO_EVENTS: readonly LevelCapParserEvent[] = [];
@@ -112,6 +123,8 @@ const LINE_HINTS = [
   "/Temp/OtherPlayer",
   "Remote player",
   "/Lotus/Powersuits/",
+  "Trying to connect to",
+  "VoidProjections",
 ];
 
 /** False for lines the parser would ignore anyway. */
@@ -136,6 +149,7 @@ function snapshot(active: Active): LevelCapMission {
     })),
     tile: active.tile,
     gearXp: { ...active.gearXp },
+    accountIds: [...active.accountIds],
   };
 }
 
@@ -154,6 +168,8 @@ export function createLevelCapParser() {
   let joinedHost: string | null = null;
   let loaderOf: LevelCapSquadEntry | null = null;
   let levelLoadOf: LevelCapSquadEntry | null = null;
+  // The host's account id from joining their session, until the squad breaks up.
+  let hostAccountId: string | null = null;
 
   function member(name: string, host = false): LevelCapSquadEntry {
     const known = squad.find((entry) => entry.name === name);
@@ -179,7 +195,7 @@ export function createLevelCapParser() {
   function feedSquad(line: string): boolean {
     if (LEAVE_SQUAD.test(line)) {
       squad = [];
-      joinedHost = null;
+      joinedHost = hostAccountId = null;
       loaderOf = levelLoadOf = null;
       return true;
     }
@@ -187,6 +203,7 @@ export function createLevelCapParser() {
     if (join) {
       squad = [];
       joinedHost = cleanName(join[1]);
+      hostAccountId = null;
       return true;
     }
     const add = line.match(ADD_MEMBER);
@@ -298,6 +315,16 @@ export function createLevelCapParser() {
 
     if (feedSquad(line)) return events ?? NO_EVENTS;
 
+    const account = line.match(CONNECT) ?? line.match(VOID_PROJECTIONS);
+    if (account) {
+      if (CONNECT.test(line)) hostAccountId = account[1];
+      if (active && active.endSec == null && !active.accountIds.has(account[1])) {
+        active.accountIds.add(account[1]);
+        out().push({ type: "account", accountId: account[1] });
+      }
+      return events ?? NO_EVENTS;
+    }
+
     const loaded = line.match(LOADOUT_LOADED);
     if (loaded) {
       const name = cleanName(loaded[1]);
@@ -319,6 +346,7 @@ export function createLevelCapParser() {
           squad: new Map(squad.map((entry) => [entry.name, entry])),
           tile: decodeLevelCapTile(prelude.bridges),
           gearXp: {},
+          accountIds: new Set(hostAccountId ? [hostAccountId] : []),
         };
         out().push({ type: "start", mission: snapshot(active) });
       }
@@ -361,7 +389,8 @@ export function createLevelCapParser() {
     flush(): LevelCapMission | null {
       const events: LevelCapParserEvent[] = [];
       close(events);
-      return events[0]?.mission ?? null;
+      const [event] = events;
+      return event?.type === "end" ? event.mission : null;
     },
   };
 }

@@ -228,6 +228,10 @@ export interface LevelCapLogSquadmate {
   frame?: string;
   /** `frame` is the host's, guessed from what their level loaded first. */
   frameGuess?: true;
+  /** Enemies they killed, from their profile's lifetime kills before and after
+   *  the run; absent when unknown or their profile is private. Never on you:
+   *  your kills are the run's `kills`. */
+  kills?: number;
 }
 
 /** A correction to one squad row, by its place in `squadReads`; a slot past the

@@ -189,6 +189,9 @@ function normalizeSquadLog(raw: unknown[]): LevelCapLogSquadmate[] {
     if (value.you === true) mate.you = true;
     if (typeof value.frame === "string" && value.frame) mate.frame = value.frame.slice(0, 64);
     if (value.frameGuess === true && mate.frame) mate.frameGuess = true;
+    if (!mate.you && Number.isSafeInteger(value.kills) && (value.kills as number) >= 0) {
+      mate.kills = value.kills as number;
+    }
     return [mate];
   });
 }

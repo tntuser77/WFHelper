@@ -394,10 +394,8 @@ function register(): void {
       return shot && !shot.image.isEmpty() ? shot.image.toPNG() : null;
     },
     onChanged: pushUpdate,
-    async lifetimeStats() {
-      const accountId = getProfileAccountId();
-      return accountId ? parseLifetimeStats(await fetchProfileJson(accountId)) : null;
-    },
+    accountId: getProfileAccountId,
+    lifetimeStats: async (accountId) => parseLifetimeStats(await fetchProfileJson(accountId)),
     onHotkey: (outcome) => {
       broadcastToRenderers(LEVEL_CAP_HOTKEY, outcome);
       showLevelCapNotification(toastCard(outcome));

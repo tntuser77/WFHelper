@@ -2884,6 +2884,7 @@
   "levelCap.kills": "kills",
   "levelCap.killsPerMin": "{count}/min",
   "levelCap.killsPending": "kills...",
+  "levelCap.squadKills": "{count} kills",
   "levelCap.dateAt": "{date} at {time}",
   "levelCap.builds.editHint": "Click to show only this build's runs, double-click to edit it",
   "levelCap.tags.acceptHint": "Tab or Enter accepts the suggested tag",

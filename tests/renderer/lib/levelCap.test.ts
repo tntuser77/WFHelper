@@ -22,6 +22,7 @@ import {
   levelCapRunHasPlayer,
   levelCapSearchTerms,
   levelCapSquad,
+  levelCapSquadKills,
   levelCapSlotLayout,
   levelCapTagSuggestions,
   levelCapUpgradeRole,
@@ -571,6 +572,18 @@ describe("level cap search", () => {
       names: ["Me", "Kemani"],
       others: 1,
     });
+  });
+
+  it("keys squadmates' kills by lowercased name, skipping those without a count", () => {
+    const kills = levelCapSquadKills({
+      squadLog: [
+        { name: "WealthyPoet", slot: 1, host: true, kills: 1200 },
+        { name: "Me", slot: 2, you: true },
+        { name: "Private", slot: 3 },
+      ],
+    });
+    expect([...kills]).toEqual([["wealthypoet", 1200]]);
+    expect(levelCapSquadKills({}).size).toBe(0);
   });
 
   it("keeps only the terms that name a player on some run", () => {
