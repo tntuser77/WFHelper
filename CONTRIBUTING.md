@@ -35,8 +35,10 @@ pnpm run build           # production build
 The pre-push hook runs all of these, and also checks the ONNX models, typechecks
 and tests the Worker, and audits production dependencies. On Windows it then
 runs the Electron DBWIN test (`test:dbwin`), the reward scan test
-(`test:reward-scan`) and the Playwright suite on the fresh build
-(`test:e2e:built`). CI runs the same checks and a few more across its Linux and
+(`test:reward-scan`) and the Playwright smoke tier on the fresh build
+(`test:e2e:smoke`: startup, the setup wizard, and every view and tab mounting).
+Run the specs for the area you changed with `pnpm run test:e2e:built <spec>`,
+and the whole suite with `pnpm run test:e2e:built`. CI runs the same checks and a few more across its Linux and
 Windows jobs. It skips the dependency audit on pull requests and runs it on
 branch pushes.
 

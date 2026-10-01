@@ -70,7 +70,7 @@ git commit --no-edit
 git push origin sync/upstream
 ```
 
-The push runs the full pre-push check (about 15 minutes). Once it is pushed, the PR updates, CI runs on the merged result, and you merge it as above.
+The push runs the pre-push check (a few minutes). An upstream sync touches many areas, so run the full e2e suite first with `pnpm run test:e2e:built`. Once it is pushed, the PR updates, CI runs on the merged result, and you merge it as above.
 
 Common spots in this fork:
 

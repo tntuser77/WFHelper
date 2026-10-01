@@ -16,5 +16,7 @@ pnpm run build
 if [ "${OS:-}" = "Windows_NT" ]; then
   pnpm run test:dbwin
   pnpm run test:reward-scan
-  pnpm run test:e2e:built
+  # Startup and every-view smoke only. Run the specs for the area you changed with
+  # `pnpm run test:e2e:built e2e/<spec>`; the full suite is `pnpm run test:e2e:built`.
+  pnpm run test:e2e:smoke
 fi
