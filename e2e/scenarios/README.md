@@ -4,8 +4,8 @@
 harness a throwaway script that runs before the app's main script, plus a
 callback that sets the renderer clock. Pick `world-darvo` for a fixed Darvo
 deal, `world-loading` to hold the World response until you call
-`scenario.releaseWorld(harness.app)`, or `world-unavailable` for failed DE and
-oracle.browse.wf sources. Extra responses in the second argument match before
+`scenario.releaseWorld(harness.app)`, or `world-unavailable` for a failed DE
+source. Extra responses in the second argument match before
 the defaults, so a spec can serve a route like `/v1/wfcd-relics` itself. Call
 `scenario.assertNoUnexpectedRequests()` after each test, then close the harness
 before `scenario.dispose()`.

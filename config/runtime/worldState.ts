@@ -1,10 +1,7 @@
 export const WORLD_STATE_CONFIG = Object.freeze({
-  // Keep the old DE path as a cheap fallback.
-  fetchUrls: Object.freeze([
-    "https://api.warframe.com/cdn/worldState.php",
-    "https://content.warframe.com/dynamic/worldState.php",
-  ]),
-  oracleWorldStateUrl: "https://oracle.browse.wf/worldState.json",
+  // content.warframe.com/dynamic/worldState.php is 404 and oracle.browse.wf
+  // Cloudflare-blocks /worldState.json for every client, so DE is the only source.
+  fetchUrls: Object.freeze(["https://api.warframe.com/cdn/worldState.php"]),
   oracleBountyCycleUrl: "https://oracle.browse.wf/bounty-cycle",
   earthCycleUrl: "https://api.warframestat.us/pc",
   warframestatBaseUrl: "https://api.warframestat.us/pc",
