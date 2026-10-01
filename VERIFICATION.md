@@ -20,8 +20,9 @@ on purpose. None of the automated checks below need a live account.
 | Worker                              | `pnpm run backend:typecheck`, `pnpm run backend:test`                 | Tests in the Cloudflare runtime. The smoke test against the deployed Worker is separate and needs the network.                    |
 
 `pnpm run test:e2e <spec>` builds first. `test:e2e:built` reuses the last build,
-so rebuild after changing app code. For changes that touch many areas, run the
-full pre-push and CI checks.
+so rebuild after changing app code. The pre-push hook runs only
+`test:e2e:smoke`; for changes that touch many areas, also run the full suite
+with `pnpm run test:e2e:built`.
 
 The Windows CI job runs a shorter overlay stress test (30 show and hide rounds,
 12 trigger rounds); release checks use the full default counts. Keyboard focus
