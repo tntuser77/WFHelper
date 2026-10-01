@@ -24,7 +24,7 @@ import {
   resolveDict,
 } from "./regionNames";
 import { titleCase } from "../config/shared/textNormalize";
-import { fetchJsonWithTimeout } from "./worldStateFetch";
+import { fetchJsonIpv4, fetchJsonWithTimeout } from "./worldStateFetch";
 import { computeSteelPathHonors } from "./worldStateSteelPath";
 
 const log = withScope("worldStateParser");
@@ -915,11 +915,17 @@ async function fetchDeWorldState(): Promise<WorldStateRaw | null> {
         { headers: { Accept: "application/json" } },
         new Error("timeout"),
       );
-      if (!resp.ok) {
+      let raw: unknown;
+      if (resp.status === 403) {
+        // Akamai blocks some IPv6 ranges outright; the same host answers over IPv4.
+        log.warn(`[WorldState] ${url} returned HTTP 403, retrying over IPv4`);
+        raw = await fetchJsonIpv4(url, FETCH_TIMEOUT_MS);
+      } else if (!resp.ok) {
         log.warn(`[WorldState] ${url} returned HTTP ${resp.status}`);
         continue;
+      } else {
+        raw = await resp.json();
       }
-      const raw = await resp.json();
       if (!isWorldStatePayload(raw)) {
         log.warn(`[WorldState] ${url} returned an invalid payload`);
         continue;

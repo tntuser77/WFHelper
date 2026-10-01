@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../services/worldStateFetch", () => ({
   fetchJsonWithTimeout: vi.fn(),
+  fetchJsonIpv4: vi.fn(),
 }));
 
 vi.mock("../../config/shared/fetchWithTimeout", () => ({
@@ -10,10 +11,11 @@ vi.mock("../../config/shared/fetchWithTimeout", () => ({
 
 import { fetchAndParse } from "../../services/worldStateParser";
 import { fetchWithTimeout } from "../../config/shared/fetchWithTimeout";
-import { fetchJsonWithTimeout } from "../../services/worldStateFetch";
+import { fetchJsonIpv4, fetchJsonWithTimeout } from "../../services/worldStateFetch";
 
 const mockFetch = vi.mocked(fetchWithTimeout);
 const mockFetchJson = vi.mocked(fetchJsonWithTimeout);
+const mockFetchIpv4 = vi.mocked(fetchJsonIpv4);
 
 const DE_PRIMARY = "https://api.warframe.com/cdn/worldState.php";
 const DE_LEGACY = "https://content.warframe.com/dynamic/worldState.php";
@@ -80,6 +82,16 @@ describe("world-state source chain", () => {
     await fetchAndParse();
 
     expect(worldStateUrls()).toEqual([DE_PRIMARY, DE_LEGACY, ORACLE]);
+  });
+
+  it("retries a DE 403 over IPv4 before falling through", async () => {
+    mockFetch.mockResolvedValue(response(403, {}));
+    mockFetchIpv4.mockResolvedValue({ ActiveMissions: [] });
+
+    await fetchAndParse();
+
+    expect(mockFetchIpv4).toHaveBeenCalledWith(DE_PRIMARY, expect.any(Number));
+    expect(worldStateUrls()).toEqual([DE_PRIMARY]);
   });
 
   it("throws instead of reporting an empty world when every source fails", async () => {

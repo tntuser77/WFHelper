@@ -1,3 +1,4 @@
+import https from "node:https";
 import { WORLD_STATE_CONFIG } from "../config/runtime/worldState";
 import { fetchWithTimeout } from "../config/shared/fetchWithTimeout";
 
@@ -15,4 +16,32 @@ export async function fetchJsonWithTimeout(
   );
   if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
   return resp.json();
+}
+
+/** GET `url` over IPv4 only. DE's Akamai edge 403s some IPv6 ranges (seen on
+ *  Verizon cellular) while serving the same address fine over IPv4, and the
+ *  global fetch gives no way to pin the address family. */
+export function fetchJsonIpv4(url: string, timeoutMs: number): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { family: 4, headers: { Accept: "application/json" } }, (res) => {
+      const status = res.statusCode ?? 0;
+      if (status < 200 || status >= 300) {
+        res.resume();
+        reject(new Error(`HTTP ${status} for ${url} (IPv4)`));
+        return;
+      }
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("error", reject);
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+    req.setTimeout(timeoutMs, () => req.destroy(new Error("timeout")));
+    req.on("error", reject);
+  });
 }
