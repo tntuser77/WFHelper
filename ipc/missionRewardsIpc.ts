@@ -6,6 +6,8 @@ import {
   MISSION_REWARDS_GET,
   MISSION_REWARDS_PAGE,
   MISSION_REWARDS_UPDATED,
+  MISSION_VALUATIONS_FREEZE,
+  MISSION_VALUATIONS_PENDING,
 } from "../config/shared/ipcChannels";
 import type {
   MissionRewardSummary,
@@ -16,24 +18,37 @@ import type {
 import { addLineListener, isMissionEndLine } from "../services/eeLogMonitor";
 import { readGameInventory } from "../services/gameMemoryInventory";
 import * as missionRewards from "../services/missionRewards";
-import { normalizeMissionRewardsQuery, queryHistory } from "../services/missionRewardsHistory";
+import {
+  allSummaries,
+  normalizeMissionRewardsQuery,
+  queryHistory,
+} from "../services/missionRewardsHistory";
+import {
+  freezeValuations,
+  getValuations,
+  loadValuations,
+  unloadValuations,
+} from "../services/missionValuations";
 import { loadRegionTranslation, nodeLabel } from "../services/regionNames";
 
 let unsubscribeLines: (() => void) | null = null;
 let unsubscribeInventory: (() => void) | null = null;
 
-function withNodeLabels(summaries: MissionRewardSummary[]): MissionRewardSummaryView[] {
+function withValuations(summaries: MissionRewardSummary[]): MissionRewardSummaryView[] {
   const translation = summaries.some((summary) => summary.node) ? loadRegionTranslation() : null;
-  return summaries.map((summary) =>
-    translation && summary.node
-      ? { ...summary, nodeLabel: nodeLabel(translation, summary.node) }
-      : summary,
-  );
+  return summaries.map((summary) => {
+    const valuation = getValuations().get(summary.id);
+    return {
+      ...summary,
+      ...(translation && summary.node ? { nodeLabel: nodeLabel(translation, summary.node) } : {}),
+      ...(valuation ? { valuation } : {}),
+    };
+  });
 }
 
 function buildPayload(): MissionRewardsPayload {
   return {
-    summaries: withNodeLabels(missionRewards.getHistory()),
+    summaries: withValuations(missionRewards.getHistory()),
     status: missionRewards.getStatus(),
   };
 }
@@ -41,8 +56,8 @@ function buildPayload(): MissionRewardsPayload {
 function buildPage(raw: unknown): MissionRewardsPage | null {
   const query = normalizeMissionRewardsQuery(raw);
   if (!query) return null;
-  const page = queryHistory(query);
-  const labelled = withNodeLabels(page.latest ? [page.latest, ...page.summaries] : page.summaries);
+  const page = queryHistory(query, getValuations());
+  const labelled = withValuations(page.latest ? [page.latest, ...page.summaries] : page.summaries);
   return {
     ...page,
     latest: page.latest ? (labelled.shift() ?? null) : null,
@@ -94,7 +109,19 @@ function onEeLogLine(line: string, source: "dbwin" | "file"): void {
   else missionRewards.observeLine(line, source);
 }
 
+/** Recorded missions with no frozen estimate yet, newest first, for the renderer to price. */
+const PENDING_LIMIT = 200;
+
+function pendingValuations(): MissionRewardSummary[] {
+  const frozen = getValuations();
+  return allSummaries()
+    .filter((summary) => !frozen.has(summary.id))
+    .reverse()
+    .slice(0, PENDING_LIMIT);
+}
+
 export function register(): void {
+  loadValuations();
   missionRewards.init({
     currentInventory: () => ctx.currentInventoryData,
     readGameInventory: () => readGameInventory(),
@@ -110,6 +137,13 @@ export function register(): void {
   handleAuthorized(MISSION_REWARDS_PAGE, assertMainRendererSender, (_event, raw: unknown) =>
     buildPage(raw),
   );
+  handleAuthorized(MISSION_VALUATIONS_PENDING, assertMainRendererSender, () => pendingValuations());
+  handleAuthorized(MISSION_VALUATIONS_FREEZE, assertMainRendererSender, (_event, raw: unknown) => {
+    const known = new Set(allSummaries().map((summary) => summary.id));
+    const frozen = freezeValuations(raw, known);
+    if (frozen > 0) broadcastToRenderers(MISSION_REWARDS_UPDATED, buildPayload());
+    return frozen;
+  });
 }
 
 export function stop(): void {
@@ -119,4 +153,5 @@ export function stop(): void {
   unsubscribeInventory?.();
   unsubscribeInventory = null;
   missionRewards.stop();
+  unloadValuations();
 }

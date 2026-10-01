@@ -251,15 +251,18 @@ describe("queries", () => {
     const first = queryHistory({ offset: 0, limit: 2 });
     expect(first.summaries.map((entry) => entry.id)).toEqual(["new-defense", "survival"]);
     expect(first.matched).toBe(3);
+    const items = [
+      { uniqueName: PLASTIDS, count: 40 },
+      { uniqueName: CELL, count: 2 },
+      { uniqueName: RELIC, count: 1 },
+    ];
     expect(first.totals).toEqual({
       missions: 4,
       credits: 600,
       endo: 50,
-      items: [
-        { uniqueName: PLASTIDS, count: 40 },
-        { uniqueName: CELL, count: 2 },
-        { uniqueName: RELIC, count: 1 },
-      ],
+      items,
+      liveItems: items,
+      estimate: { sellNow: 0, held: 0, missions: 0 },
     });
     expect(first.recorded).toBe(3);
     expect(first.today).toBe(0);
@@ -268,6 +271,31 @@ describe("queries", () => {
 
     const second = queryHistory({ offset: 2, limit: 2 });
     expect(second.summaries.map((entry) => entry.id)).toEqual(["old-defense"]);
+  });
+
+  it("sums frozen estimates and leaves unfrozen missions to be priced live", () => {
+    const valuations = new Map([
+      [
+        "new-defense",
+        {
+          at: 1,
+          goldAtLeast: 37,
+          items: [
+            { uniqueName: PLASTIDS, platinum: 0, sale: null },
+            { uniqueName: RELIC, platinum: 40, sale: "now" as const },
+            { uniqueName: CELL, platinum: 15, sale: "held" as const },
+          ],
+        },
+      ],
+    ]);
+    const page = queryHistory({ offset: 0, limit: 10 }, valuations);
+
+    expect(page.totals.estimate).toEqual({ sellNow: 40, held: 15, missions: 1 });
+    // Only the two unfrozen missions are left for live pricing.
+    expect(page.totals.liveItems).toEqual([
+      { uniqueName: PLASTIDS, count: 30 },
+      { uniqueName: CELL, count: 2 },
+    ]);
   });
 
   it("filters by start, mission type and received items, leaving the latest alone", () => {

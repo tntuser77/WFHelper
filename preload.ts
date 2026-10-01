@@ -214,6 +214,8 @@ import {
   MISSION_REWARDS_GET,
   MISSION_REWARDS_PAGE,
   MISSION_REWARDS_UPDATED,
+  MISSION_VALUATIONS_FREEZE,
+  MISSION_VALUATIONS_PENDING,
   MACROS_GET,
   MACROS_SAVE,
   MACROS_SCRIPT,
@@ -456,6 +458,8 @@ try {
 
     getMissionRewards: inv<"getMissionRewards">(MISSION_REWARDS_GET),
     getMissionRewardsPage: inv<"getMissionRewardsPage">(MISSION_REWARDS_PAGE),
+    getPendingMissionValuations: inv<"getPendingMissionValuations">(MISSION_VALUATIONS_PENDING),
+    freezeMissionValuations: inv<"freezeMissionValuations">(MISSION_VALUATIONS_FREEZE),
     onMissionRewardsUpdated: ipcDataBridge<IpcEventMap["mission-rewards-updated"]>(
       ipcRenderer,
       MISSION_REWARDS_UPDATED,

@@ -6,6 +6,7 @@ import {
   type MissionRewardsQuery,
   type MissionRewardsTotals,
 } from "../config/shared/missionRewardsTypes";
+import type { MissionValuation } from "../config/shared/missionValuation";
 import { asRecord } from "../config/shared/objectValidation";
 import { createJsonCache } from "./jsonCache";
 import { withScope } from "./logger";
@@ -235,6 +236,11 @@ export function appendSummary(summary: MissionRewardSummary): void {
   persist();
 }
 
+/** Every recorded mission, oldest first. */
+export function allSummaries(): MissionRewardSummary[] {
+  return missions.map(decode);
+}
+
 /** Newest first. */
 export function recentSummaries(limit: number): MissionRewardSummary[] {
   const out: MissionRewardSummary[] = [];
@@ -276,7 +282,10 @@ function receivedAny(mission: StoredMission, wanted: ReadonlySet<number>): boole
 }
 
 /** Newest first; totals cover every match, the summaries only the requested slice. */
-export function queryHistory(query: MissionRewardsQuery): HistoryPage {
+export function queryHistory(
+  query: MissionRewardsQuery,
+  valuations: ReadonlyMap<string, MissionValuation> = new Map(),
+): HistoryPage {
   let wanted: Set<number> | null = null;
   if (query.uniqueNames) {
     wanted = new Set();
@@ -289,7 +298,15 @@ export function queryHistory(query: MissionRewardsQuery): HistoryPage {
   const summaries: MissionRewardSummary[] = [];
   const itemCounts = new Map<number, number>();
   const missionTypes = new Set<string>();
-  const totals: MissionRewardsTotals = { missions: 0, credits: 0, endo: 0, items: [] };
+  const liveCounts = new Map<number, number>();
+  const totals: MissionRewardsTotals = {
+    missions: 0,
+    credits: 0,
+    endo: 0,
+    items: [],
+    liveItems: [],
+    estimate: { sellNow: 0, held: 0, missions: 0 },
+  };
   let matched = 0;
   let today = 0;
   for (let i = missions.length - 1; i >= 0; i -= 1) {
@@ -308,14 +325,26 @@ export function queryHistory(query: MissionRewardsQuery): HistoryPage {
     totals.missions += mission.missionCount;
     totals.credits += mission.credits;
     totals.endo += mission.endo;
+    const valuation = valuations.get(mission.id);
+    if (valuation) {
+      totals.estimate.missions += 1;
+      for (const item of valuation.items) {
+        if (item.sale === "now") totals.estimate.sellNow += item.platinum;
+        else if (item.sale === "held") totals.estimate.held += item.platinum;
+      }
+    }
     for (let j = 0; j < mission.items.length; j += 2) {
       const at = mission.items[j];
       itemCounts.set(at, (itemCounts.get(at) ?? 0) + mission.items[j + 1]);
+      if (!valuation) liveCounts.set(at, (liveCounts.get(at) ?? 0) + mission.items[j + 1]);
     }
   }
-  totals.items = [...itemCounts]
-    .map(([at, count]) => ({ uniqueName: names[at], count }))
-    .sort((a, b) => b.count - a.count);
+  const byCount = (counts: ReadonlyMap<number, number>) =>
+    [...counts]
+      .map(([at, count]) => ({ uniqueName: names[at], count }))
+      .sort((a, b) => b.count - a.count);
+  totals.items = byCount(itemCounts);
+  totals.liveItems = byCount(liveCounts);
 
   return {
     summaries,

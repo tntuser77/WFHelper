@@ -40,6 +40,7 @@
   import { themeSettings } from "./stores/theme.js";
   import { viewAccentVars } from "./lib/theme/derive.js";
   import { effectiveViewAccent, viewOverrideStyle } from "./lib/theme/viewOverrides.js";
+  import { startMissionFreezer } from "./lib/missionFreezer.js";
   import { initStartup } from "./lib/startupLoader.js";
   import { initRendererEvents } from "./lib/rendererEvents.js";
   import { invoke } from "./lib/ipc.js";
@@ -104,6 +105,7 @@
     // Only the main window owns the shared disk caches; a popout flushing its
     // own smaller export would shrink them.
     const startup = initStartup({ ownsSharedCaches: !isPopoutWindow });
+    const stopMissionFreezer = isPopoutWindow ? () => {} : startMissionFreezer();
 
     if (popoutRoute) {
       currentView.set(popoutRoute);
@@ -137,6 +139,7 @@
       if (prefetchTimer) clearTimeout(prefetchTimer);
       unsubscribeBulkSell();
       disposed = true;
+      stopMissionFreezer();
       startup.dispose();
       disposeEvents();
       unsubscribeViewChange();

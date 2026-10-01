@@ -53,7 +53,8 @@
   </p>
 {:else}
   <MissionRewardTotals
-    platinum={totals.platinum}
+    sellNow={totals.sellNow}
+    held={totals.held}
     ducats={totals.ducats}
     credits={mission.credits}
     endo={mission.endo}

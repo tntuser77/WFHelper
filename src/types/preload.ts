@@ -327,6 +327,10 @@ export interface PreloadAPI {
   getMissionRewardsPage: (
     query: IpcInvokeMap["getMissionRewardsPage"]["args"][0],
   ) => Promise<IpcInvokeMap["getMissionRewardsPage"]["return"]>;
+  getPendingMissionValuations: () => Promise<IpcInvokeMap["getPendingMissionValuations"]["return"]>;
+  freezeMissionValuations: (
+    entries: IpcInvokeMap["freezeMissionValuations"]["args"][0],
+  ) => Promise<IpcInvokeMap["freezeMissionValuations"]["return"]>;
   onMissionRewardsUpdated: (
     callback: (payload: IpcEventMap["mission-rewards-updated"]) => void,
   ) => () => void;

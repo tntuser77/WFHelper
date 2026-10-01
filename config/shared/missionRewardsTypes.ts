@@ -1,3 +1,5 @@
+import type { EstimateTotals, MissionValuation } from "./missionValuation";
+
 /** Summaries the dashboard widget receives; the Missions tab pages through the rest. */
 export const MISSION_REWARDS_RECENT_LIMIT = 10;
 export const MISSION_REWARDS_PAGE_SIZE = 50;
@@ -43,6 +45,8 @@ export interface MissionRewardsStatus {
 
 export interface MissionRewardSummaryView extends MissionRewardSummary {
   nodeLabel?: string;
+  /** The estimate frozen for this mission; absent until its prices were read. */
+  valuation?: MissionValuation;
 }
 
 export interface MissionRewardsPayload {
@@ -68,6 +72,10 @@ export interface MissionRewardsTotals {
   credits: number;
   endo: number;
   items: MissionRewardItem[];
+  /** The items of missions with no frozen estimate yet, which the renderer prices live. */
+  liveItems: MissionRewardItem[];
+  /** Frozen estimates summed over the matched missions. */
+  estimate: EstimateTotals;
 }
 
 export interface MissionRewardsPage {

@@ -32,7 +32,9 @@
     class="flex justify-end gap-2 text-[0.68rem] uppercase tracking-[0.06em] text-text-muted"
     data-reward-list-header
   >
-    <span class="w-16 shrink-0 text-right">{$tr("missions.column.plat")}</span>
+    <span class="w-20 shrink-0 text-right" data-reward-list-estimate
+      >{$tr("missions.estimate")}</span
+    >
     <span class="w-14 shrink-0 text-right">{$tr("common.ducats")}</span>
   </div>
 {/if}
@@ -64,8 +66,21 @@
         {$tr("analysis.unitsShort", { count: String(row.count) })}
       </span>
       <span
-        class="inline-flex w-16 shrink-0 items-center justify-end gap-1 tabular-nums text-text-primary"
-        data-reward-row-platinum
+        class="inline-flex w-20 shrink-0 items-center justify-end gap-1 tabular-nums {row.sale ===
+        'held'
+          ? ''
+          : 'text-text-primary'}"
+        title={[
+          row.sale === "held"
+            ? $tr("missions.heldHint")
+            : row.sale === "now"
+              ? $tr("missions.sellNowHint")
+              : null,
+          row.frozen ? $tr("missions.frozenHint") : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || undefined}
+        data-reward-row-platinum={row.sale ?? ""}
       >
         {#if row.platinum === null}-{:else}{row.platinum.toLocaleString($locale)}<img
             src={PLATINUM_ICON_URL}
