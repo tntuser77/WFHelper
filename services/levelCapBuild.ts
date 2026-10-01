@@ -374,7 +374,11 @@ export function snapshotBuildForFrame(payload: unknown, frameType: string): Leve
   };
 }
 
-/** Each owned frame's skins (appearance slot 0) and the one its loadout wears: the
+/** Appearance slot of the body skin, whose store icon is the half-body art. Slot 0 is
+ *  the helmet, and an alternate helmet has no art beyond its head. */
+const BODY_SKIN_SLOT = 7;
+
+/** Each owned frame's body skins and the one its loadout wears: the
  *  equipped loadout's appearance config, else the first saved loadout's, else A.
  *  `isSkin` drops the frame's own look and paths with no art. Frames with no skin are left out. */
 export function frameSkins(
@@ -392,7 +396,7 @@ export function frameSkins(
     if (id && type) owned.set(id, type);
   }
   const skinOf = (config: unknown, frame: string): string | null => {
-    const raw = toNonEmptyString(array(asRecord(config)?.Skins)[0], 512);
+    const raw = toNonEmptyString(array(asRecord(config)?.Skins)[BODY_SKIN_SLOT], 512);
     const type = raw ? (lotusPath(raw) ?? owned.get(raw) ?? null) : null;
     return type && isSkin(type, frame) ? type : null;
   };

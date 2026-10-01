@@ -396,16 +396,16 @@ describe("levelCapStore", () => {
     expect(store.getFrameNotes()).toEqual({ Dante: "comfy frame" });
     store.setFrameNotes("Dante", "   ");
     expect(store.getFrameNotes()).toEqual({});
-    store.setFrameIcon("Dante", "/Lotus/Upgrades/Skins/Pagemaster/DanteDeluxeHelmet");
+    store.setFrameIcon("Dante", "/Lotus/Upgrades/Skins/Pagemaster/PagemasterDeluxeSkin");
     store.setFrameIcon("Nezha", "default");
     store.setFrameIcon("Mesa", "https://example.com/skin.png");
     expect(store.getFrameIcons()).toEqual({
-      Dante: "/Lotus/Upgrades/Skins/Pagemaster/DanteDeluxeHelmet",
+      Dante: "/Lotus/Upgrades/Skins/Pagemaster/PagemasterDeluxeSkin",
       Nezha: "default",
     });
     store.setFrameIcon("Nezha", null);
     expect(store.getFrameIcons()).toEqual({
-      Dante: "/Lotus/Upgrades/Skins/Pagemaster/DanteDeluxeHelmet",
+      Dante: "/Lotus/Upgrades/Skins/Pagemaster/PagemasterDeluxeSkin",
     });
     store.updateBuild(buildId!, { tags: [] });
     expect(store.getBuilds()[0].tags).toBeUndefined();

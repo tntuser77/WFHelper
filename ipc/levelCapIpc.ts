@@ -187,11 +187,11 @@ function defaultSkins(): Set<string> {
 }
 
 /** A skin worth its own icon. The export marks most default skins, but not every
- *  Prime's own helmet, so "Saryn Prime Helmet" on Saryn Prime counts as default too. */
+ *  frame's own, so "Yareli Prime Skin" on Yareli Prime counts as default too. */
 function isFrameSkin(skin: string, frame: string): boolean {
   const item = itemDb.lookupItem(skin);
   if (!item?.imageUrl || defaultSkins().has(skin)) return false;
-  return item.name.toLowerCase() !== `${frameName(frame)} helmet`.toLowerCase();
+  return item.name.toLowerCase() !== `${frameName(frame)} skin`.toLowerCase();
 }
 
 let _skinsFor: { inventory: unknown; skins: LevelCapPayload["frameSkins"] } | null = null;

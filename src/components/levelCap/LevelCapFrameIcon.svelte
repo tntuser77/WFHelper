@@ -3,7 +3,7 @@
   import { levelCap, setLevelCapFrameIcon } from "../../stores/levelCap.js";
   import { tr as t } from "../../lib/i18n.js";
   import { itemLabel } from "../../lib/itemLabel.js";
-  import { levelCapFrameArt, type LevelCapFrameRow } from "../../lib/levelCap.js";
+  import { levelCapFrameSkin, type LevelCapFrameRow } from "../../lib/levelCap.js";
   import { LEVEL_CAP_DEFAULT_SKIN } from "../../../config/shared/levelCapTypes.js";
 
   let {
@@ -20,7 +20,6 @@
 
   const skins = $derived($levelCap?.frameSkins ?? {});
   const icons = $derived($levelCap?.frameIcons ?? {});
-  const art = $derived(levelCapFrameArt(row, skins, icons, $itemDb));
   const pinned = $derived(icons[row.frame] ?? null);
   // A pinned skin stays on offer after it leaves every appearance config.
   const options = $derived.by(() => {
@@ -29,9 +28,22 @@
       ? [...owned, pinned]
       : owned;
   });
-  const equippedArt = $derived(levelCapFrameArt(row, skins, {}, $itemDb));
   const frameArt = $derived(row.frameType ? ($itemDb[row.frameType]?.imageUrl ?? null) : null);
+  // Skins newer than the bundled data can have no mirrored icon yet.
+  let broken = $state<Record<string, true>>({});
+  const art = $derived(skinArt(levelCapFrameSkin(row, skins, icons)));
+  const equippedArt = $derived(skinArt(levelCapFrameSkin(row, skins, {})));
   let open = $state(false);
+
+  /** The skin's icon, or the frame's own art when it has none or it failed to load. */
+  function skinArt(skin: string | null): string | null {
+    const url = skin ? $itemDb[skin]?.imageUrl : null;
+    return url && !broken[url] ? url : frameArt;
+  }
+
+  function markBroken(url: string | null): void {
+    if (url && url !== frameArt) broken = { ...broken, [url]: true };
+  }
 
   function pick(skin: string | null): void {
     open = false;
@@ -52,7 +64,12 @@
     data-level-cap-skin={skin ?? "auto"}
   >
     <span class="flex h-12 w-12 items-center justify-center overflow-hidden rounded bg-bg-raised">
-      {#if src}<img {src} alt="" class="h-full w-full object-contain" />{/if}
+      {#if src}<img
+          {src}
+          alt=""
+          class="h-full w-full object-contain"
+          onerror={() => markBroken(src)}
+        />{/if}
     </span>
     <span class="w-full truncate text-center">{label}</span>
   </button>
@@ -72,7 +89,12 @@
       }}
       data-level-cap-frame-icon
     >
-      {#if art}<img src={art} alt="" class="h-full w-full object-contain" />{/if}
+      {#if art}<img
+          src={art}
+          alt=""
+          class="h-full w-full object-contain"
+          onerror={() => markBroken(art)}
+        />{/if}
     </button>
     {#if open}
       <!-- Dismissed by any click outside it, or a right-click on it. -->
@@ -104,7 +126,7 @@
         )}
         {#each options as skin (skin)}
           {@render tile(
-            $itemDb[skin]?.imageUrl ?? null,
+            skinArt(skin),
             itemLabel($itemDb[skin]) || skin.split("/").pop() || skin,
             pinned === skin,
             skin,
@@ -117,6 +139,11 @@
   <div
     class="flex {sizeClass} shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-md)] bg-bg-raised"
   >
-    {#if art}<img src={art} alt="" class="h-full w-full object-contain" />{/if}
+    {#if art}<img
+        src={art}
+        alt=""
+        class="h-full w-full object-contain"
+        onerror={() => markBroken(art)}
+      />{/if}
   </div>
 {/if}

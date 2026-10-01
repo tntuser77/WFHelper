@@ -174,21 +174,6 @@ export function levelCapFrameSkin(
   return (row.frameType && skins[row.frameType]?.equipped) || null;
 }
 
-/** The frame icon's image: the skin's art, falling back to the frame's own. */
-export function levelCapFrameArt(
-  row: Pick<LevelCapFrameRow, "frame" | "frameType">,
-  skins: Record<string, LevelCapFrameSkins>,
-  icons: Record<string, string>,
-  db: ItemArt,
-): string | null {
-  const skin = levelCapFrameSkin(row, skins, icons);
-  return (
-    (skin ? db[skin]?.imageUrl : null) ??
-    (row.frameType ? db[row.frameType]?.imageUrl : null) ??
-    null
-  );
-}
-
 export function formatLevelCapDuration(sec: number | null): string {
   if (sec === null) return "";
   const h = Math.floor(sec / 3600);

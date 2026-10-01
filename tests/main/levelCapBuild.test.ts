@@ -134,40 +134,51 @@ describe("levelCapBuild", () => {
     expect(snapshotBuildForFrame(levelCapInventory(), "/Lotus/Powersuits/Unowned")).toBeNull();
   });
 
-  it("reads the skin each frame's loadout wears and the others it has", () => {
+  it("reads the body skin each frame's loadout wears and the others it has", () => {
     const inventory = levelCapInventory();
     const [dante, nezhaPrime, nezha] = inventory.Suits as Array<Record<string, unknown>>;
     const bought = "ab".padStart(24, "0");
     inventory.WeaponSkins = [
-      { ItemId: { $oid: bought }, ItemType: "/Lotus/Upgrades/Skins/Pagemaster/DanteDeluxeHelmet" },
+      {
+        ItemId: { $oid: bought },
+        ItemType: "/Lotus/Upgrades/Skins/Pagemaster/PagemasterDeluxeSkin",
+      },
     ];
-    // Slot 0 is the skin: a free one by path, a bought one by its owned-copy id.
+    // Slot 7 is the body skin: a free one by path, a bought one by its owned-copy id.
+    // The helmet in slot 0 does not count.
+    const skins = (helmet: string, body: string) => [helmet, "", "", "", "", "", "", body];
     dante.Configs = [
-      { Skins: ["/Lotus/Upgrades/Skins/Pagemaster/DanteHelmet"] },
-      { Skins: [bought] },
+      {
+        Skins: skins(
+          "/Lotus/Upgrades/Skins/Pagemaster/PagemasterAltHelmet",
+          "/Lotus/Upgrades/Skins/Pagemaster/PagemasterSkin",
+        ),
+      },
+      { Skins: skins("", bought) },
     ];
-    nezhaPrime.Configs = [{ Skins: ["/Lotus/Upgrades/Skins/Nezha/NezhaPrimeHelmet"] }];
+    nezhaPrime.Configs = [{ Skins: skins("", "/Lotus/Upgrades/Skins/Nezha/NezhaPrimeSkin") }];
     nezha.Configs = [
-      { Skins: ["/Lotus/Upgrades/Skins/Nezha/NezhaHelmet"] },
+      { Skins: skins("", "/Lotus/Upgrades/Skins/Nezha/NezhaSkin") },
+      { Skins: skins("", "/Lotus/Upgrades/Skins/Nezha/NezhaDeluxeSkin") },
       { Skins: ["/Lotus/Upgrades/Skins/Nezha/NezhaDeluxeHelmet"] },
     ];
     const presets = (inventory.LoadOutPresets as { NORMAL: Array<Record<string, unknown>> }).NORMAL;
     // The equipped Dante loadout wears appearance B; mod config is separate.
     (presets[0].s as Record<string, unknown>).cus = 1;
     const defaults = new Set([
-      "/Lotus/Upgrades/Skins/Pagemaster/DanteHelmet",
-      "/Lotus/Upgrades/Skins/Nezha/NezhaPrimeHelmet",
-      "/Lotus/Upgrades/Skins/Nezha/NezhaHelmet",
+      "/Lotus/Upgrades/Skins/Pagemaster/PagemasterSkin",
+      "/Lotus/Upgrades/Skins/Nezha/NezhaPrimeSkin",
+      "/Lotus/Upgrades/Skins/Nezha/NezhaSkin",
     ]);
     expect(frameSkins(inventory, (skin) => !defaults.has(skin))).toEqual({
       "/Lotus/Powersuits/Pagemaster/Pagemaster": {
-        equipped: "/Lotus/Upgrades/Skins/Pagemaster/DanteDeluxeHelmet",
-        options: ["/Lotus/Upgrades/Skins/Pagemaster/DanteDeluxeHelmet"],
+        equipped: "/Lotus/Upgrades/Skins/Pagemaster/PagemasterDeluxeSkin",
+        options: ["/Lotus/Upgrades/Skins/Pagemaster/PagemasterDeluxeSkin"],
       },
       // No loadout carries plain Nezha, so appearance A counts, and it is the default.
       "/Lotus/Powersuits/Nezha/Nezha": {
         equipped: null,
-        options: ["/Lotus/Upgrades/Skins/Nezha/NezhaDeluxeHelmet"],
+        options: ["/Lotus/Upgrades/Skins/Nezha/NezhaDeluxeSkin"],
       },
     });
     expect(frameSkins(null, () => true)).toEqual({});
