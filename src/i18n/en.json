@@ -2855,6 +2855,8 @@
   "levelCap.builds.runBuild": "Build used this run",
   "levelCap.builds.details": "Show run details",
   "levelCap.editor.backToRuns": "Back to runs",
+  "levelCap.skin.hint": "Change the icon's skin. Right-click to follow the equipped skin.",
+  "levelCap.skin.equipped": "Equipped",
   "levelCap.editor.name": "Build name",
   "levelCap.editor.usedBy": "Used by {count} runs",
   "levelCap.editor.save": "Save ({count} runs)",

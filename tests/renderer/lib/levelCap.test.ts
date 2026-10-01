@@ -13,6 +13,7 @@ import {
 } from "../../../config/shared/levelCapBuild.js";
 import {
   formatLevelCapDuration,
+  levelCapFrameSkin,
   levelCapFrames,
   levelCapGearUse,
   levelCapItemImage,
@@ -246,6 +247,17 @@ describe("levelCap helpers", () => {
         run("2", "Dante", 2, { tags: ["Caster"] }),
       ]),
     ).toEqual(["caster", "comfy"]);
+  });
+
+  it("shows a pinned skin, else the equipped one, else the frame's own art", () => {
+    const row = { frame: "Wisp", frameType: "/Lotus/Powersuits/Wisp/WispPrime" };
+    const dex = "/Lotus/Upgrades/Skins/Wisp/DexWispSkin";
+    const deluxe = "/Lotus/Upgrades/Skins/Wisp/WispDeluxeSkin";
+    const skins = { [row.frameType]: { equipped: dex, options: [dex, deluxe] } };
+    expect(levelCapFrameSkin(row, skins, {})).toBe(dex);
+    expect(levelCapFrameSkin(row, skins, { Wisp: deluxe })).toBe(deluxe);
+    expect(levelCapFrameSkin(row, skins, { Wisp: "default" })).toBeNull();
+    expect(levelCapFrameSkin(row, {}, {})).toBeNull();
   });
 
   it("formats durations with hours only when needed", () => {

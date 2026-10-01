@@ -11,6 +11,7 @@ import { asRunId } from "./runTrackerIpc";
 import { addInventoryListener } from "./inventoryIpc";
 import { levelCapChanged, setLevelCapRefresh } from "./phoneSyncIpc";
 import * as itemDb from "../services/itemDatabase";
+import { getOverlay } from "../services/publicExportSource";
 import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
 import { levelCapCatalog } from "../services/levelCapCatalog";
@@ -22,6 +23,7 @@ import {
 } from "../config/shared/underframe";
 import {
   findModularIdentity,
+  frameSkins,
   ownedModularItems,
   ownedSuitTypes,
   rivensByWeapon,
@@ -58,6 +60,7 @@ import {
   LEVEL_CAP_PICK_FOLDER,
   LEVEL_CAP_PORTRAIT_THUMB,
   LEVEL_CAP_SET_NOTES,
+  LEVEL_CAP_SET_FRAME_ICON,
   LEVEL_CAP_SQUAD_CROP,
   LEVEL_CAP_SCREENSHOT,
   LEVEL_CAP_THUMBNAIL,
@@ -164,6 +167,59 @@ function squadFrame(folder: string, type: string | null): string | null {
   return base ? tracker.frameGroup(frameName(base)) : null;
 }
 
+let _defaultSkins: Set<string> | null = null;
+
+/** Skins every owner of a frame has, which the frame's art already shows. */
+function defaultSkins(): Set<string> {
+  if (_defaultSkins) return _defaultSkins;
+  const skins = new Set<string>();
+  try {
+    const pep = require("warframe-public-export-plus") as {
+      ExportCustoms?: Record<string, { alwaysAvailable?: boolean }>;
+    };
+    for (const [type, custom] of Object.entries(pep.ExportCustoms ?? {})) {
+      if (custom.alwaysAvailable) skins.add(type);
+    }
+  } catch (err) {
+    log.warn("[LevelCap] default skins unavailable:", String(err));
+  }
+  _defaultSkins = skins;
+  return skins;
+}
+
+/** A skin worth its own icon. The export marks most default skins, but not every
+ *  frame's own, so "Yareli Prime Skin" on Yareli Prime counts as default too. */
+function isFrameSkin(skin: string, frame: string): boolean {
+  const item = itemDb.lookupItem(skin);
+  if (!item?.imageUrl || defaultSkins().has(skin)) return false;
+  return item.name.toLowerCase() !== `${frameName(frame)} skin`.toLowerCase();
+}
+
+let _skinsFor: { inventory: unknown; skins: LevelCapPayload["frameSkins"] } | null = null;
+
+function ownedFrameSkins(): LevelCapPayload["frameSkins"] {
+  const inventory = ctx.currentInventoryData;
+  if (_skinsFor?.inventory !== inventory) {
+    _skinsFor = { inventory, skins: frameSkins(inventory, isFrameSkin) };
+  }
+  return _skinsFor.skins;
+}
+
+const DE_CONTENT_BASE = "https://content.warframe.com/PublicExport";
+
+/** DE-hosted art for skins newer than the bundled data, which the icon mirror can lack. */
+function skinFallbackArt(skins: LevelCapPayload["frameSkins"]): Record<string, string> {
+  const images = getOverlay()?.images;
+  const art: Record<string, string> = {};
+  if (!images) return art;
+  for (const { options } of Object.values(skins)) {
+    for (const skin of options) {
+      if (images[skin]) art[skin] = DE_CONTENT_BASE + images[skin];
+    }
+  }
+  return art;
+}
+
 function payload(): LevelCapPayload {
   const settings = store.getSettings();
   // Aliases only change what the renderer sees; the index keeps the names as read.
@@ -181,6 +237,9 @@ function payload(): LevelCapPayload {
     settings,
     status: tracker.getStatus(),
     frameNotes: store.getFrameNotes(),
+    frameSkins: ownedFrameSkins(),
+    skinArt: skinFallbackArt(ownedFrameSkins()),
+    frameIcons: store.getFrameIcons(),
     hotkey: {
       bound: _boundHotkey !== "",
       canPassThrough: process.platform === "win32",
@@ -420,7 +479,11 @@ function register(): void {
     return payload();
   });
   addInventoryListener((inventory) => {
-    if (backfillInventory(inventory)) pushUpdate();
+    // ctx already holds this inventory, so the cache still has the skins last sent.
+    const before = _skinsFor && JSON.stringify(_skinsFor.skins);
+    const backfilled = backfillInventory(inventory);
+    const skinsChanged = before !== null && JSON.stringify(ownedFrameSkins()) !== before;
+    if (backfilled || skinsChanged) pushUpdate();
   });
 
   handleAuthorized(
@@ -429,6 +492,17 @@ function register(): void {
     (_e, frame: unknown, notes: unknown) => {
       if (typeof frame === "string" && frame.trim() && frame.length <= 120) {
         store.setFrameNotes(frame, notes);
+      }
+      return payload();
+    },
+  );
+
+  handleAuthorized(
+    LEVEL_CAP_SET_FRAME_ICON,
+    assertMainRendererSender,
+    (_e, frame: unknown, skin: unknown) => {
+      if (typeof frame === "string" && frame.trim() && frame.length <= 120) {
+        store.setFrameIcon(frame, skin);
       }
       return payload();
     },

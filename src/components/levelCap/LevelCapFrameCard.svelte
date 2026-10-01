@@ -2,6 +2,7 @@
   import type { LevelCapNamedBuild, LevelCapRun } from "../../types/ipc.js";
   import { itemDb } from "../../stores/data.js";
   import { tr as t, type MessageKey } from "../../lib/i18n.js";
+  import LevelCapFrameIcon from "./LevelCapFrameIcon.svelte";
   import {
     levelCapGearUse,
     levelCapItemImage,
@@ -195,17 +196,7 @@
   data-level-cap-frame={row.frame}
 >
   <div class="flex items-center gap-3">
-    <div
-      class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-md)] bg-bg-raised"
-    >
-      {#if row.frameType && $itemDb[row.frameType]?.imageUrl}
-        <img
-          src={$itemDb[row.frameType].imageUrl ?? ""}
-          alt=""
-          class="h-full w-full object-contain"
-        />
-      {/if}
-    </div>
+    <LevelCapFrameIcon {row} sizeClass="h-16 w-16" />
     <!-- No handler of its own: its click bubbles to the card, so Enter opens it too. -->
     <button
       type="button"

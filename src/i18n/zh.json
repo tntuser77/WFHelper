@@ -2835,6 +2835,8 @@
   "levelCap.builds.runBuild": "此运行使用的构建",
   "levelCap.builds.details": "显示运行详情",
   "levelCap.editor.backToRuns": "返回运行列表",
+  "levelCap.skin.hint": "更换图标外观。右键点击以跟随当前装备的外观。",
+  "levelCap.skin.equipped": "已装备",
   "levelCap.editor.name": "构建名称",
   "levelCap.editor.usedBy": "{count} 次运行使用",
   "levelCap.editor.save": "保存（{count} 次运行）",

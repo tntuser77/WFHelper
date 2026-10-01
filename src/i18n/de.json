@@ -2835,6 +2835,8 @@
   "levelCap.builds.runBuild": "In diesem Run genutzter Build",
   "levelCap.builds.details": "Run-Details zeigen",
   "levelCap.editor.backToRuns": "Zurück zu den Runs",
+  "levelCap.skin.hint": "Skin des Symbols ändern. Rechtsklick folgt dem ausgerüsteten Skin.",
+  "levelCap.skin.equipped": "Ausgerüstet",
   "levelCap.editor.name": "Build-Name",
   "levelCap.editor.usedBy": "Von {count} Runs genutzt",
   "levelCap.editor.save": "Speichern ({count} Runs)",

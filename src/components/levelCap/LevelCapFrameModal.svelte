@@ -23,6 +23,7 @@
   import ModalShell from "../ModalShell.svelte";
   import ThemedButton from "../ThemedButton.svelte";
   import LevelCapBuildEditor from "./LevelCapBuildEditor.svelte";
+  import LevelCapFrameIcon from "./LevelCapFrameIcon.svelte";
   import LevelCapFrameNotes from "./LevelCapFrameNotes.svelte";
   import LevelCapRunDetail from "./LevelCapRunDetail.svelte";
 
@@ -212,17 +213,7 @@
     </div>
 
     <div class="flex items-center gap-3 border-b border-border/60 px-5 py-4 pr-14">
-      <div
-        class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-md)] bg-bg-raised"
-      >
-        {#if row.frameType && $itemDb[row.frameType]?.imageUrl}
-          <img
-            src={$itemDb[row.frameType].imageUrl ?? ""}
-            alt=""
-            class="h-full w-full object-contain"
-          />
-        {/if}
-      </div>
+      <LevelCapFrameIcon {row} sizeClass="h-14 w-14" editable />
       <div class="flex min-w-0 flex-1 flex-col">
         <h2 class="m-0 truncate text-2xl font-bold text-text-primary">{row.frame}</h2>
         {#if editing}
