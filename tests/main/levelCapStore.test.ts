@@ -71,7 +71,17 @@ describe("levelCapStore", () => {
       screenshotDir: path.join(tmpDir, "pictures", "WarframeCaps"),
       backupDir: "",
       knownPlayers: [],
+      playerAliases: {},
     });
+  });
+
+  it("saves player aliases and drops ones that point at themselves", async () => {
+    const store = await freshStore();
+    store.updateSettings({ playerAliases: { PoetAlt: "WealthyPoet", Me: "me" } });
+    expect(store.getSettings().playerAliases).toEqual({ PoetAlt: "WealthyPoet" });
+    // The index keeps the names as the game showed them.
+    store.addRun(run({ players: ["Me", "PoetAlt"] }));
+    expect(store.getRuns()[0].players).toEqual(["Me", "PoetAlt"]);
   });
 
   it("persists runs and reloads them newest first", async () => {

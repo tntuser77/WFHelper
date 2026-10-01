@@ -207,14 +207,31 @@ export function levelCapSquadKills(run: Pick<LevelCapRun, "squadLog">): Map<stri
   return kills;
 }
 
-/** Whether a squad player's name contains the (lowercased) search term. */
-export function levelCapRunHasPlayer(run: { players?: string[] }, term: string): boolean {
-  return (run.players ?? []).some((name) => name.toLowerCase().includes(term));
+/** The name each aliased player went by on the run, keyed by lowercased main name. */
+export function levelCapSquadAliases(
+  run: Pick<LevelCapRun, "squadLog" | "squadmates">,
+): Map<string, string> {
+  const aliases = new Map<string, string>();
+  for (const mate of [...(run.squadLog ?? []), ...(run.squadmates ?? [])]) {
+    if (mate.alias && mate.name) aliases.set(mate.name.toLowerCase(), mate.alias);
+  }
+  return aliases;
+}
+
+type PlayerSearchRun = Partial<Pick<LevelCapRun, "players" | "squadLog" | "squadmates">>;
+
+/** Whether a squad player's name, or the alt name they played under, contains
+ *  the (lowercased) search term. */
+export function levelCapRunHasPlayer(run: PlayerSearchRun, term: string): boolean {
+  const alts = [...(run.squadLog ?? []), ...(run.squadmates ?? [])].flatMap((mate) =>
+    mate.alias ? [mate.alias] : [],
+  );
+  return [...(run.players ?? []), ...alts].some((name) => name.toLowerCase().includes(term));
 }
 
 /** The search terms that name a player on at least one of these runs. */
 export function levelCapPlayerTerms(
-  runs: ReadonlyArray<{ players?: string[] }>,
+  runs: readonly PlayerSearchRun[],
   terms: readonly string[],
 ): string[] {
   return terms.filter((term) => runs.some((run) => levelCapRunHasPlayer(run, term)));

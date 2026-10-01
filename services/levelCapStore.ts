@@ -12,6 +12,7 @@ import { writeFileAtomicSync } from "./atomicFile";
 import { normalizeRunNotes, normalizeRunTags } from "./runAnnotations";
 import { withScope } from "./logger";
 import { normalizeErrorMessage } from "../config/shared/errors";
+import { normalizePlayerAliases } from "../config/shared/playerAliases";
 import {
   isLevelCapRivenType,
   levelCapBuildKey,
@@ -60,6 +61,7 @@ function defaultSettings(): LevelCapSettings {
     screenshotDir: path.join(app.getPath("pictures"), "WarframeCaps"),
     backupDir: "",
     knownPlayers: [],
+    playerAliases: {},
   };
 }
 
@@ -78,6 +80,7 @@ function normalizeSettings(raw: unknown): LevelCapSettings {
     knownPlayers: Array.isArray(value.knownPlayers)
       ? normalizePlayers(value.knownPlayers, 200)
       : base.knownPlayers,
+    playerAliases: normalizePlayerAliases(value.playerAliases),
   };
 }
 

@@ -209,6 +209,8 @@ export interface LevelCapCatalog {
 export interface LevelCapSquadmate {
   /** Resolved player name; null for a one-off nobody could name. */
   name: string | null;
+  /** The name the game showed, when a player alias swapped it for `name`. */
+  alias?: string;
   /** Portrait group: squadmates sharing it played the same frame look. */
   portrait: string | null;
   /** Frame the portrait group was labelled with, once someone labels it. */
@@ -220,6 +222,8 @@ export interface LevelCapSquadmate {
 /** One player of a logged run's squad. */
 export interface LevelCapLogSquadmate {
   name: string;
+  /** The name the game showed, when a player alias swapped it for `name`. */
+  alias?: string;
   /** The digit the HUD shows by the name: the host is 1, then join order. */
   slot: number;
   host?: true;
@@ -264,6 +268,8 @@ export interface LevelCapSettings {
   backupDir: string;
   /** Exact names of players the user runs with, so screenshot reads snap to them. */
   knownPlayers: string[];
+  /** Alt and old names -> the player's main name, so they count as one person. */
+  playerAliases: Record<string, string>;
 }
 
 export interface LevelCapStatus {
