@@ -104,8 +104,7 @@ export function createOfflineScenario(
     responses: [
       ...responses,
       {
-        pattern:
-          "^https://(?:api\\.warframe\\.com/cdn/worldState\\.php|content\\.warframe\\.com/dynamic/worldState\\.php|oracle\\.browse\\.wf/worldState\\.json)$",
+        pattern: "^https://api\\.warframe\\.com/cdn/worldState\\.php$",
         status: name === "world-unavailable" ? 503 : 200,
         body: name === "world-unavailable" ? { error: "fixture_unavailable" } : rawWorld,
         waitForRelease: name === "world-loading",
