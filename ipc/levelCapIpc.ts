@@ -11,6 +11,7 @@ import { asRunId } from "./runTrackerIpc";
 import { addInventoryListener } from "./inventoryIpc";
 import { levelCapChanged, setLevelCapRefresh } from "./phoneSyncIpc";
 import * as itemDb from "../services/itemDatabase";
+import { getOverlay } from "../services/publicExportSource";
 import * as store from "../services/levelCapStore";
 import * as tracker from "../services/levelCapTracker";
 import { levelCapCatalog } from "../services/levelCapCatalog";
@@ -204,6 +205,21 @@ function ownedFrameSkins(): LevelCapPayload["frameSkins"] {
   return _skinsFor.skins;
 }
 
+const DE_CONTENT_BASE = "https://content.warframe.com/PublicExport";
+
+/** DE-hosted art for skins newer than the bundled data, which the icon mirror can lack. */
+function skinFallbackArt(skins: LevelCapPayload["frameSkins"]): Record<string, string> {
+  const images = getOverlay()?.images;
+  const art: Record<string, string> = {};
+  if (!images) return art;
+  for (const { options } of Object.values(skins)) {
+    for (const skin of options) {
+      if (images[skin]) art[skin] = DE_CONTENT_BASE + images[skin];
+    }
+  }
+  return art;
+}
+
 function payload(): LevelCapPayload {
   const settings = store.getSettings();
   // Aliases only change what the renderer sees; the index keeps the names as read.
@@ -222,6 +238,7 @@ function payload(): LevelCapPayload {
     status: tracker.getStatus(),
     frameNotes: store.getFrameNotes(),
     frameSkins: ownedFrameSkins(),
+    skinArt: skinFallbackArt(ownedFrameSkins()),
     frameIcons: store.getFrameIcons(),
     hotkey: {
       bound: _boundHotkey !== "",

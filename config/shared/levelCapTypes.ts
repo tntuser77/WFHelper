@@ -304,6 +304,8 @@ export interface LevelCapPayload {
   /** Skin picked for a frame's icon, keyed by display name: a skin path, or
    *  LEVEL_CAP_DEFAULT_SKIN for the frame's own art. Unset follows the equipped skin. */
   frameIcons: Record<string, string>;
+  /** Second source for a skin's art, from DE's own server, when the icon mirror lacks it. */
+  skinArt: Record<string, string>;
   /** Whether the finish-run key is live, and whether this platform can share it
    *  with the game (Linux shortcuts always take the key). */
   hotkey: { bound: boolean; canPassThrough: boolean };

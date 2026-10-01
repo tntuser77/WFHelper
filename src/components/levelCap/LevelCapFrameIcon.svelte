@@ -20,6 +20,7 @@
 
   const skins = $derived($levelCap?.frameSkins ?? {});
   const icons = $derived($levelCap?.frameIcons ?? {});
+  const fallbacks = $derived($levelCap?.skinArt ?? {});
   const pinned = $derived(icons[row.frame] ?? null);
   // A pinned skin stays on offer after it leaves every appearance config.
   const options = $derived.by(() => {
@@ -35,10 +36,24 @@
   const equippedArt = $derived(skinArt(levelCapFrameSkin(row, skins, {})));
   let open = $state(false);
 
-  /** The skin's icon, or the frame's own art when it has none or it failed to load. */
+  /** The skin's icon, then DE's copy of it, then the frame's own art. */
   function skinArt(skin: string | null): string | null {
-    const url = skin ? $itemDb[skin]?.imageUrl : null;
-    return url && !broken[url] ? url : frameArt;
+    if (!skin) return frameArt;
+    const urls = [$itemDb[skin]?.imageUrl, fallbacks[skin]];
+    return urls.find((url) => url && !broken[url]) ?? frameArt;
+  }
+
+  /** "Threnodia" for "Banshee Threnodia Skin": the card already names the frame. */
+  function skinLabel(skin: string): string {
+    const name = itemLabel($itemDb[skin]) || skin.split("/").pop() || skin;
+    let short = name.replace(/ Skin$/i, "");
+    for (const prefix of [`${row.frame} Prime `, `${row.frame} `]) {
+      if (short.toLowerCase().startsWith(prefix.toLowerCase())) {
+        short = short.slice(prefix.length);
+        break;
+      }
+    }
+    return short || name;
   }
 
   function markBroken(url: string | null): void {
@@ -56,7 +71,7 @@
 {#snippet tile(src: string | null, label: string, selected: boolean, skin: string | null)}
   <button
     type="button"
-    class="flex w-16 cursor-pointer flex-col items-center gap-1 rounded-[var(--radius-md)] border p-1 text-[10px] leading-tight transition-colors {selected
+    class="flex w-20 cursor-pointer flex-col items-center gap-1 rounded-[var(--radius-md)] border p-1 text-[10px] leading-tight transition-colors {selected
       ? 'border-accent bg-accent/10 text-text-primary'
       : 'border-transparent text-text-secondary hover:border-border-strong hover:text-text-primary'}"
     title={label}
@@ -71,7 +86,7 @@
           onerror={() => markBroken(src)}
         />{/if}
     </span>
-    <span class="w-full truncate text-center">{label}</span>
+    <span class="line-clamp-2 w-full text-center">{label}</span>
   </button>
 {/snippet}
 
@@ -110,7 +125,7 @@
       ></button>
       <div
         role="presentation"
-        class="absolute left-0 top-full z-40 mt-1 flex max-w-[22rem] flex-wrap gap-1 rounded-[var(--radius-md)] border border-border-strong bg-bg-surface p-1.5 shadow-lg"
+        class="absolute left-0 top-full z-40 mt-1 flex w-max max-w-[26rem] flex-wrap gap-1 rounded-[var(--radius-md)] border border-border-strong bg-bg-surface p-1.5 shadow-lg"
         oncontextmenu={(event) => {
           event.preventDefault();
           open = false;
@@ -125,12 +140,7 @@
           LEVEL_CAP_DEFAULT_SKIN,
         )}
         {#each options as skin (skin)}
-          {@render tile(
-            skinArt(skin),
-            itemLabel($itemDb[skin]) || skin.split("/").pop() || skin,
-            pinned === skin,
-            skin,
-          )}
+          {@render tile(skinArt(skin), skinLabel(skin), pinned === skin, skin)}
         {/each}
       </div>
     {/if}
