@@ -282,6 +282,16 @@ export interface LevelCapStatus {
   killsPending: string[];
 }
 
+export interface LevelCapFrameSkins {
+  /** Skin on the appearance config the frame's loadout wears; null when that is the default. */
+  equipped: string | null;
+  /** Every non-default skin across the frame's appearance configs, in config order. */
+  options: string[];
+}
+
+/** A frame icon pinned to the frame's own art, whatever skin it wears. */
+export const LEVEL_CAP_DEFAULT_SKIN = "default";
+
 export interface LevelCapPayload {
   runs: LevelCapRun[];
   builds: LevelCapNamedBuild[];
@@ -289,6 +299,11 @@ export interface LevelCapPayload {
   status: LevelCapStatus;
   /** Free-form notes per frame, keyed by the frame's display name. */
   frameNotes: Record<string, string>;
+  /** Owned frames' non-default skins, keyed by frame path; read from the inventory. */
+  frameSkins: Record<string, LevelCapFrameSkins>;
+  /** Skin picked for a frame's icon, keyed by display name: a skin path, or
+   *  LEVEL_CAP_DEFAULT_SKIN for the frame's own art. Unset follows the equipped skin. */
+  frameIcons: Record<string, string>;
   /** Whether the finish-run key is live, and whether this platform can share it
    *  with the game (Linux shortcuts always take the key). */
   hotkey: { bound: boolean; canPassThrough: boolean };

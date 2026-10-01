@@ -25,6 +25,11 @@ export async function setLevelCapNotes(frame: string, notes: string): Promise<vo
   levelCap.set(await invoke("setLevelCapNotes", frame, notes));
 }
 
+/** Pins the frame's icon to a skin path or LEVEL_CAP_DEFAULT_SKIN; null follows the equipped skin. */
+export async function setLevelCapFrameIcon(frame: string, skin: string | null): Promise<void> {
+  levelCap.set(await invoke("setLevelCapFrameIcon", frame, skin));
+}
+
 /** Resolves to the new build's id, or null when the equipped frame is a different one. */
 export async function createLevelCapBuild(
   frame: string,

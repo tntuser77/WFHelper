@@ -153,6 +153,7 @@ import {
   PT_RUN_SAVED,
   LEVEL_CAP_GET,
   LEVEL_CAP_SET_NOTES,
+  LEVEL_CAP_SET_FRAME_ICON,
   LEVEL_CAP_ASSIGN_BUILD,
   LEVEL_CAP_CATALOG,
   LEVEL_CAP_ITEM_CONFIGS,
@@ -467,6 +468,7 @@ try {
 
     getLevelCap: inv<"getLevelCap">(LEVEL_CAP_GET),
     setLevelCapNotes: inv<"setLevelCapNotes">(LEVEL_CAP_SET_NOTES),
+    setLevelCapFrameIcon: inv<"setLevelCapFrameIcon">(LEVEL_CAP_SET_FRAME_ICON),
     createLevelCapBuild: inv<"createLevelCapBuild">(LEVEL_CAP_CREATE_BUILD),
     updateLevelCapBuild: inv<"updateLevelCapBuild">(LEVEL_CAP_UPDATE_BUILD),
     deleteLevelCapBuild: inv<"deleteLevelCapBuild">(LEVEL_CAP_DELETE_BUILD),

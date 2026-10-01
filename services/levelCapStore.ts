@@ -19,6 +19,7 @@ import {
   nextLevelCapBuildName,
   normalizeLevelCapBuild,
 } from "../config/shared/levelCapBuild";
+import { LEVEL_CAP_DEFAULT_SKIN } from "../config/shared/levelCapTypes";
 import type {
   LevelCapBuild,
   LevelCapBuildPatch,
@@ -48,6 +49,7 @@ let _runs: LevelCapRun[] = [];
 let _builds: LevelCapNamedBuild[] = [];
 let _settings: LevelCapSettings | null = null;
 let _frameNotes: Record<string, string> = {};
+let _frameIcons: Record<string, string> = {};
 let _portraitLabels: LevelCapPortraitLabel[] = [];
 const PORTRAIT_DIR = "level-cap-portraits";
 const SQUAD_LOG_DIR = "level-cap-logs";
@@ -255,6 +257,22 @@ function normalizeFrameNotes(raw: unknown): Record<string, string> {
   return out;
 }
 
+function normalizeFrameIcons(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [frame, skin] of Object.entries(raw)) {
+    const clean = frameIcon(skin);
+    if (frame.trim() && clean) out[frame] = clean;
+  }
+  return out;
+}
+
+/** A skin path or the default marker; anything else unpins the icon. */
+function frameIcon(raw: unknown): string | null {
+  if (typeof raw !== "string" || raw.length > 512) return null;
+  return raw === LEVEL_CAP_DEFAULT_SKIN || raw.startsWith("/Lotus/") ? raw : null;
+}
+
 function buildName(raw: unknown): string | null {
   return typeof raw === "string" && raw.trim() ? raw.trim().slice(0, MAX_BUILD_NAME) : null;
 }
@@ -347,6 +365,7 @@ function ensureLoaded(): void {
       builds?: unknown;
       settings?: unknown;
       frameNotes?: unknown;
+      frameIcons?: unknown;
       portraitLabels?: unknown;
     };
     _runs = Array.isArray(parsed.runs) ? parsed.runs.flatMap((raw) => normalizeRun(raw) ?? []) : [];
@@ -355,6 +374,7 @@ function ensureLoaded(): void {
       : [];
     _settings = normalizeSettings(parsed.settings);
     _frameNotes = normalizeFrameNotes(parsed.frameNotes);
+    _frameIcons = normalizeFrameIcons(parsed.frameIcons);
     _portraitLabels = normalizePortraitLabels(parsed.portraitLabels);
     const version = typeof parsed.schemaVersion === "number" ? parsed.schemaVersion : 1;
     if (version < INDEX_SCHEMA_VERSION) {
@@ -382,6 +402,7 @@ function ensureLoaded(): void {
     _builds = [];
     _settings = defaultSettings();
     _frameNotes = {};
+    _frameIcons = {};
     _portraitLabels = [];
   }
 }
@@ -392,6 +413,7 @@ function serialize(): string {
       schemaVersion: INDEX_SCHEMA_VERSION,
       settings: _settings,
       frameNotes: _frameNotes,
+      frameIcons: _frameIcons,
       portraitLabels: _portraitLabels,
       builds: _builds,
       runs: _runs,
@@ -841,6 +863,20 @@ export function setFrameNotes(frame: string, notes: unknown): void {
   save();
 }
 
+export function getFrameIcons(): Record<string, string> {
+  ensureLoaded();
+  return { ..._frameIcons };
+}
+
+/** Pins a frame's icon to a skin; anything but a skin path or the default marker unpins it. */
+export function setFrameIcon(frame: string, skin: unknown): void {
+  ensureLoaded();
+  const clean = frameIcon(skin);
+  if (clean) _frameIcons[frame] = clean;
+  else delete _frameIcons[frame];
+  save();
+}
+
 export function createBuild(
   frame: string,
   build: LevelCapBuild,
@@ -1080,6 +1116,7 @@ export function __resetLevelCapStoreForTest(): void {
   _builds = [];
   _settings = null;
   _frameNotes = {};
+  _frameIcons = {};
   _portraitLabels = [];
   _loaded = false;
 }

@@ -13,6 +13,8 @@ import {
 } from "../../../config/shared/levelCapBuild.js";
 import {
   formatLevelCapDuration,
+  levelCapFrameArt,
+  levelCapFrameSkin,
   levelCapFrames,
   levelCapGearUse,
   levelCapItemImage,
@@ -246,6 +248,24 @@ describe("levelCap helpers", () => {
         run("2", "Dante", 2, { tags: ["Caster"] }),
       ]),
     ).toEqual(["caster", "comfy"]);
+  });
+
+  it("shows a pinned skin, else the equipped one, else the frame's own art", () => {
+    const row = { frame: "Wisp", frameType: "/Lotus/Powersuits/Wisp/WispPrime" };
+    const dex = "/Lotus/Upgrades/Skins/Wisp/DexWispHelmet";
+    const deluxe = "/Lotus/Upgrades/Skins/Wisp/WispDeluxeHelmet";
+    const skins = { [row.frameType]: { equipped: dex, options: [dex, deluxe] } };
+    const db = {
+      [row.frameType]: { imageUrl: "https://x/wisp-prime.png" },
+      [dex]: { imageUrl: "https://x/dex.png" },
+    };
+    expect(levelCapFrameSkin(row, skins, {})).toBe(dex);
+    expect(levelCapFrameArt(row, skins, {}, db)).toBe("https://x/dex.png");
+    expect(levelCapFrameSkin(row, skins, { Wisp: deluxe })).toBe(deluxe);
+    // A skin with no art falls back to the frame's.
+    expect(levelCapFrameArt(row, skins, { Wisp: deluxe }, db)).toBe("https://x/wisp-prime.png");
+    expect(levelCapFrameSkin(row, skins, { Wisp: "default" })).toBeNull();
+    expect(levelCapFrameArt(row, {}, {}, db)).toBe("https://x/wisp-prime.png");
   });
 
   it("formats durations with hours only when needed", () => {

@@ -227,6 +227,7 @@ export const PT_RUN_SAVED = "pt-run-saved";
 
 export const LEVEL_CAP_GET = "level-cap:get";
 export const LEVEL_CAP_SET_NOTES = "level-cap:set-notes";
+export const LEVEL_CAP_SET_FRAME_ICON = "level-cap:set-frame-icon";
 export const LEVEL_CAP_CREATE_BUILD = "level-cap:create-build";
 export const LEVEL_CAP_UPDATE_BUILD = "level-cap:update-build";
 export const LEVEL_CAP_DELETE_BUILD = "level-cap:delete-build";

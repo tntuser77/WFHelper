@@ -7,6 +7,7 @@ import { isLevelCapRivenType } from "../config/shared/levelCapBuild";
 import type {
   LevelCapBuild,
   LevelCapFocusSchool,
+  LevelCapFrameSkins,
   LevelCapItem,
   LevelCapRiven,
   LevelCapSlotKind,
@@ -371,6 +372,52 @@ export function snapshotBuildForFrame(payload: unknown, frameType: string): Leve
     companion: null,
     focus: focusSchool(inventory, current),
   };
+}
+
+/** Each owned frame's skins (appearance slot 0) and the one its loadout wears: the
+ *  equipped loadout's appearance config, else the first saved loadout's, else A.
+ *  `isSkin` drops the frame's own look and paths with no art. Frames with no skin are left out. */
+export function frameSkins(
+  payload: unknown,
+  isSkin: (skin: string, frame: string) => boolean,
+): Record<string, LevelCapFrameSkins> {
+  const inventory = inventoryRecord(payload);
+  if (!inventory) return {};
+  // Configs name a bought skin by its owned-copy id, a free one by path.
+  const owned = new Map<string, string>();
+  for (const entry of array(inventory.WeaponSkins)) {
+    const skin = asRecord(entry);
+    const id = oid(skin?.ItemId);
+    const type = lotusPath(skin?.ItemType);
+    if (id && type) owned.set(id, type);
+  }
+  const skinOf = (config: unknown, frame: string): string | null => {
+    const raw = toNonEmptyString(array(asRecord(config)?.Skins)[0], 512);
+    const type = raw ? (lotusPath(raw) ?? owned.get(raw) ?? null) : null;
+    return type && isSkin(type, frame) ? type : null;
+  };
+  const worn = new Map<string, number>();
+  const presets = [
+    currentPreset(inventory, "NORMAL"),
+    ...array(asRecord(inventory.LoadOutPresets)?.NORMAL).map(asRecord),
+  ];
+  for (const preset of presets) {
+    const slot = asRecord(preset?.s);
+    const id = oid(slot?.ItemId);
+    if (id && !worn.has(id)) worn.set(id, typeof slot?.cus === "number" ? slot.cus : 0);
+  }
+  const result: Record<string, LevelCapFrameSkins> = {};
+  for (const entry of array(inventory.Suits)) {
+    const suit = asRecord(entry);
+    const type = lotusPath(suit?.ItemType);
+    if (!suit || !type || result[type]) continue;
+    const skins = array(suit.Configs).map((config) => skinOf(config, type));
+    const options = [...new Set(skins.flatMap((skin) => skin ?? []))];
+    if (!options.length) continue;
+    const id = oid(suit.ItemId);
+    result[type] = { equipped: skins[(id && worn.get(id)) || 0] ?? null, options };
+  }
+  return result;
 }
 
 /** Frame type of an owned suit id, e.g. from an EOM XP line. */

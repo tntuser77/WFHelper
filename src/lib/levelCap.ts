@@ -1,7 +1,9 @@
-import type {
-  LevelCapItem,
-  LevelCapSlotKind,
-  LevelCapUpgrade,
+import {
+  LEVEL_CAP_DEFAULT_SKIN,
+  type LevelCapFrameSkins,
+  type LevelCapItem,
+  type LevelCapSlotKind,
+  type LevelCapUpgrade,
 } from "../../config/shared/levelCapTypes.js";
 import type { LevelCapRun } from "../types/ipc.js";
 import { fallbackNameFromUniqueName } from "../../config/shared/displayName.js";
@@ -158,6 +160,33 @@ export function levelCapFrames(runs: readonly LevelCapRun[]): LevelCapFrameRow[]
     rows.set(run.frame, row);
   }
   return [...rows.values()].sort((a, b) => b.count - a.count || a.frame.localeCompare(b.frame));
+}
+
+/** The skin a frame's icon shows: the one pinned for it, else the one its loadout
+ *  wears. Null means the frame's own art. */
+export function levelCapFrameSkin(
+  row: Pick<LevelCapFrameRow, "frame" | "frameType">,
+  skins: Record<string, LevelCapFrameSkins>,
+  icons: Record<string, string>,
+): string | null {
+  const pinned = icons[row.frame];
+  if (pinned) return pinned === LEVEL_CAP_DEFAULT_SKIN ? null : pinned;
+  return (row.frameType && skins[row.frameType]?.equipped) || null;
+}
+
+/** The frame icon's image: the skin's art, falling back to the frame's own. */
+export function levelCapFrameArt(
+  row: Pick<LevelCapFrameRow, "frame" | "frameType">,
+  skins: Record<string, LevelCapFrameSkins>,
+  icons: Record<string, string>,
+  db: ItemArt,
+): string | null {
+  const skin = levelCapFrameSkin(row, skins, icons);
+  return (
+    (skin ? db[skin]?.imageUrl : null) ??
+    (row.frameType ? db[row.frameType]?.imageUrl : null) ??
+    null
+  );
 }
 
 export function formatLevelCapDuration(sec: number | null): string {

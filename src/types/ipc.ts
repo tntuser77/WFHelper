@@ -825,6 +825,10 @@ export interface IpcInvokeMap {
     args: [frame: string, notes: string];
     return: LevelCapPayload;
   };
+  setLevelCapFrameIcon: {
+    args: [frame: string, skin: string | null];
+    return: LevelCapPayload;
+  };
   createLevelCapBuild: {
     args: [frame: string, source: LevelCapBuildSource, name?: string];
     return: { payload: LevelCapPayload; buildId: string | null };
