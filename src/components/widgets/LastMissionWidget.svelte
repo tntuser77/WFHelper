@@ -4,7 +4,9 @@
   import { locale, tr, type MessageKey } from "../../lib/i18n.js";
   import { getPlatform, invoke, on } from "../../lib/ipc.js";
   import { log } from "../../lib/log.js";
+  import { missionRowSources } from "../../lib/missionSources.js";
   import {
+    applyMissionValuation,
     buildRewardRows,
     endedAtLabel,
     missionName,
@@ -13,7 +15,8 @@
   } from "../../lib/missionRewardRows.js";
   import { currentView } from "../../stores/app.js";
   import { itemDb, wfmItems } from "../../stores/data.js";
-  import { getCachedMedian } from "../../stores/hydration/hydrationCacheHelpers.js";
+  import { inventorySafetyContext } from "../../stores/inventorySafety.js";
+  import { missionRelicPool } from "../../stores/missionRelicPool.js";
   import { priceCacheRevision } from "../../stores/pricing.js";
   import { relicDb } from "../../stores/relics.js";
   import type { MissionRewardsPayload } from "../../types/ipc.js";
@@ -34,13 +37,13 @@
   );
   const rows = $derived.by(() => {
     void $priceCacheRevision;
+    void $itemDb;
+    void $wfmItems;
+    void $relicDb;
+    void $missionRelicPool;
+    void $inventorySafetyContext;
     return selected
-      ? buildRewardRows(selected.items, {
-          db: $itemDb,
-          lookup: $wfmItems,
-          relics: $relicDb,
-          priceOf: getCachedMedian,
-        })
+      ? applyMissionValuation(buildRewardRows(selected.items, missionRowSources()), selected)
       : [];
   });
   const trackingOff = $derived(status?.blocked === "tracking-off");

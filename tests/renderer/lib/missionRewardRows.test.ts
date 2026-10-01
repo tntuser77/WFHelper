@@ -4,22 +4,28 @@ import type { MissionRewardsStatus } from "../../../config/shared/missionRewards
 import { normalizeMarketName } from "../../../src/lib/marketNaming.js";
 import {
   appendPage,
+  applyMissionValuation,
   buildRewardRows,
   createPageLoader,
+  freezeRows,
   matchRewardItemTypes,
   mergeFirstPage,
   missionPeriodStart,
   missionStatusText,
   missionTypeLabel,
+  readyToFreeze,
   rewardRowTotals,
   type PageLoadMode,
   type RewardRowSources,
 } from "../../../src/lib/missionRewardRows.js";
+import type { MissionPool } from "../../../src/lib/missionRelicPool.js";
 import type { ItemDbEntry } from "../../../src/types/inventory.js";
 
 const FORMA_BP = "/Lotus/Types/Recipes/Components/FormaBlueprint";
 const PLASTIDS = "/Lotus/Types/Items/MiscItems/Plastids";
 const PRIME_PART = "/Lotus/Types/Recipes/WarframeRecipes/EmberPrimeChassisComponent";
+const SET_ROOT = "/Lotus/Powersuits/Ember/EmberPrime";
+const ARCANE = "/Lotus/Upgrades/CosmeticEnhancers/Offensive/ArcaneX";
 const UNKNOWN = "/Lotus/Types/Items/MiscItems/SomeNewResource";
 
 const DB: Record<string, ItemDbEntry> = {
@@ -52,7 +58,7 @@ function sources(prices: Record<string, number>): RewardRowSources {
 }
 
 describe("mission reward rows", () => {
-  it("prices unranked rewards, sorts by value and counts what has no price", () => {
+  it("counts a reward as platinum only when it sells for the trade floor or more", () => {
     const rows = buildRewardRows(
       [
         { uniqueName: PLASTIDS, count: 200 },
@@ -60,22 +66,207 @@ describe("mission reward rows", () => {
         { uniqueName: PRIME_PART, count: 1 },
         { uniqueName: UNKNOWN, count: 3 },
       ],
-      sources({ "forma_blueprint:rank-v3:r0": 6 }),
+      sources({ "forma_blueprint:rank-v3:r0": 30, ember_prime_chassis: 9 }),
     );
 
     expect(rows.map((row) => row.uniqueName)).toEqual([FORMA_BP, PRIME_PART, PLASTIDS, UNKNOWN]);
-    expect(rows[0]).toMatchObject({ name: "Forma-Blaupause", platinum: 12, openable: true });
-    expect(rows[1]).toMatchObject({ platinum: null, ducats: 45, vaulted: true, unpriced: true });
+    expect(rows[0]).toMatchObject({ name: "Forma-Blaupause", platinum: 60, openable: true });
+    expect(rows[1]).toMatchObject({ platinum: null, ducats: 45, vaulted: true, unpriced: false });
     expect(rows[3]).toMatchObject({ openable: false, platinum: null, unpriced: false });
-    expect(rewardRowTotals(rows)).toEqual({ platinum: 12, ducats: 45, unpriced: 1 });
+    expect(rewardRowTotals(rows)).toEqual({ sellNow: 60, held: 0, ducats: 45, unpriced: 0 });
+  });
+
+  it("flags a tradable reward with no cached price as unpriced", () => {
+    const [row] = buildRewardRows([{ uniqueName: PRIME_PART, count: 1 }], sources({}));
+    expect(row).toMatchObject({ platinum: null, unpriced: true });
   });
 
   it("falls back to the bare slug price when no rank-0 price is cached", () => {
     const [row] = buildRewardRows(
       [{ uniqueName: FORMA_BP, count: 1 }],
-      sources({ forma_blueprint: 5 }),
+      sources({ forma_blueprint: 25 }),
     );
-    expect(row?.platinum).toBe(5);
+    expect(row?.platinum).toBe(25);
+  });
+
+  it("leaves a ranked mod uncounted instead of using the bare slug price", () => {
+    const ranked = sources({ forma_blueprint: 40 });
+    ranked.lookup[normalizeMarketName(FORMA_BP)] = {
+      url_name: "forma_blueprint",
+      gameRef: FORMA_BP,
+      maxRank: 5,
+    };
+    const [row] = buildRewardRows([{ uniqueName: FORMA_BP, count: 6 }], ranked);
+    expect(row).toMatchObject({ platinum: null, unpriced: true });
+
+    ranked.priceOf = (key) => (key === "forma_blueprint:rank-v3:r0" ? 30 : 40);
+    expect(buildRewardRows([{ uniqueName: FORMA_BP, count: 6 }], ranked)[0]?.platinum).toBe(180);
+  });
+
+  it("values a cheap part at its share of a set worth trading", () => {
+    const recipes = "/Lotus/Types/Recipes/WarframeRecipes";
+    const blueprintSpelling = PRIME_PART.replace(/Component$/, "Blueprint");
+    const set = sources({ ember_prime_chassis: 6, ember_prime_set: 80 });
+    set.db = {
+      ...DB,
+      [blueprintSpelling]: DB[PRIME_PART],
+      [SET_ROOT]: {
+        name: "Ember Prime",
+        imageUrl: null,
+        components: [
+          { name: "Blueprint", uniqueName: `${recipes}/EmberPrimeBlueprint` },
+          { name: "Chassis", uniqueName: PRIME_PART },
+          { name: "Neuroptics", uniqueName: `${recipes}/EmberPrimeHelmetComponent` },
+          { name: "Systems", uniqueName: `${recipes}/EmberPrimeSystemsComponent` },
+          { name: "Orokin Cell", uniqueName: "/Lotus/Types/Items/MiscItems/OrokinCell" },
+        ],
+      },
+    };
+    set.lookup[normalizeMarketName("Ember Prime Set")] = { url_name: "ember_prime_set" };
+    set.lookup[normalizeMarketName(blueprintSpelling)] = {
+      url_name: "ember_prime_chassis",
+      gameRef: blueprintSpelling,
+    };
+    const reward = [{ uniqueName: blueprintSpelling, count: 6 }];
+
+    expect(buildRewardRows(reward, set)[0]).toMatchObject({
+      platinum: 120,
+      sale: "held",
+      unpriced: false,
+    });
+
+    set.priceOf = (key) => (key === "ember_prime_set" ? 24 : 6);
+    expect(buildRewardRows(reward, set)[0]?.platinum).toBeNull();
+  });
+
+  describe("with a relic pool", () => {
+    const recipes = "/Lotus/Types/Recipes/WarframeRecipes";
+    const chassis = PRIME_PART.replace(/Component$/, "Blueprint");
+    const others = [
+      `${recipes}/EmberPrimeBlueprint`,
+      `${recipes}/EmberPrimeHelmetComponent`,
+      `${recipes}/EmberPrimeSystemsComponent`,
+    ];
+
+    function poolSources(pool: MissionPool): RewardRowSources {
+      const set = sources({ ember_prime_chassis: 6, ember_prime_set: 80 });
+      set.db = {
+        ...DB,
+        [chassis]: DB[PRIME_PART],
+        [SET_ROOT]: {
+          name: "Ember Prime",
+          imageUrl: null,
+          components: [
+            { name: "Blueprint", uniqueName: others[0] },
+            { name: "Chassis", uniqueName: PRIME_PART },
+            { name: "Neuroptics", uniqueName: others[1] },
+            { name: "Systems", uniqueName: others[2] },
+          ],
+        },
+      };
+      set.lookup[normalizeMarketName("Ember Prime Set")] = { url_name: "ember_prime_set" };
+      set.lookup[normalizeMarketName(chassis)] = {
+        url_name: "ember_prime_chassis",
+        gameRef: chassis,
+      };
+      return { ...set, pool };
+    }
+    const reward = [{ uniqueName: chassis, count: 6 }];
+
+    it("holds a part whose set the pool can finish", () => {
+      const pool = { farmable: new Set(others), owned: new Map<string, number>() };
+      expect(buildRewardRows(reward, poolSources(pool))[0]).toMatchObject({
+        platinum: 120,
+        sale: "held",
+      });
+    });
+
+    it("leaves a part out when the rest of its set is neither farmed nor owned", () => {
+      const pool = { farmable: new Set<string>(), owned: new Map<string, number>() };
+      expect(buildRewardRows(reward, poolSources(pool))[0]).toMatchObject({
+        platinum: null,
+        sale: null,
+      });
+    });
+
+    it("counts only as many copies as the scarcest unfarmed part allows", () => {
+      const pool = {
+        farmable: new Set(others.slice(1)),
+        owned: new Map([[others[0], 2]]),
+      };
+      expect(buildRewardRows(reward, poolSources(pool))[0]).toMatchObject({
+        platinum: 40,
+        sale: "held",
+      });
+    });
+  });
+
+  it("puts a frozen estimate over the live rows", () => {
+    const live = buildRewardRows(
+      [{ uniqueName: FORMA_BP, count: 2 }],
+      sources({ "forma_blueprint:rank-v3:r0": 30 }),
+    );
+    const rows = applyMissionValuation(live, {
+      valuation: {
+        at: 1,
+        goldAtLeast: 37,
+        items: [{ uniqueName: FORMA_BP, platinum: 44, sale: "now" }],
+      },
+    });
+    expect(rows[0]).toMatchObject({ platinum: 44, sale: "now", frozen: true });
+    expect(rewardRowTotals(rows).sellNow).toBe(44);
+    expect(applyMissionValuation(live, {})[0]).toMatchObject({ platinum: 60, frozen: false });
+  });
+
+  it("freezes the valued rows and waits on unpriced ones until the grace runs out", () => {
+    const rows = buildRewardRows(
+      [
+        { uniqueName: FORMA_BP, count: 2 },
+        { uniqueName: PRIME_PART, count: 1 },
+        { uniqueName: PLASTIDS, count: 9 },
+      ],
+      sources({ "forma_blueprint:rank-v3:r0": 30 }),
+    );
+    expect(freezeRows(rows, 37, 5)).toEqual({
+      at: 5,
+      goldAtLeast: 37,
+      items: [
+        { uniqueName: FORMA_BP, platinum: 60, sale: "now" },
+        { uniqueName: PRIME_PART, platinum: 0, sale: null },
+      ],
+    });
+
+    const read = { readAt: 1_000 };
+    expect(readyToFreeze(read, rows, 1_000 + 60_000)).toBe(false);
+    expect(readyToFreeze(read, rows, 1_000 + 31 * 60_000)).toBe(true);
+    expect(
+      readyToFreeze(
+        read,
+        rows.filter((row) => !row.unpriced),
+        1_000,
+      ),
+    ).toBe(true);
+  });
+
+  it("values an arcane at its share of a maxed copy, with no trade floor", () => {
+    const arcane = sources({ "arcane_x:rank-v3:r0": 2, "arcane_x:rank-v3:r5": 42, arcane_x: 42 });
+    arcane.db = { ...DB, [ARCANE]: { name: "Arcane X", imageUrl: null, tradable: true } };
+    arcane.lookup[normalizeMarketName(ARCANE)] = {
+      url_name: "arcane_x",
+      gameRef: ARCANE,
+      maxRank: 5,
+    };
+    const reward = [{ uniqueName: ARCANE, count: 5 }];
+
+    const rows = buildRewardRows(reward, arcane);
+    expect(rows[0]).toMatchObject({ platinum: 10, sale: "held" });
+    expect(rewardRowTotals(rows)).toMatchObject({ sellNow: 0, held: 10 });
+
+    arcane.priceOf = (key) => (key === "arcane_x:rank-v3:r5" ? 21 : null);
+    expect(buildRewardRows(reward, arcane)[0]).toMatchObject({ platinum: 5, sale: "held" });
+
+    arcane.priceOf = () => null;
+    expect(buildRewardRows(reward, arcane)[0]).toMatchObject({ platinum: null, unpriced: true });
   });
 
   it("searches shown, English and fallback names of recorded items only", () => {

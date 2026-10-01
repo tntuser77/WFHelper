@@ -777,6 +777,14 @@ export interface IpcInvokeMap {
     args: [query: MissionRewardsQuery];
     return: MissionRewardsPage | null;
   };
+  getPendingMissionValuations: {
+    args: [];
+    return: MissionRewardSummary[];
+  };
+  freezeMissionValuations: {
+    args: [entries: { id: string; valuation: MissionValuation }[]];
+    return: number;
+  };
   refreshPtRuns: {
     args: [];
     return: PtRunsPayload;
@@ -1063,10 +1071,12 @@ import type {
 export type { PtRunRecord };
 
 import type {
+  MissionRewardSummary,
   MissionRewardsPage,
   MissionRewardsPayload,
   MissionRewardsQuery,
 } from "../../config/shared/missionRewardsTypes.js";
+import type { MissionValuation } from "../../config/shared/missionValuation.js";
 export type {
   MissionRewardItem,
   MissionRewardSummaryView,

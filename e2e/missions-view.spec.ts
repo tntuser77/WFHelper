@@ -97,6 +97,18 @@ function historyFile(summaries: SeedSummary[]) {
   return { version: 2, names, missions };
 }
 
+/** "newest" frozen at 44 platinum for its one Forma blueprint; nothing else has an estimate. */
+const VALUATIONS = {
+  version: 1,
+  missions: {
+    newest: {
+      at: NOW - MINUTE,
+      goldAtLeast: 37,
+      items: [{ uniqueName: FORMA_BP, platinum: 44, sale: "now" }],
+    },
+  },
+};
+
 interface MissionPageGate {
   hold: boolean;
   held: (() => void)[];
@@ -193,6 +205,7 @@ test.describe("Missions view", () => {
     harness = await launchElectronTestHarness("wfh-missions-view-e2e-", {
       userDataFiles: {
         "mission-history.json": historyFile(SUMMARIES),
+        "mission-valuations.json": VALUATIONS,
         "overlay-settings.json": { missionTrackingEnabled: true },
       },
       onPage: (page) => page.clock.setFixedTime(NOW),
@@ -294,6 +307,19 @@ test.describe("Missions view", () => {
     await detail.locator(`[data-reward-row="${FORMA_BP}"] button`).click();
     await expect(page.locator('[role="dialog"] [data-item-detail]')).toBeVisible();
     await page.keyboard.press("Escape");
+  });
+
+  test("a frozen estimate stays as recorded under its own label", async () => {
+    await openMissions();
+    const latest = page.locator("[data-missions-latest]");
+    const estimate = latest.locator('[data-reward-group="estimate"]');
+    await expect(estimate).toContainText("Estimate");
+    await expect(estimate.locator('[data-reward-total="sellNow"] dd')).toHaveText("44");
+
+    await page.locator('[data-mission-toggle="newest"]').click();
+    const row = page.locator(`[data-mission-detail="newest"] [data-reward-row="${FORMA_BP}"]`);
+    await expect(row.locator("[data-reward-row-platinum]")).toContainText("44");
+    await page.screenshot({ path: test.info().outputPath("missions-estimate.png") });
   });
 
   test.describe("Last mission widget", () => {

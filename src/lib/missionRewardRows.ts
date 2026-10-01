@@ -1,3 +1,7 @@
+import {
+  componentUniqueNameAliases,
+  ownedComponentCount,
+} from "../../config/shared/componentNames.js";
 import { fallbackNameFromUniqueName } from "../../config/shared/displayName.js";
 import type {
   MissionRewardsFailure,
@@ -8,10 +12,14 @@ import { sanitizeWfmSlug, titleCase } from "../../config/shared/textNormalize.js
 import { rendererPriceCacheKey } from "../../config/shared/wfmCacheKeys.js";
 import { accessDeniedKeys } from "./accessDenied.js";
 import type { MessageKey, Translator } from "./i18n.js";
+import { partConsumerIndex } from "./inventory/partConsumers.js";
+import { reservableParts } from "./inventory/safetyRules.js";
 import { getLookupByGameRef, getLookupByName } from "./inventoryMarket.js";
+import type { MissionPool } from "./missionRelicPool.js";
 import { relicGroupForUniqueName } from "./relic.js";
 import type { ItemDbEntry } from "../types/inventory.js";
 import type { MissionRewardItem, MissionRewardSummaryView, WfmItemsLookup } from "../types/ipc.js";
+import type { FrozenItem, MissionValuation } from "../../config/shared/missionValuation.js";
 import type { RelicDatabase } from "../types/relics.js";
 
 export interface RewardRow {
@@ -20,14 +28,23 @@ export interface RewardRow {
   imageUrl: string | null;
   count: number;
   vaulted: boolean;
+  /** Market slug it was priced under, for matching a sale back to it. */
+  slug: string | null;
   platinum: number | null;
+  /** How the platinum is reached: sold as it is, or held until a set or a maxed arcane. */
+  sale: RewardSale | null;
   ducats: number | null;
   unpriced: boolean;
   openable: boolean;
+  /** The platinum and sale above were frozen with the mission, not read from today's prices. */
+  frozen: boolean;
 }
 
+type RewardSale = "now" | "held";
+
 interface RewardRowTotals {
-  platinum: number;
+  sellNow: number;
+  held: number;
   ducats: number;
   unpriced: number;
 }
@@ -38,25 +55,156 @@ export interface RewardRowSources {
   relics: RelicDatabase | null;
   /** Median for a renderer price cache key, from the price snapshot store. */
   priceOf: (cacheKey: string) => number | null;
+  /** The relics being farmed and the parts held. Without it, any set a part builds can be
+   *  completed. */
+  pool?: MissionPool;
 }
 
-function marketSlug(uniqueName: string, name: string, lookup: WfmItemsLookup): string | null {
+/** The cheapest sale worth a trade: a reward counts as platinum only when it, or the
+ *  set it builds, sells for this or more. */
+const MIN_TRADE_PLATINUM = 25;
+
+const ARCANE_PATH = /\/CosmeticEnhancers\//;
+
+interface MarketListing {
+  slug: string;
+  maxRank: number;
+}
+
+interface UnitValue {
+  /** Platinum one copy adds; null when no sale of it reaches the trade floor. */
+  platinum: number | null;
+  sale: RewardSale | null;
+  /** Copies that count at that value; the rest find no set to go into. Null is no limit. */
+  cap: number | null;
+  /** No price is cached for the sale this reward would go through. */
+  unpriced: boolean;
+}
+
+function marketListing(
+  uniqueName: string,
+  name: string,
+  lookup: WfmItemsLookup,
+): MarketListing | null {
   const entry = getLookupByGameRef(uniqueName, lookup) ?? getLookupByName(name, lookup);
-  return entry ? sanitizeWfmSlug(entry.url_name) : null;
+  const slug = entry ? sanitizeWfmSlug(entry.url_name) : null;
+  return entry && slug ? { slug, maxRank: Math.max(0, entry.maxRank ?? 0) } : null;
 }
 
-// Rewards arrive unranked, so a rank-0 price wins over the bare slug, which
-// tracks whichever rank sold last.
-function cachedPlatinum(slug: string, priceOf: RewardRowSources["priceOf"]): number | null {
-  return priceOf(rendererPriceCacheKey(slug, 0)) ?? priceOf(rendererPriceCacheKey(slug, null));
+// Rewards arrive unranked, so a rank-0 price wins over the bare slug. A ranked item's
+// bare slug tracks whichever rank sold last, mostly maxed copies, so it never prices one.
+function cachedPlatinum(
+  listing: MarketListing,
+  priceOf: RewardRowSources["priceOf"],
+): number | null {
+  const rankZero = priceOf(rendererPriceCacheKey(listing.slug, 0));
+  if (rankZero !== null || listing.maxRank > 0) return rankZero;
+  return priceOf(rendererPriceCacheKey(listing.slug, null));
 }
 
-function buildRow(item: MissionRewardItem, sources: RewardRowSources): RewardRow {
+const NO_SALE = { platinum: null, sale: null, cap: null } as const;
+
+/** An arcane sells maxed, whatever that fetches: each copy is its share of the copies
+ *  one maxed arcane takes. */
+function arcaneValue(listing: MarketListing, priceOf: RewardRowSources["priceOf"]): UnitValue {
+  const maxed = priceOf(rendererPriceCacheKey(listing.slug, listing.maxRank));
+  if (maxed === null) return { ...NO_SALE, unpriced: true };
+  const copies = ((listing.maxRank + 1) * (listing.maxRank + 2)) / 2;
+  return { platinum: maxed / copies, sale: "held", cap: null, unpriced: false };
+}
+
+interface SetShare {
+  each: number;
+  /** Copies of the part the sets it can still complete take; null when it is not limited. */
+  cap: number | null;
+}
+
+/** Sets this build can still complete: a part the pool farms is unlimited, any other is
+ *  held only as often as it is owned, counting what this mission brought. */
+function completableSets(
+  parts: readonly { uniqueName?: string; itemCount?: number }[],
+  pool: MissionPool,
+  received: ReadonlyMap<string, number>,
+): number {
+  let sets = Infinity;
+  for (const part of parts) {
+    const uniqueName = part.uniqueName ?? "";
+    if (componentUniqueNameAliases(uniqueName).some((alias) => pool.farmable.has(alias))) continue;
+    const perBuild = part.itemCount && part.itemCount > 0 ? part.itemCount : 1;
+    const held = Math.max(
+      ownedComponentCount(uniqueName, pool.owned),
+      ownedComponentCount(uniqueName, received),
+    );
+    sets = Math.min(sets, Math.floor(held / perBuild));
+  }
+  return sets;
+}
+
+/** A part's even share of the best-priced set it builds, when that set is worth a trade
+ *  and the pool can complete it. */
+function setShare(
+  uniqueName: string,
+  sources: RewardRowSources,
+  received: ReadonlyMap<string, number>,
+): SetShare | null {
+  const consumers = new Map<string, number>();
+  const index = partConsumerIndex(sources.db);
+  for (const alias of componentUniqueNameAliases(uniqueName)) {
+    for (const link of index.get(alias) ?? []) consumers.set(link.parent, link.perBuild);
+  }
+  let best: SetShare | null = null;
+  for (const [parent, perBuild] of consumers) {
+    const setName = sources.db[parent]?.name;
+    const set = setName ? getLookupByName(`${setName} Set`, sources.lookup) : null;
+    const slug = set ? sanitizeWfmSlug(set.url_name) : null;
+    const price = slug ? sources.priceOf(rendererPriceCacheKey(slug, null)) : null;
+    if (price === null || price < MIN_TRADE_PLATINUM) continue;
+    const parts = reservableParts(sources.db, parent);
+    const partCount = parts.reduce(
+      (sum, part) => sum + (part.itemCount && part.itemCount > 0 ? part.itemCount : 1),
+      0,
+    );
+    if (partCount <= 0) continue;
+    const sets = sources.pool ? completableSets(parts, sources.pool, received) : Infinity;
+    if (sets <= 0) continue;
+    const each = price / partCount;
+    if (best && best.each >= each) continue;
+    best = { each, cap: Number.isFinite(sets) ? sets * perBuild : null };
+  }
+  return best;
+}
+
+function unitValue(
+  uniqueName: string,
+  listing: MarketListing,
+  sources: RewardRowSources,
+  received: ReadonlyMap<string, number>,
+): UnitValue {
+  if (listing.maxRank > 0 && ARCANE_PATH.test(uniqueName)) {
+    return arcaneValue(listing, sources.priceOf);
+  }
+  const own = cachedPlatinum(listing, sources.priceOf);
+  if (own !== null && own >= MIN_TRADE_PLATINUM) {
+    return { platinum: own, sale: "now", cap: null, unpriced: false };
+  }
+  const share = setShare(uniqueName, sources, received);
+  if (share !== null) {
+    return { platinum: share.each, sale: "held", cap: share.cap, unpriced: false };
+  }
+  return { ...NO_SALE, unpriced: own === null };
+}
+
+function buildRow(
+  item: MissionRewardItem,
+  sources: RewardRowSources,
+  received: ReadonlyMap<string, number>,
+): RewardRow {
   const entry: ItemDbEntry | undefined = sources.db[item.uniqueName];
   const englishName = entry?.name || fallbackNameFromUniqueName(item.uniqueName);
-  const slug =
-    entry?.tradable === true ? marketSlug(item.uniqueName, englishName, sources.lookup) : null;
-  const each = slug ? cachedPlatinum(slug, sources.priceOf) : null;
+  const listing =
+    entry?.tradable === true ? marketListing(item.uniqueName, englishName, sources.lookup) : null;
+  const value = listing ? unitValue(item.uniqueName, listing, sources, received) : null;
+  const each = value?.platinum ?? null;
   const ducats = typeof entry?.ducats === "number" && entry.ducats > 0 ? entry.ducats : null;
   return {
     uniqueName: item.uniqueName,
@@ -64,38 +212,108 @@ function buildRow(item: MissionRewardItem, sources: RewardRowSources): RewardRow
     imageUrl: entry?.imageUrl ?? null,
     count: item.count,
     vaulted: entry?.vaulted === true,
-    platinum: each === null ? null : each * item.count,
+    slug: listing?.slug ?? null,
+    platinum:
+      each === null ? null : Math.round(each * Math.min(item.count, value?.cap ?? Infinity)),
+    sale: value?.sale ?? null,
     ducats: ducats === null ? null : ducats * item.count,
-    unpriced: entry?.tradable === true && each === null,
+    unpriced: entry?.tradable === true && (value === null || value.unpriced),
     openable: Boolean(entry) || relicGroupForUniqueName(sources.relics, item.uniqueName) !== null,
+    frozen: false,
   };
 }
 
-/** Most valuable first: platinum, then ducats, then name. */
+/** What sells now first, then what is held; within each the most platinum, then ducats, then name. */
 export function buildRewardRows(
   items: readonly MissionRewardItem[],
   sources: RewardRowSources,
 ): RewardRow[] {
+  const received = new Map(items.map((item) => [item.uniqueName, item.count]));
   return items
-    .map((item) => buildRow(item, sources))
+    .map((item) => buildRow(item, sources, received))
     .sort(
       (a, b) =>
+        saleOrder(a.sale) - saleOrder(b.sale) ||
         (b.platinum ?? -1) - (a.platinum ?? -1) ||
         (b.ducats ?? -1) - (a.ducats ?? -1) ||
         a.name.localeCompare(b.name),
     );
 }
 
+function saleOrder(sale: RewardSale | null): number {
+  return sale === "now" ? 0 : sale === "held" ? 1 : 2;
+}
+
+/** Puts a mission's frozen estimate on its rows. A mission with no frozen estimate keeps
+ *  the live prices the rows were built with. */
+export function applyMissionValuation(
+  rows: readonly RewardRow[],
+  mission: Pick<MissionRewardSummaryView, "valuation">,
+): RewardRow[] {
+  const valuation = mission.valuation;
+  if (!valuation) return [...rows];
+  const frozen = new Map(valuation.items.map((item) => [item.uniqueName, item]));
+  const out = rows.map((row) => {
+    const item = frozen.get(row.uniqueName);
+    if (!item) return row;
+    return {
+      ...row,
+      platinum: item.sale === null && item.platinum === 0 ? null : item.platinum,
+      sale: item.sale,
+      unpriced: false,
+      frozen: true,
+    };
+  });
+  return out.sort(
+    (a, b) =>
+      saleOrder(a.sale) - saleOrder(b.sale) ||
+      (b.platinum ?? -1) - (a.platinum ?? -1) ||
+      (b.ducats ?? -1) - (a.ducats ?? -1) ||
+      a.name.localeCompare(b.name),
+  );
+}
+
+/** A mission whose rewards still have no price is left unfrozen this long after its read,
+ *  so a price that is still on its way is not frozen in as nothing. */
+const UNPRICED_GRACE_MS = 30 * 60_000;
+
+/** What a mission's rows are worth now, as the estimate it keeps from here on. */
+export function freezeRows(
+  rows: readonly RewardRow[],
+  goldAtLeast: number | null,
+  at: number,
+): MissionValuation {
+  const items: FrozenItem[] = rows
+    .filter((row) => row.slug !== null || row.sale !== null)
+    .map((row) => ({
+      uniqueName: row.uniqueName,
+      platinum: row.platinum ?? 0,
+      sale: row.sale,
+    }));
+  return { at, goldAtLeast, items };
+}
+
+/** Whether the mission's rewards are priced enough to freeze what they are worth. */
+export function readyToFreeze(
+  summary: Pick<MissionRewardSummaryView, "readAt">,
+  rows: readonly RewardRow[],
+  now: number,
+): boolean {
+  return rows.every((row) => !row.unpriced) || now - summary.readAt > UNPRICED_GRACE_MS;
+}
+
 export function rewardRowTotals(rows: readonly RewardRow[]): RewardRowTotals {
-  let platinum = 0;
+  let sellNow = 0;
+  let held = 0;
   let ducats = 0;
   let unpriced = 0;
   for (const row of rows) {
-    platinum += row.platinum ?? 0;
+    if (row.sale === "now") sellNow += row.platinum ?? 0;
+    else if (row.sale === "held") held += row.platinum ?? 0;
     ducats += row.ducats ?? 0;
     if (row.unpriced) unpriced += 1;
   }
-  return { platinum, ducats, unpriced };
+  return { sellNow, held, ducats, unpriced };
 }
 
 export function missionTypeLabel(missionType: string | undefined): string | null {

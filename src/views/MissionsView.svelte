@@ -8,6 +8,7 @@
   import MissionRewardList from "../components/missions/MissionRewardList.svelte";
   import MissionRewardTotals from "../components/missions/MissionRewardTotals.svelte";
   import MissionTrackingSettingsLink from "../components/missions/MissionTrackingSettingsLink.svelte";
+  import RelicPoolModal from "../components/missions/RelicPoolModal.svelte";
   import SearchBox from "../components/SearchBox.svelte";
   import ThemedButton from "../components/ThemedButton.svelte";
   import ThemedPanel from "../components/ThemedPanel.svelte";
@@ -16,7 +17,9 @@
   import { locale, tr, type MessageKey } from "../lib/i18n.js";
   import { getPlatform, invoke, on } from "../lib/ipc.js";
   import { log } from "../lib/log.js";
+  import { missionRowSources } from "../lib/missionSources.js";
   import {
+    applyMissionValuation,
     buildRewardRows,
     createPageLoader,
     endedAtLabel,
@@ -34,7 +37,8 @@
   } from "../lib/missionRewardRows.js";
   import { persistedString } from "../lib/persistence.js";
   import { itemDb, wfmItems } from "../stores/data.js";
-  import { getCachedMedian } from "../stores/hydration/hydrationCacheHelpers.js";
+  import { inventorySafetyContext } from "../stores/inventorySafety.js";
+  import { missionRelicPool } from "../stores/missionRelicPool.js";
   import { priceCacheRevision } from "../stores/pricing.js";
   import { relicDb } from "../stores/relics.js";
   import type {
@@ -63,6 +67,7 @@
   let appliedSearch = $state("");
   let expanded = $state<Record<string, boolean>>({});
   let showPeriodItems = $state(false);
+  let showRelicPool = $state(false);
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   const period = $derived($periodStore);
@@ -79,14 +84,30 @@
   );
   const sources = $derived.by((): RewardRowSources => {
     void $priceCacheRevision;
-    return { db: $itemDb, lookup: $wfmItems, relics: $relicDb, priceOf: getCachedMedian };
+    void $itemDb;
+    void $wfmItems;
+    void $relicDb;
+    void $missionRelicPool;
+    void $inventorySafetyContext;
+    return missionRowSources();
   });
-  const latestRows = $derived(latest ? buildRewardRows(latest.items, sources) : []);
+  const latestRows = $derived(
+    latest ? applyMissionValuation(buildRewardRows(latest.items, sources), latest) : [],
+  );
   const periodRows = $derived(page ? buildRewardRows(page.totals.items, sources) : []);
-  const periodTotals = $derived(rewardRowTotals(periodRows));
+  // Frozen missions count at what they were estimated at; the rest at today's prices.
+  const periodTotals = $derived.by(() => {
+    const live = rewardRowTotals(page ? buildRewardRows(page.totals.liveItems, sources) : []);
+    const estimate = page?.totals.estimate;
+    return {
+      sellNow: live.sellNow + (estimate?.sellNow ?? 0),
+      held: live.held + (estimate?.held ?? 0),
+      ducats: rewardRowTotals(periodRows).ducats,
+    };
+  });
   const entries = $derived(
     summaries.map((summary) => {
-      const rows = buildRewardRows(summary.items, sources);
+      const rows = applyMissionValuation(buildRewardRows(summary.items, sources), summary);
       return { summary, rows, totals: rewardRowTotals(rows) };
     }),
   );
@@ -102,8 +123,15 @@
       className:
         "inline-flex w-20 shrink-0 items-center justify-end gap-1 tabular-nums text-text-primary",
       icon: PLATINUM_ICON_URL,
-      altKey: "common.platinum",
-      value: (entry) => entry.totals.platinum,
+      altKey: "missions.sellNow",
+      value: (entry) => entry.totals.sellNow,
+    },
+    {
+      attr: "data-mission-held",
+      className: "inline-flex w-20 shrink-0 items-center justify-end gap-1 tabular-nums",
+      icon: PLATINUM_ICON_URL,
+      altKey: "missions.held",
+      value: (entry) => entry.totals.held,
     },
     {
       attr: "data-mission-ducats",
@@ -229,7 +257,7 @@
       : $tr("missions.itemTypeCount", { count: String(entry.summary.items.length) })}
   </span>
   {#each VALUE_CELLS as cell (cell.attr)}
-    <span class={cell.className} {...{ [cell.attr]: "" }}>
+    <span class={cell.className} title={$tr(cell.altKey)} {...{ [cell.attr]: "" }}>
       {cell.value(entry).toLocaleString($locale)}<img
         src={cell.icon}
         alt={$tr(cell.altKey)}
@@ -258,6 +286,9 @@
           </p>
         {/if}
       </div>
+      <ThemedButton onClick={() => (showRelicPool = true)} title={$tr("missions.relicPool.hint")}>
+        <span data-missions-relic-pool>{$tr("missions.relicPool")}</span>
+      </ThemedButton>
     </header>
 
     {#if notice}
@@ -346,7 +377,8 @@
         <ThemedPanel className="flex flex-col gap-3 p-4">
           <MissionRewardTotals
             missions={page.totals.missions}
-            platinum={periodTotals.platinum}
+            sellNow={periodTotals.sellNow}
+            held={periodTotals.held}
             ducats={periodTotals.ducats}
             credits={page.totals.credits}
             endo={page.totals.endo}
@@ -425,3 +457,7 @@
     {/if}
   </div>
 </section>
+
+{#if showRelicPool}
+  <RelicPoolModal onClose={() => (showRelicPool = false)} />
+{/if}
