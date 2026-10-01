@@ -2,6 +2,10 @@
   import { untrack } from "svelte";
 
   import type { LevelCapPayload, LevelCapSettings } from "../../types/ipc.js";
+  import {
+    formatPlayerAliasLines,
+    parsePlayerAliasLines,
+  } from "../../../config/shared/playerAliases.js";
   import { tr as t } from "../../lib/i18n.js";
   import { pickLevelCapFolder, updateLevelCapSettings } from "../../stores/levelCap.js";
   import ThemedButton from "../ThemedButton.svelte";
@@ -29,6 +33,16 @@
     if (next.join("\n") !== settings.knownPlayers.join("\n")) {
       void updateLevelCapSettings({ knownPlayers: next });
     }
+  }
+
+  let aliasesDraft = $state(untrack(() => formatPlayerAliasLines(settings.playerAliases)));
+
+  function commitAliases(): void {
+    const next = parsePlayerAliasLines(aliasesDraft);
+    if (JSON.stringify(next) !== JSON.stringify(settings.playerAliases)) {
+      void updateLevelCapSettings({ playerAliases: next });
+    }
+    aliasesDraft = formatPlayerAliasLines(next);
   }
 </script>
 
@@ -74,6 +88,19 @@
       onblur={commitPlayers}
       data-level-cap-known-players></textarea>
     <span class="text-xs text-text-muted">{$t("levelCap.settings.knownPlayersHint")}</span>
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-xs font-semibold uppercase tracking-wide text-text-muted"
+      >{$t("levelCap.settings.playerAliases")}</span
+    >
+    <textarea
+      class="h-24 w-96 resize-y rounded border border-border bg-bg-raised px-2 py-1 font-mono text-sm text-text-primary outline-none focus:border-info"
+      placeholder="MainName = AltName, OldName"
+      bind:value={aliasesDraft}
+      onblur={commitAliases}
+      data-level-cap-player-aliases></textarea>
+    <span class="text-xs text-text-muted">{$t("levelCap.settings.playerAliasesHint")}</span>
   </label>
 
   {#each [["screenshotDir", "levelCap.settings.screenshotDir"], ["backupDir", "levelCap.settings.backupDir"]] as const as [kind, labelKey] (kind)}

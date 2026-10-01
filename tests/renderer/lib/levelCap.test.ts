@@ -22,6 +22,7 @@ import {
   levelCapRunHasPlayer,
   levelCapSearchTerms,
   levelCapSquad,
+  levelCapSquadAliases,
   levelCapSquadKills,
   levelCapSlotLayout,
   levelCapTagSuggestions,
@@ -556,6 +557,15 @@ describe("level cap search", () => {
     expect(levelCapRunHasPlayer(run, "saltz")).toBe(true);
     expect(levelCapRunHasPlayer(run, "melee")).toBe(false);
     expect(levelCapRunHasPlayer({}, "wealthy")).toBe(false);
+  });
+
+  it("finds a player by the alt name they played under", () => {
+    const run = {
+      players: ["WealthyPoet"],
+      squadLog: [{ name: "WealthyPoet", alias: "PoetAlt", slot: 2 }],
+    };
+    expect(levelCapRunHasPlayer(run, "poetalt")).toBe(true);
+    expect(levelCapSquadAliases(run as never)).toEqual(new Map([["wealthypoet", "PoetAlt"]]));
   });
 
   it("counts the squadmates a run could not name", () => {

@@ -23,6 +23,7 @@ import {
   PHONE_SYNC_SET_CONFIG,
   PHONE_SYNC_UNPAIR,
 } from "../config/shared/ipcChannels";
+import { applyPlayerAliases } from "../config/shared/playerAliases";
 import { normalizeDucats } from "../config/shared/numeric";
 import {
   buildLevelCapSnapshot,
@@ -87,7 +88,7 @@ function relicSnapshot(): PhoneSnapshot | null {
 
 function levelCapSnapshot(): PhoneSnapshot {
   return buildLevelCapSnapshot({
-    runs: levelCapStore.getRuns(),
+    runs: applyPlayerAliases(levelCapStore.getRuns(), levelCapStore.getSettings().playerAliases),
     builds: levelCapStore.getBuilds(),
     frameNotes: levelCapStore.getFrameNotes(),
     nameOf,

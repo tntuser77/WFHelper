@@ -79,6 +79,7 @@ import type {
   LevelCapSquadFixPatch,
   LevelCapSlotKind,
 } from "../config/shared/levelCapTypes";
+import { applyPlayerAliases } from "../config/shared/playerAliases";
 
 const log = withScope("levelCapIpc");
 const THUMBNAIL_WIDTH = 960;
@@ -164,7 +165,9 @@ function squadFrame(folder: string, type: string | null): string | null {
 }
 
 function payload(): LevelCapPayload {
-  const runs = store.getRuns();
+  const settings = store.getSettings();
+  // Aliases only change what the renderer sees; the index keeps the names as read.
+  const runs = applyPlayerAliases(store.getRuns(), settings.playerAliases);
   const builds = store.getBuilds();
   const abilityNames: Record<string, string> = {};
   for (const build of [...runs.map((r) => r.build), ...builds.map((b) => b.build)]) {
@@ -175,7 +178,7 @@ function payload(): LevelCapPayload {
   return {
     runs,
     builds,
-    settings: store.getSettings(),
+    settings,
     status: tracker.getStatus(),
     frameNotes: store.getFrameNotes(),
     hotkey: {
@@ -355,7 +358,11 @@ function isSettingsPatch(raw: unknown): raw is Partial<LevelCapSettings> {
     (value.passthrough === undefined || typeof value.passthrough === "boolean") &&
     (value.screenshotDir === undefined || typeof value.screenshotDir === "string") &&
     (value.backupDir === undefined || typeof value.backupDir === "string") &&
-    (value.knownPlayers === undefined || Array.isArray(value.knownPlayers))
+    (value.knownPlayers === undefined || Array.isArray(value.knownPlayers)) &&
+    (value.playerAliases === undefined ||
+      (typeof value.playerAliases === "object" &&
+        value.playerAliases !== null &&
+        !Array.isArray(value.playerAliases)))
   );
 }
 

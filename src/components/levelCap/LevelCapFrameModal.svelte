@@ -12,6 +12,7 @@
     levelCapPlayerTerms,
     levelCapRunHasPlayer,
     levelCapSquad,
+    levelCapSquadAliases,
     levelCapSquadKills,
     orderLevelCapTags,
     type LevelCapFrameRow,
@@ -410,6 +411,7 @@
             {@const open = expanded.has(run.id)}
             {@const squad = levelCapSquad(run)}
             {@const squadKills = levelCapSquadKills(run)}
+            {@const squadAliases = levelCapSquadAliases(run)}
             {@const squadUp = shownRuns.length > 2 && index >= shownRuns.length - 2}
             <li class="border-b border-border/50 last:border-b-0">
               <div class="flex min-h-[3.75rem] items-center gap-4 px-3 py-2.5 text-sm">
@@ -521,8 +523,14 @@
                           >
                           {#each squad.names as name (name)}
                             {@const kills = squadKills.get(name.toLowerCase())}
+                            {@const alias = squadAliases.get(name.toLowerCase())}
                             <span class="flex justify-between gap-3 whitespace-nowrap"
-                              >{name}
+                              ><span
+                                >{name}{#if alias}
+                                  <span class="text-text-muted" data-level-cap-squad-alias
+                                    >{$t("levelCap.squadAlias", { name: alias })}</span
+                                  >{/if}</span
+                              >
                               {#if kills != null}
                                 <span class="font-mono text-text-muted" data-level-cap-squad-kills
                                   >{$t("levelCap.squadKills", {
