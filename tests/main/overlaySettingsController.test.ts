@@ -230,6 +230,16 @@ describe("overlay settings controller", () => {
     ).toBe(60);
   });
 
+  it("keeps unmatched-trade notifications on unless they are switched off", () => {
+    const { controller } = buildController();
+
+    expect(controller.normalizeOverlaySettings({}).tradeNoMatchNotificationsEnabled).toBe(true);
+    expect(
+      controller.normalizeOverlaySettings({ tradeNoMatchNotificationsEnabled: false })
+        .tradeNoMatchNotificationsEnabled,
+    ).toBe(false);
+  });
+
   it("keeps the trade desktop notification opt-in off unless it is set", () => {
     const { controller } = buildController();
 

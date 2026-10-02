@@ -27,6 +27,9 @@ export function handleConfirmedTrade(trade: ParsedLogTrade): void {
     // The in-game toast is what records history and raises the OS notification,
     // so with the toast switched off this path owns the desktop notification.
     const notify = (status: TradeNotificationStatus, match?: TradeMatchPayload | null) => {
+      // Both statuses read "No Listing Matched", so the toggle mutes both.
+      const unmatched = status === "no-match" || status === "match-failed";
+      if (unmatched && !ctx.overlaySettings.tradeNoMatchNotificationsEnabled) return;
       const payload = match ?? summarizeTrade(event);
       if (isTradeNotificationOverlayEnabled(ctx.overlaySettings)) {
         tradeNotificationIpc.showTradeNotification(payload, status);

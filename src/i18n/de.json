@@ -618,6 +618,8 @@
   "notifications.clearAll": "Alle löschen",
   "settings.tradeRepKeybindEnable": "Reputations-Taste im Trade-Popup",
   "settings.unlistOnTrade": "warframe.market-Orders nach einem Handel schließen",
+  "settings.tradeNoMatchNotifications": "Benachrichtigen, wenn keine Order passt",
+  "settings.tradeNoMatchNotificationsHint": "Handel, die keine deiner Orders schließen, z. B. die meisten Käufe. Aus überspringt dafür auch das +Rep-Angebot.",
   "settings.wfmDmNotifications": "Benachrichtigungen für warframe.market-Nachrichten",
   "settings.windowsNotifSound": "Benachrichtigungston",
   "settings.notificationSoundUsesSystem": "Windows-Benachrichtigungston verwenden",

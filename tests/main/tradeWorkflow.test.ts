@@ -175,4 +175,54 @@ describe("trade workflow notification routing", () => {
 
     expect(h.showTradeNotification.mock.calls[0][1]).toBe("match-failed");
   });
+
+  it.each([
+    ["no-match", () => h.matchTradeToOrders.mockResolvedValue([])],
+    ["match-failed", () => h.matchTradeToOrders.mockRejectedValue(new Error("down"))],
+  ])("stays silent on %s when unmatched notifications are off", async (_status, arrange) => {
+    const { workflow } = await setup({
+      tradeNotificationOverlayEnabled: true,
+      tradeDesktopNotificationsEnabled: true,
+      tradeNoMatchNotificationsEnabled: false,
+      autoCloseWfmOrders: true,
+    });
+    h.getToken.mockReturnValue("token");
+    arrange();
+
+    workflow.handleConfirmedTrade({} as ParsedLogTrade);
+    await flushPromises();
+    await flushPromises();
+
+    expect(h.showTradeNotification).not.toHaveBeenCalled();
+    expect(h.sendDesktopNotification).not.toHaveBeenCalled();
+  });
+
+  it("still shows a closed listing when unmatched notifications are off", async () => {
+    const { workflow } = await setup({
+      tradeNotificationOverlayEnabled: true,
+      tradeNoMatchNotificationsEnabled: false,
+      autoCloseWfmOrders: true,
+    });
+    h.getToken.mockReturnValue("token");
+    h.matchTradeToOrders.mockResolvedValue([
+      {
+        kind: "order",
+        orderId: "order-1",
+        itemName: "Ash Prime Chassis",
+        itemUrlName: "ash_prime_chassis",
+        itemThumb: null,
+        quantity: 1,
+        platinum: 45,
+        partner: "Buyer",
+        type: "sale",
+      },
+    ]);
+    h.closeMatchedOrder.mockResolvedValue(true);
+
+    workflow.handleConfirmedTrade({} as ParsedLogTrade);
+    await flushPromises();
+    await flushPromises();
+
+    expect(h.showTradeNotification.mock.calls[0][1]).toBe("closed");
+  });
 });
