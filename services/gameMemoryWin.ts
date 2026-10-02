@@ -111,6 +111,8 @@ interface AuthzResult {
 }
 
 function findWarframePids(): number[] {
+  // e2e sandboxes: a running game would hand them the real account's inventory.
+  if (process.env.WFHELPER_DISABLE_GAME_MEMORY === "1") return [];
   return enumProcessIds().filter((pid) => isWarframeExePath(exePathOfPid(pid)));
 }
 

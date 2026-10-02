@@ -59,6 +59,7 @@ test.describe("Native main window startup fallbacks", () => {
       APPDATA: path.join(sandbox, "roaming"),
       WFHELPER_DISABLE_KEYBOARD_HOOK: "1",
       WFHELPER_DISABLE_DBWIN: "1",
+      WFHELPER_DISABLE_GAME_MEMORY: "1",
       WF_DISABLE_AUTO_UPDATE: "1",
     } as Record<string, string>;
     delete env.ELECTRON_RUN_AS_NODE;
