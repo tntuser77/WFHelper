@@ -203,6 +203,8 @@ function* scannableRegions(lines: string[], widen: boolean): Generator<Scannable
 }
 
 function findWarframePid(): number | null {
+  // e2e sandboxes: a running game would hand them the real account's inventory.
+  if (process.env.WFHELPER_DISABLE_GAME_MEMORY === "1") return null;
   let entries: string[];
   try {
     entries = fs.readdirSync("/proc");

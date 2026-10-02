@@ -217,6 +217,8 @@ function getInstallerAutoInstallHelperPreference(): boolean | null {
 }
 
 function findExePath(): string | null {
+  // The helper reads game memory too; e2e sandboxes must not reach the real game.
+  if (process.env.WFHELPER_DISABLE_GAME_MEMORY === "1") return null;
   // Check userData install location first (auto-downloaded).
   const candidates = [
     path.join(getHelperDir(), EXE_NAME),
