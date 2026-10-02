@@ -78,6 +78,7 @@ describe("ahk macro ini files", () => {
     });
     expect(settings.keys).toEqual(defaultMacroSettings().keys);
     expect(settings.wheelCombo).toEqual(defaultMacroSettings().wheelCombo);
+    expect(settings.keySpam).toEqual({ enabled: false, key: "2", rate: 8 });
   });
 
   it("round-trips everything through the two files", async () => {
@@ -93,6 +94,7 @@ describe("ahk macro ini files", () => {
       { key: ":", wait: 30 },
       { key: "1", wait: 0 },
     ];
+    settings.keySpam = { enabled: true, key: "4", rate: 12 };
 
     const back = settingsFromIni(settingsIniText(settings, "C:\\x.ini"), mexianIniText(settings));
     expect(back).toEqual(settings);
@@ -119,6 +121,10 @@ describe("ahk macro ini files", () => {
         "Enabled=0",
         "[WheelCombo]",
         "Steps=e:80|bad key:10|[:9000",
+        "[KeySpam]",
+        "Enabled=1",
+        "Key=bad key",
+        "Rate=99",
       ].join("\r\n"),
       "[Settings]\nactive = Missing\n[settings2]\nroll = -5\n",
     );
@@ -133,6 +139,7 @@ describe("ahk macro ini files", () => {
       { key: "e", wait: 80 },
       { key: "[", wait: 1000 },
     ]);
+    expect(settings.keySpam).toEqual({ enabled: true, key: "2", rate: 20 });
     expect(settings.mexian.active).toBe("settings2");
     expect(settings.mexian.profiles[0].roll).toBe(0);
   });
