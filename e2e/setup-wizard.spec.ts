@@ -40,6 +40,7 @@ async function launchWizard(inventory: unknown | null): Promise<Wizard> {
   delete env.ELECTRON_RUN_AS_NODE;
   env.WFHELPER_DISABLE_KEYBOARD_HOOK = "1";
   env.WFHELPER_DISABLE_DBWIN = "1";
+  env.WFHELPER_DISABLE_GAME_MEMORY = "1";
   env.LOCALAPPDATA = localAppData;
   env.APPDATA = path.join(sandboxDir, "roaming");
   env.WFHELPER_USER_DATA = userData;

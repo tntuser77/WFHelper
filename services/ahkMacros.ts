@@ -84,6 +84,7 @@ export function settingsFromIni(settingsText: string, mexianText: string): Macro
   const timing = section(ini, "Timing");
   const mexian = section(ini, "Mexian");
   const combo = section(ini, "WheelCombo");
+  const spam = section(ini, "KeySpam");
 
   const mex = parseIni(mexianText);
   const profiles = mex
@@ -114,11 +115,16 @@ export function settingsFromIni(settingsText: string, mexianText: string): Macro
       cooldownMs: combo.get("cooldown"),
       steps: parseSteps(combo.get("steps")),
     },
+    keySpam: {
+      enabled: flag(spam.get("enabled")),
+      key: spam.get("key"),
+      rate: spam.get("rate"),
+    },
   });
 }
 
 export function settingsIniText(settings: MacroSettings, mexianIni: string): string {
-  const { keys, mexian, wheelCombo } = settings;
+  const { keys, mexian, wheelCombo, keySpam } = settings;
   return [
     "; Warframe Macros settings, written by WFHelper's Macros tab.",
     "; Warframe Macros.ahk re-reads this file every half second.",
@@ -145,6 +151,11 @@ export function settingsIniText(settings: MacroSettings, mexianIni: string): str
     `Enabled=${wheelCombo.enabled ? 1 : 0}`,
     `Cooldown=${wheelCombo.cooldownMs}`,
     `Steps=${wheelCombo.steps.map((s) => `${s.key}:${s.wait}`).join("|")}`,
+    "",
+    "[KeySpam]",
+    `Enabled=${keySpam.enabled ? 1 : 0}`,
+    `Key=${keySpam.key}`,
+    `Rate=${keySpam.rate}`,
     "",
   ].join("\r\n");
 }
