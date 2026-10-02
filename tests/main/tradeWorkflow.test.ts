@@ -179,11 +179,10 @@ describe("trade workflow notification routing", () => {
   it.each([
     ["no-match", () => h.matchTradeToOrders.mockResolvedValue([])],
     ["match-failed", () => h.matchTradeToOrders.mockRejectedValue(new Error("down"))],
-  ])("stays silent on %s when unmatched notifications are off", async (_status, arrange) => {
+  ])("still shows the %s toast when unmatched history is off", async (status, arrange) => {
     const { workflow } = await setup({
       tradeNotificationOverlayEnabled: true,
-      tradeDesktopNotificationsEnabled: true,
-      tradeNoMatchNotificationsEnabled: false,
+      tradeNoMatchHistoryEnabled: false,
       autoCloseWfmOrders: true,
     });
     h.getToken.mockReturnValue("token");
@@ -193,14 +192,33 @@ describe("trade workflow notification routing", () => {
     await flushPromises();
     await flushPromises();
 
-    expect(h.showTradeNotification).not.toHaveBeenCalled();
+    expect(h.showTradeNotification.mock.calls[0][1]).toBe(status);
+  });
+
+  // With the toast off the desktop notification is the only notice, and it
+  // always lands in history, so opting out drops it.
+  it("drops the unmatched desktop notification when history is off", async () => {
+    const { workflow } = await setup({
+      tradeNotificationOverlayEnabled: false,
+      tradeDesktopNotificationsEnabled: true,
+      tradeNoMatchHistoryEnabled: false,
+      autoCloseWfmOrders: true,
+    });
+    h.getToken.mockReturnValue("token");
+    h.matchTradeToOrders.mockResolvedValue([]);
+
+    workflow.handleConfirmedTrade({} as ParsedLogTrade);
+    await flushPromises();
+    await flushPromises();
+
     expect(h.sendDesktopNotification).not.toHaveBeenCalled();
   });
 
-  it("still shows a closed listing when unmatched notifications are off", async () => {
+  it("still notifies a closed listing when unmatched history is off", async () => {
     const { workflow } = await setup({
-      tradeNotificationOverlayEnabled: true,
-      tradeNoMatchNotificationsEnabled: false,
+      tradeNotificationOverlayEnabled: false,
+      tradeDesktopNotificationsEnabled: true,
+      tradeNoMatchHistoryEnabled: false,
       autoCloseWfmOrders: true,
     });
     h.getToken.mockReturnValue("token");
@@ -223,6 +241,6 @@ describe("trade workflow notification routing", () => {
     await flushPromises();
     await flushPromises();
 
-    expect(h.showTradeNotification.mock.calls[0][1]).toBe("closed");
+    expect(h.sendDesktopNotification.mock.calls[0][0]).toBe("Listing Closed");
   });
 });

@@ -250,7 +250,7 @@ export function createOverlaySettingsController(options: OverlaySettingsControll
         Number((defaults as Record<string, unknown>).tradeNotificationSeconds ?? 5),
       ),
       tradeDesktopNotificationsEnabled: booleanSetting("tradeDesktopNotificationsEnabled"),
-      tradeNoMatchNotificationsEnabled: booleanSetting("tradeNoMatchNotificationsEnabled"),
+      tradeNoMatchHistoryEnabled: booleanSetting("tradeNoMatchHistoryEnabled"),
       windowsNotificationSeconds: normalizeNotificationSeconds(
         candidate.windowsNotificationSeconds,
         Number((defaults as Record<string, unknown>).windowsNotificationSeconds ?? 5),
