@@ -13,6 +13,7 @@
     MEXIAN_MAX_MS,
     MEXIAN_TIMINGS,
     PROFILE_NAME_MAX,
+    SPAM_RATE_MAX,
     TAP_MAX_MS,
     cleanProfileName,
     effectiveMexianTimes,
@@ -380,6 +381,28 @@
                 onclick={addStep}>{$tr("macros.addStep")}</button
               >
             </div>
+          </div>
+        </SettingsSection>
+
+        <SettingsSection title={$tr("macros.keySpam")} description={$tr("macros.keySpamDesc")}>
+          <div class="mt-2.5 grid gap-1" data-macro="keySpam">
+            <SettingsRow label={$tr("marketAlerts.enabled")}>
+              <input type="checkbox" bind:checked={settings.keySpam.enabled} onchange={save} />
+            </SettingsRow>
+            <SettingsRow label={$tr("macros.stepKey")} inputRow>
+              <input class="macro-input" bind:value={settings.keySpam.key} onchange={save} />
+            </SettingsRow>
+            <SettingsRow label={$tr("macros.spamRate")} inputRow>
+              <input
+                type="number"
+                min="1"
+                max={SPAM_RATE_MAX}
+                class="macro-input"
+                bind:value={settings.keySpam.rate}
+                onchange={save}
+                data-macro-spam-rate
+              />
+            </SettingsRow>
           </div>
         </SettingsSection>
 

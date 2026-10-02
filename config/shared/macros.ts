@@ -41,6 +41,13 @@ export interface MacroSettings {
     cooldownMs: number;
     steps: ComboStep[];
   };
+  /** While the key is held, the script taps it again and again instead. */
+  keySpam: {
+    enabled: boolean;
+    key: string;
+    /** Taps per second. */
+    rate: number;
+  };
 }
 
 export interface MacroPaths {
@@ -73,6 +80,7 @@ export const COOLDOWN_MAX_MS = 5000;
 export const TAP_MAX_MS = 200;
 export const COMBO_MAX_STEPS = 12;
 export const PROFILE_NAME_MAX = 40;
+export const SPAM_RATE_MAX = 20;
 
 export const DEFAULT_MEXIAN_PROFILE: Omit<MexianProfile, "name"> = {
   swap: 0,
@@ -101,6 +109,7 @@ export function defaultMacroSettings(): MacroSettings {
         { key: "[", wait: 0 },
       ],
     },
+    keySpam: { enabled: false, key: "2", rate: 8 },
   };
 }
 
@@ -176,6 +185,7 @@ export function normalizeMacroSettings(raw: unknown): MacroSettings {
   const keys = asRecord(rec.keys);
   const mexian = asRecord(rec.mexian);
   const combo = asRecord(rec.wheelCombo);
+  const spam = asRecord(rec.keySpam);
 
   const profiles = normalizeProfiles(mexian.profiles);
   const activeName = typeof mexian.active === "string" ? mexian.active.toLowerCase() : "";
@@ -201,6 +211,11 @@ export function normalizeMacroSettings(raw: unknown): MacroSettings {
       enabled: typeof combo.enabled === "boolean" ? combo.enabled : def.wheelCombo.enabled,
       cooldownMs: clampInt(combo.cooldownMs, 0, COOLDOWN_MAX_MS, def.wheelCombo.cooldownMs),
       steps: normalizeSteps(combo.steps, def.wheelCombo.steps),
+    },
+    keySpam: {
+      enabled: typeof spam.enabled === "boolean" ? spam.enabled : def.keySpam.enabled,
+      key: keyOr(spam.key, def.keySpam.key),
+      rate: clampInt(spam.rate, 1, SPAM_RATE_MAX, def.keySpam.rate),
     },
   };
 }
