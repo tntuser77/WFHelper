@@ -2,6 +2,7 @@
   import type { ItemDbLookup, WfmItemsLookup } from "../../types/ipc.js";
   import { getLookupByName } from "../../lib/inventoryMarket.js";
   import { locale, tr } from "../../lib/i18n.js";
+  import { baroFlipPlan } from "../../stores/baroFlips.js";
   import BaroLastSeen from "./BaroLastSeen.svelte";
 
   // Baro inventory entry - typed loosely to match the world-state shape.
@@ -50,6 +51,8 @@
       : "border-border";
   $: interactCls = hasDb ? "cursor-pointer hover:scale-105 hover:z-[1]" : "";
   $: labelMaxW = isMod ? "max-w-[100px]" : "max-w-[120px]";
+  $: flip = $baroFlipPlan.rows.find((row) => row.uniqueName === entry.uniqueName);
+  $: flipOk = flip?.analysis?.kind === "ok" ? flip.analysis : null;
 </script>
 
 <button
@@ -94,6 +97,10 @@
     class="overflow-hidden text-ellipsis whitespace-nowrap text-center text-xs
            text-text-secondary {labelMaxW}">{entry.item || $tr("common.unknown")}</span
   >
+  {#if flip && flipOk}<span
+      class="text-center text-xs font-semibold text-accent {labelMaxW}"
+      data-baro-card-flip>{$tr("baroFlip.card", { price: flipOk.target, count: flip.buy })}</span
+    >{/if}
   {#if entry.uniqueName}<span class="text-center {labelMaxW}"
       ><BaroLastSeen uniqueName={entry.uniqueName} available={true} /></span
     >{/if}
