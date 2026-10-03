@@ -77,7 +77,10 @@ export function buildBaroCatalog(
   });
 }
 
-function balance(inventory: RawInventoryData | null, id: "ducats" | "credits"): number | null {
+export function currencyBalance(
+  inventory: RawInventoryData | null,
+  id: "ducats" | "credits",
+): number | null {
   if (!inventory) return null;
   const source = STAT_RESOURCES.find((resource) => resource.id === id)?.source;
   if (!source) return null;
@@ -89,8 +92,8 @@ function balance(inventory: RawInventoryData | null, id: "ducats" | "credits"): 
 }
 
 export function baroBudget(rows: BaroCatalogRow[], inventory: RawInventoryData | null) {
-  const ducats = balance(inventory, "ducats");
-  const credits = balance(inventory, "credits");
+  const ducats = currencyBalance(inventory, "ducats");
+  const credits = currencyBalance(inventory, "credits");
   let totalDucats = 0;
   let totalCredits = 0;
   let unknownCosts = 0;

@@ -26,6 +26,7 @@
   import SearchBox from "../SearchBox.svelte";
   import ItemImage from "../ItemImage.svelte";
   import ThemedPanel from "../ThemedPanel.svelte";
+  import BaroFlips from "./BaroFlips.svelte";
   import BaroLastSeen from "./BaroLastSeen.svelte";
 
   type Filter = "all" | "current" | "history" | "wishlist";
@@ -234,6 +235,7 @@
         {$t("baro.futureWishes", { count: budget.unavailableItems })}
       </p>{/if}
   </ThemedPanel>
+  <BaroFlips />
 
   <div class="flex flex-wrap items-center gap-3">
     <div class="filter-tabs flex-wrap">

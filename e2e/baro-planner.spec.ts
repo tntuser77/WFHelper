@@ -399,3 +399,112 @@ test("Baro plans a combined basket, preserves wishes and separates recorded pric
     await closeElectronTestHarness(harness);
   }
 });
+
+test("Baro flip advisor sizes primed mod buys from their price history", async () => {
+  test.setTimeout(180_000);
+  const cryo = "/Lotus/Upgrades/Mods/Fixture/PrimedCryoRoundsFixture";
+  const ravage = "/Lotus/Upgrades/Mods/Fixture/PrimedRavageFixture";
+  const now = Date.now();
+  const world: WorldState = {
+    voidTrader: {
+      activation: new Date(now - 300_000).toISOString(),
+      expiry: new Date(now + 3_600_000).toISOString(),
+      location: "Fixture Relay",
+      inventory: [
+        { uniqueName: cryo, item: "Primed Cryo Rounds", ducats: 300, credits: 100_000 },
+        { uniqueName: ravage, item: "Primed Ravage", ducats: 350, credits: 110_000 },
+      ],
+    },
+  };
+  // 89 calm days at 48 sales a day, then Baro's arrival crashes the price.
+  const rows = (calm: number) =>
+    Array.from({ length: 90 }, (_, index) => [
+      new Date(now - (89 - index) * 86_400_000).toISOString().slice(0, 10),
+      null,
+      index === 89 ? 21 : calm,
+      48,
+    ]);
+  const histories = { primed_cryo_rounds: rows(60), primed_ravage: rows(50) };
+  const inventory: RawInventoryData = {
+    Suits: [],
+    RegularCredits: 1_000_000,
+    MiscItems: [{ ItemType: ducats, ItemCount: 2000 }],
+    RawUpgrades: [{ ItemType: cryo, ItemCount: 2 }],
+  };
+  let harness: ElectronTestHarness | undefined;
+  const pageErrors: string[] = [];
+  try {
+    harness = await launchElectronTestHarness("wfh-baro-flips-", {
+      inventory,
+      storage: { "baro-wishlist-alerts": "0" },
+      onPage: async (page) => {
+        page.on("pageerror", (error) => pageErrors.push(error.message));
+        await page.addInitScript((fixture) => {
+          const nativeFetch = window.fetch.bind(window);
+          window.fetch = (input, init) => {
+            const url =
+              typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+            const match = /^\/v1\/price-history\/([^/]+)$/.exec(
+              new URL(url, location.href).pathname,
+            );
+            const body = match ? fixture[match[1] as keyof typeof fixture] : undefined;
+            if (!body) return nativeFetch(input, init);
+            return Promise.resolve(
+              new Response(JSON.stringify({ ok: true, rows: body }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          };
+        }, histories);
+      },
+    });
+    const { app, page } = harness;
+    await evaluateInMain(
+      app,
+      ({ ipcMain }, { channel, world }) => {
+        ipcMain.removeHandler(channel);
+        ipcMain.handle(channel, () => world);
+      },
+      { channel: DB_GET_WORLD_STATE, world },
+    );
+    await setLayoutViewport(page, 1440, 1100);
+    await openView(page, "world");
+    await page.locator('#content .view.active [data-tour-tab="baro"]').click();
+    const flips = page.locator("[data-baro-flips]");
+    const row = (uniqueName: string) => flips.locator(`[data-baro-flip-row="${uniqueName}"]`);
+    // 48 a day, 10% captured, 9 hours a week for 4 weeks = 7 wanted.
+    await expect(row(cryo).locator("td").nth(1)).toContainText("58p");
+    await expect(row(cryo).locator("td").nth(1)).toContainText("crashed now");
+    // Two copies already owned; the best plat per ducat is bought first.
+    await expect(row(cryo).locator("td").nth(2)).toHaveText("5");
+    await expect(row(cryo)).toContainText("You already have 2 unranked");
+    // 2000 - 5 * 300 leaves room for one Ravage; the rest is saved.
+    await expect(row(ravage).locator("td").nth(1)).toContainText("48p");
+    await expect(row(ravage).locator("td").nth(2)).toHaveText("1");
+    await expect(row(ravage)).toContainText("so the rest is saved");
+    await expect(flips).toContainText("Ducat balance 2,000, 150 left");
+    await page.screenshot({
+      path: test.info().outputPath("baro-flips.png"),
+      animations: "disabled",
+    });
+
+    await flips.locator("[data-baro-flip-hours]").fill("18");
+    await flips.locator("[data-baro-flip-hours]").blur();
+    await expect(row(cryo).locator("td").nth(2)).toHaveText("6");
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem("baro-flip-hours")))
+      .toBe("18");
+
+    await flips.locator("[data-baro-flip-basket]").click();
+    await expect
+      .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("baro-wishlist-v1") ?? "{}")))
+      .toEqual({ [cryo]: 6 });
+
+    await page.locator('#content .view.active [data-tour-tab="world"]').click();
+    await expect(page.locator("[data-baro-card-flip]").first()).toHaveText("Sell 58p, buy 6");
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await closeElectronTestHarness(harness);
+  }
+});
