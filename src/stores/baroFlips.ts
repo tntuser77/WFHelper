@@ -7,35 +7,38 @@ import { getLookupByName } from "../lib/inventoryMarket.js";
 import { readStorage, writeStorage } from "../lib/persistence.js";
 import { fetchBackendPriceHistory } from "../lib/wfm/priceHistory.js";
 import { analyzeBaroFlip, planBaroFlips, type BaroFlipInput } from "../lib/world/baroFlip.js";
-import { currencyBalance } from "../lib/world/baroPlanner.js";
 import type { RawInventoryData } from "../types/inventory.js";
 import { inventoryData, wfmItems } from "./data.js";
 import { worldData } from "./world.js";
 
-const HOURS_KEY = "baro-flip-hours";
-const DEFAULT_HOURS = 9;
-const MAX_HOURS = 168;
 const CONCURRENCY = 4;
 
-function clampHours(value: number): number {
-  return Number.isFinite(value)
-    ? Math.min(MAX_HOURS, Math.max(1, Math.round(value)))
-    : DEFAULT_HOURS;
-}
-
-function hoursStore(): Writable<number> {
-  const raw = readStorage(HOURS_KEY);
-  const store = writable(raw == null ? DEFAULT_HOURS : clampHours(Number(raw)));
+function clampedNumber(
+  key: string,
+  fallback: number,
+  min: number,
+  max: number,
+  step: number,
+): Writable<number> {
+  const clamp = (value: number) =>
+    Number.isFinite(value)
+      ? Math.min(max, Math.max(min, Math.round(value / step) * step))
+      : fallback;
+  const raw = readStorage(key);
+  const store = writable(raw == null ? fallback : clamp(Number(raw)));
   const set = (value: number) => {
-    const next = clampHours(value);
-    writeStorage(HOURS_KEY, String(next));
+    const next = clamp(value);
+    writeStorage(key, String(next));
     store.set(next);
   };
   return { subscribe: store.subscribe, set, update: (fn) => set(fn(get(store))) };
 }
 
 /** Hours a week the user is online to sell; sizes every buy suggestion. */
-export const baroFlipHours = hoursStore();
+export const baroFlipHours = clampedNumber("baro-flip-hours", 9, 1, 168, 1);
+
+/** Below this a mod earns less than selling the prime parts its ducats come from. */
+export const baroFlipMinPerDucat = clampedNumber("baro-flip-min-per-ducat", 0.1, 0, 2, 0.01);
 
 /** Archive rows per slug for this session; null when the backend had nothing. */
 const histories = writable<Record<string, readonly MarketStatPoint[] | null>>({});
@@ -97,8 +100,8 @@ export async function loadBaroFlipHistory(slugs: readonly (string | null)[]): Pr
 }
 
 export const baroFlipPlan = derived(
-  [baroPrimedMods, histories, inventoryData, baroFlipHours],
-  ([mods, loaded, inventory, hours]) => {
+  [baroPrimedMods, histories, inventoryData, baroFlipHours, baroFlipMinPerDucat],
+  ([mods, loaded, inventory, hours, minPerDucat]) => {
     const now = Date.now();
     const inputs: BaroFlipInput[] = mods.map((mod) => {
       const points = mod.slug ? loaded[mod.slug] : null;
@@ -113,7 +116,6 @@ export const baroFlipPlan = derived(
               : analyzeBaroFlip(points, now),
       };
     });
-    const balance = currencyBalance(inventory, "ducats");
-    return { ...planBaroFlips(inputs, balance, hours), balance };
+    return planBaroFlips(inputs, hours, minPerDucat);
   },
 );

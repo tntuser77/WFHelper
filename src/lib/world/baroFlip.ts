@@ -187,60 +187,45 @@ export interface BaroFlipInput {
   analysis: BaroFlipAnalysis | null;
 }
 
-type BaroFlipLimit = "time" | "ducats" | "saved";
-
 export interface BaroFlipRow extends BaroFlipInput {
   wanted: number;
-  need: number;
   buy: number;
-  limitedBy: BaroFlipLimit | null;
+  /** Sells for too little platinum per ducat to be worth buying. */
+  belowMinimum: boolean;
   platPerDucat: number | null;
   expectedPlat: number;
-  creditCost: number;
 }
 
 /**
- * Sizes every mod by time, then spends the ducat balance on the best platinum per
- * ducat first. What the weaker mods can't get stays unspent for the next visit.
+ * Sizes every mod by how many copies sell in time, less the unranked copies already
+ * owned. The ducat balance is left out on purpose: the user trades prime parts in
+ * for ducats on demand, so the totals say how many ducats to raise instead. A mod
+ * under minPerDucat buys nothing: its ducats earn more as the prime parts they come from.
  */
 export function planBaroFlips(
   inputs: readonly BaroFlipInput[],
-  balance: number | null,
   hoursPerWeek: number,
-): { rows: BaroFlipRow[]; unspent: number | null } {
+  minPerDucat: number,
+): { rows: BaroFlipRow[]; ducats: number; credits: number } {
+  let ducats = 0;
+  let credits = 0;
   const rows: BaroFlipRow[] = inputs.map((input) => {
-    const analysis = input.analysis;
-    const wanted = analysis?.kind === "ok" ? baroFlipQuantity(analysis, hoursPerWeek) : 0;
-    const need = Math.max(0, wanted - input.owned);
+    const analysis = input.analysis?.kind === "ok" ? input.analysis : null;
+    const wanted = analysis ? baroFlipQuantity(analysis, hoursPerWeek) : 0;
+    const platPerDucat = analysis && input.ducats ? analysis.target / input.ducats : null;
+    const belowMinimum = platPerDucat !== null && platPerDucat < minPerDucat;
+    const buy = belowMinimum ? 0 : Math.max(0, wanted - input.owned);
+    ducats += (input.ducats ?? 0) * buy;
+    credits += (input.credits ?? 0) * buy;
     return {
       ...input,
       wanted,
-      need,
-      buy: need,
-      limitedBy: analysis?.kind === "ok" ? "time" : null,
-      platPerDucat: analysis?.kind === "ok" && input.ducats ? analysis.target / input.ducats : null,
-      expectedPlat: 0,
-      creditCost: 0,
+      buy,
+      belowMinimum,
+      platPerDucat,
+      expectedPlat: (analysis?.target ?? 0) * buy,
     };
   });
-  let remaining = balance;
-  let first = true;
-  const ranked = rows
-    .filter((row) => row.platPerDucat !== null)
-    .sort((a, b) => b.platPerDucat! - a.platPerDucat!);
-  for (const row of ranked) {
-    if (remaining === null || !row.ducats || row.need === 0) continue;
-    const afford = Math.floor(remaining / row.ducats);
-    row.buy = Math.min(row.need, afford);
-    if (row.buy < row.need) row.limitedBy = first ? "ducats" : "saved";
-    remaining -= row.buy * row.ducats;
-    first = false;
-  }
-  for (const row of rows) {
-    const target = row.analysis?.kind === "ok" ? row.analysis.target : 0;
-    row.expectedPlat = target * row.buy;
-    row.creditCost = (row.credits ?? 0) * row.buy;
-  }
   rows.sort((a, b) => b.expectedPlat - a.expectedPlat || a.name.localeCompare(b.name));
-  return { rows, unspent: remaining };
+  return { rows, ducats, credits };
 }

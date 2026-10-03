@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { get } from "svelte/store";
   import { locale, tr as t } from "../../lib/i18n.js";
   import type { BaroFlipRow } from "../../lib/world/baroFlip.js";
   import { baroWishlist, setBaroWishQuantity } from "../../stores/baro.js";
   import {
     baroFlipHours,
     baroFlipLoading,
+    baroFlipMinPerDucat,
     baroFlipPlan,
     baroPrimedMods,
     loadBaroFlipHistory,
@@ -28,6 +30,11 @@
         analysis.reason === "history" ? "baroFlip.reason.history" : "baroFlip.reason.recovery",
       );
     }
+    if (row.belowMinimum)
+      return $t("baroFlip.reason.perDucat", {
+        value: (row.platPerDucat ?? 0).toFixed(2),
+        min: $baroFlipMinPerDucat.toFixed(2),
+      });
     if (row.wanted === 0) return $t("baroFlip.reason.slow");
     const parts = [
       $t("baroFlip.reason.time", {
@@ -36,8 +43,6 @@
     ];
     if (analysis.fastRepeater) parts.push($t("baroFlip.reason.fast", { count: analysis.repeats }));
     if (row.owned > 0) parts.push($t("baroFlip.reason.owned", { count: row.owned }));
-    if (row.limitedBy === "ducats") parts.push($t("baroFlip.reason.ducats"));
-    if (row.limitedBy === "saved") parts.push($t("baroFlip.reason.saved"));
     return parts.join(". ");
   }
 
@@ -49,9 +54,9 @@
       );
   }
 
-  function setHours(input: HTMLInputElement): void {
-    baroFlipHours.set(Number(input.value));
-    input.value = String($baroFlipHours);
+  function setNumber(store: typeof baroFlipHours, input: HTMLInputElement): void {
+    store.set(Number(input.value));
+    input.value = String(get(store));
   }
 </script>
 
@@ -70,7 +75,19 @@
               class="w-16 rounded border border-border bg-bg-soft px-2 py-1.5 text-right text-text-primary"
               value={$baroFlipHours}
               data-baro-flip-hours
-              onchange={(event) => setHours(event.currentTarget)}
+              onchange={(event) => setNumber(baroFlipHours, event.currentTarget)}
+            /></label
+          >
+          <label class="flex items-center gap-2 text-sm text-text-secondary"
+            >{$t("baroFlip.minPerDucat")}<input
+              type="number"
+              min="0"
+              max="2"
+              step="0.01"
+              class="w-20 rounded border border-border bg-bg-soft px-2 py-1.5 text-right text-text-primary"
+              value={$baroFlipMinPerDucat}
+              data-baro-flip-min
+              onchange={(event) => setNumber(baroFlipMinPerDucat, event.currentTarget)}
             /></label
           >
           <button
@@ -83,12 +100,10 @@
         </div>
       </div>
       <p class="m-0 text-xs text-text-muted">{$t("baroFlip.hint")}</p>
-      {#if plan.balance !== null && plan.unspent !== null}<p
-          class="m-0 text-sm text-text-secondary"
-        >
-          {$t("baroFlip.unspent", {
-            balance: plan.balance.toLocaleString($locale),
-            unspent: plan.unspent.toLocaleString($locale),
+      {#if plan.ducats > 0}<p class="m-0 text-sm text-text-secondary" data-baro-flip-total>
+          {$t("baroFlip.total", {
+            ducats: plan.ducats.toLocaleString($locale),
+            credits: plan.credits.toLocaleString($locale),
           })}
         </p>{/if}
       <div class="overflow-x-auto">

@@ -476,14 +476,15 @@ test("Baro flip advisor sizes primed mod buys from their price history", async (
     // 48 a day, 10% captured, 9 hours a week for 4 weeks = 7 wanted.
     await expect(row(cryo).locator("td").nth(1)).toContainText("58p");
     await expect(row(cryo).locator("td").nth(1)).toContainText("crashed now");
-    // Two copies already owned; the best plat per ducat is bought first.
+    // Two copies already owned.
     await expect(row(cryo).locator("td").nth(2)).toHaveText("5");
     await expect(row(cryo)).toContainText("You already have 2 unranked");
-    // 2000 - 5 * 300 leaves room for one Ravage; the rest is saved.
+    // The 2000 ducat balance caps nothing; prime parts become ducats on demand.
     await expect(row(ravage).locator("td").nth(1)).toContainText("48p");
-    await expect(row(ravage).locator("td").nth(2)).toHaveText("1");
-    await expect(row(ravage)).toContainText("so the rest is saved");
-    await expect(flips).toContainText("Ducat balance 2,000, 150 left");
+    await expect(row(ravage).locator("td").nth(2)).toHaveText("7");
+    await expect(flips.locator("[data-baro-flip-total]")).toHaveText(
+      "Suggested buys cost 3,950 ducats and 1,270,000 credits",
+    );
     await page.screenshot({
       path: test.info().outputPath("baro-flips.png"),
       animations: "disabled",
@@ -491,7 +492,13 @@ test("Baro flip advisor sizes primed mod buys from their price history", async (
 
     await flips.locator("[data-baro-flip-hours]").fill("18");
     await flips.locator("[data-baro-flip-hours]").blur();
-    await expect(row(cryo).locator("td").nth(2)).toHaveText("6");
+    // 0.2/h * 18 h * 4 weeks = 14, less the 2 owned.
+    await expect(row(cryo).locator("td").nth(2)).toHaveText("12");
+    // Ravage sells at 48p for 350 ducats, 0.14p a ducat.
+    await flips.locator("[data-baro-flip-min]").fill("0.15");
+    await flips.locator("[data-baro-flip-min]").blur();
+    await expect(row(ravage).locator("td").nth(2)).toHaveText("0");
+    await expect(row(ravage)).toContainText("Only 0.14p per ducat, under your 0.15 minimum");
     await expect
       .poll(() => page.evaluate(() => localStorage.getItem("baro-flip-hours")))
       .toBe("18");
@@ -499,10 +506,10 @@ test("Baro flip advisor sizes primed mod buys from their price history", async (
     await flips.locator("[data-baro-flip-basket]").click();
     await expect
       .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("baro-wishlist-v1") ?? "{}")))
-      .toEqual({ [cryo]: 6 });
+      .toEqual({ [cryo]: 12 });
 
     await page.locator('#content .view.active [data-tour-tab="world"]').click();
-    await expect(page.locator("[data-baro-card-flip]").first()).toHaveText("Sell 58p, buy 6");
+    await expect(page.locator("[data-baro-card-flip]").first()).toHaveText("Sell 58p, buy 12");
     expect(pageErrors).toEqual([]);
   } finally {
     await closeElectronTestHarness(harness);

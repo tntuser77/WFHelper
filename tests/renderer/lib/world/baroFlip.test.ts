@@ -120,35 +120,44 @@ describe("planBaroFlips", () => {
     analysis: ok(target, 0.1),
   });
 
-  it("spends ducats on the best platinum per ducat first and saves the rest", () => {
+  it("sizes by sell time alone, whatever the ducat balance", () => {
     // 0.1/h * 10 h * 4 weeks = 4 wanted each.
-    const { rows, unspent } = planBaroFlips(
-      [mod("Weak", 300, 30), mod("Strong", 300, 60)],
-      1500,
+    const { rows, ducats, credits } = planBaroFlips(
+      [mod("Weak", 300, 30), mod("Strong", 350, 60)],
       10,
+      0.1,
     );
-    const strong = rows.find((row) => row.name === "Strong")!;
-    const weak = rows.find((row) => row.name === "Weak")!;
 
-    expect(strong).toMatchObject({ buy: 4, limitedBy: "time", expectedPlat: 240 });
-    expect(weak).toMatchObject({ buy: 1, limitedBy: "saved", creditCost: 100_000 });
-    expect(unspent).toBe(0);
+    expect(rows.map((row) => [row.name, row.buy, row.expectedPlat])).toEqual([
+      ["Strong", 4, 240],
+      ["Weak", 4, 120],
+    ]);
+    expect(ducats).toBe(2600);
+    expect(credits).toBe(800_000);
   });
 
-  it("subtracts owned copies and plans by time without a balance", () => {
-    const { rows, unspent } = planBaroFlips([mod("Owned", 300, 40, 3)], null, 10);
+  it("buys nothing that sells for too little per ducat", () => {
+    // 25p for 300 ducats is 0.083p a ducat.
+    const { rows, ducats } = planBaroFlips([mod("Cheap", 300, 25)], 10, 0.1);
 
-    expect(rows[0]).toMatchObject({ wanted: 4, need: 1, buy: 1 });
-    expect(unspent).toBeNull();
+    expect(rows[0]).toMatchObject({ wanted: 4, buy: 0, belowMinimum: true, expectedPlat: 0 });
+    expect(ducats).toBe(0);
+  });
+
+  it("subtracts owned copies", () => {
+    const { rows } = planBaroFlips([mod("Owned", 300, 40, 3)], 10, 0.1);
+
+    expect(rows[0]).toMatchObject({ wanted: 4, buy: 1 });
   });
 
   it("buys nothing for skipped mods", () => {
-    const { rows } = planBaroFlips(
+    const { rows, ducats } = planBaroFlips(
       [{ ...mod("Skip", 300, 40), analysis: { kind: "skip", reason: "history" } }],
-      5000,
       10,
+      0.1,
     );
 
-    expect(rows[0]).toMatchObject({ buy: 0, limitedBy: null, platPerDucat: null });
+    expect(rows[0]).toMatchObject({ buy: 0, platPerDucat: null });
+    expect(ducats).toBe(0);
   });
 });
