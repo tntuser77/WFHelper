@@ -151,6 +151,7 @@
   import BaroInventoryCard from "../components/world/BaroInventoryCard.svelte";
   import BaroPlanner from "../components/world/BaroPlanner.svelte";
   import { loadBaroHistory } from "../stores/baro.js";
+  import { baroPrimedMods, loadBaroFlipHistory } from "../stores/baroFlips.js";
   import CycleRow from "../components/world/CycleRow.svelte";
   import IconButtonCard from "../components/world/IconButtonCard.svelte";
   import WorldToggleIcon from "../components/world/WorldToggleIcon.svelte";
@@ -200,6 +201,8 @@
   onMount(() => {
     void loadBaroHistory();
   });
+  // Primed mod cards show a sell price and buy count once their history arrives.
+  $: void loadBaroFlipHistory($baroPrimedMods.map((mod) => mod.slug));
 
   function openItemDetail(
     uniqueName: string,
