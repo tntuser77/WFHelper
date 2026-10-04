@@ -5,6 +5,7 @@ import { createKillCounter, type LifetimeStats } from "./levelCapKills";
 import { createLevelCapParser, isLevelCapLine, type LevelCapMission } from "./levelCapParser";
 import { snapshotBuildForFrame, snapshotEquippedBuild, suitTypeForId } from "./levelCapBuild";
 import * as store from "./levelCapStore";
+import { EE_LOG_LINE_TS } from "./arbiRunParser";
 import { normalizeErrorMessage } from "../config/shared/errors";
 import {
   LEVEL_CAP_EXOLIZER_TARGET,
@@ -246,6 +247,21 @@ export function processLevelCapLine(line: string, source: "dbwin" | "file"): voi
   }
 }
 
+/** A hotkey run the mission end has not filled in yet, logged after the mission
+ * started: the app restarted mid-run, so the mission is already logged. */
+function loggedRunSince(startedAt: number): string | null {
+  // EE.log seconds drift from the wall clock; a minute of slack covers it.
+  const runs = store
+    .getRuns()
+    .filter(
+      (r) => r.source === "hotkey" && r.durationSec == null && r.completedAt >= startedAt - 60_000,
+    );
+  const latest = runs.sort((a, b) => b.completedAt - a.completedAt)[0];
+  if (latest)
+    log.info(`[LevelCap] run ${latest.id} was logged before the restart; it gets the mission end`);
+  return latest?.id ?? null;
+}
+
 /** EE.log bytes the monitor skips at startup still say whether a Void Cascade
  * is under way, so replay them into a fresh parser. Ended missions are dropped
  * rather than finished: they may already be logged, and a restart must not
@@ -267,13 +283,18 @@ export function primeLevelCapFromLog(filePath: string, size: number): void {
     return;
   }
   const parser = createLevelCapParser();
+  let lastSec: number | null = null;
   for (const line of text.split("\n")) {
+    const ts = line.match(EE_LOG_LINE_TS);
+    if (ts) lastSec = parseFloat(ts[1]);
     if (isLevelCapLine(line)) parser.feedLine(line.replace(/\r$/, ""));
   }
   const mission = parser.current();
   if (!mission) return;
   _parser = parser;
-  _missionRunId = null;
+  _missionRunId = loggedRunSince(
+    Date.now() - Math.max(0, (lastSec ?? 0) - mission.startSec) * 1000,
+  );
   startKills(mission);
   log.info(
     `[LevelCap] joined a Void Cascade already in progress (${mission.exolizers ?? "?"} Exolizers, round ${mission.rounds ?? "?"})`,

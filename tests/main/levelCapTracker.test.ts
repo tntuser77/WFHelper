@@ -220,6 +220,30 @@ describe("levelCapTracker", () => {
     expect(store.getRuns()).toHaveLength(1);
   });
 
+  it("fills in the hotkey's run, not a second one, after a restart mid-run", async () => {
+    const { tracker, store } = await setup();
+    feed(tracker, [...START, exo(4000, 108)]);
+    tracker.onLevelCapHotkey();
+    await settle();
+    const [logged] = store.getRuns();
+
+    // The app restarts: the store reloads from disk and a fresh tracker catches up from the log.
+    const { tracker: again } = await setup();
+    expect(store.getRuns()).toHaveLength(1);
+    const log = path.join(tmpDir, "EE.log");
+    fs.writeFileSync(log, [...START, exo(4000, 108), "4002.0 Sys [Info]: later", ""].join("\n"));
+    again.primeLevelCapFromLog(log, fs.statSync(log).size);
+    expect(again.getStatus().runId).toBe(logged.id);
+
+    feed(again, END(4100, false));
+    expect(store.getRuns()).toHaveLength(1);
+    expect(store.getRuns()[0]).toMatchObject({
+      id: logged.id,
+      source: "hotkey",
+      durationSec: 4088,
+    });
+  });
+
   it("does not revive or re-log a mission that ended before the app started", async () => {
     const { tracker, store } = await setup();
     const log = path.join(tmpDir, "EE.log");
