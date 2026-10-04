@@ -16,7 +16,6 @@ const PRELOADS = [
 ];
 
 const WATCH_DEBOUNCE_MS = 100;
-const SELF_WRITE_IGNORE_MS = 250;
 
 function tempPath(entry, suffix) {
   return `${entry}.${process.pid}.${suffix}`;
@@ -29,14 +28,20 @@ function validateBundle(outfile) {
   }
 }
 
-// mtime of each preload as this script last wrote it. On Windows fs.watch also
-// fires when Electron merely reads a preload (last-access update), so without
-// this check opening a window rewrote its preload and nodemon restarted the app.
-const bundledMtimes = new Map();
+// Each preload as this script last wrote it. On Windows fs.watch also fires
+// when Electron merely reads a preload (last-access update), so without this
+// check opening a window rewrote its preload and nodemon restarted the app.
+// Content, not a quiet period after writing: a tsc emit landing in that period
+// was dropped, left unbundled until a window opened, and restarted the app then.
+const bundled = new Map();
 
 function isUnchangedSinceBundle(name) {
+  const last = bundled.get(name);
+  if (!last) return false;
   try {
-    return fs.statSync(path.join(BUILD_DIR, name)).mtimeMs === bundledMtimes.get(name);
+    const file = path.join(BUILD_DIR, name);
+    if (fs.statSync(file).mtimeMs === last.mtimeMs) return true;
+    return fs.readFileSync(file).equals(last.content);
   } catch {
     return false;
   }
@@ -61,7 +66,7 @@ function bundlePreload(name) {
     });
     validateBundle(tempOut);
     fs.renameSync(tempOut, entry);
-    bundledMtimes.set(name, fs.statSync(entry).mtimeMs);
+    bundled.set(name, { mtimeMs: fs.statSync(entry).mtimeMs, content: fs.readFileSync(entry) });
     if (process.env.WFHELPER_SOURCE_MAPS === "1") fs.renameSync(`${tempOut}.map`, `${entry}.map`);
     else fs.rmSync(`${entry}.map`, { force: true });
   } finally {
@@ -85,10 +90,8 @@ async function main() {
   }
 
   const timers = new Map();
-  const ignoreUntil = new Map(PRELOADS.map((name) => [name, 0]));
   const schedule = (name) => {
     if (!PRELOADS.includes(name)) return;
-    if (Date.now() < (ignoreUntil.get(name) || 0)) return;
 
     const existing = timers.get(name);
     if (existing) clearTimeout(existing);
@@ -100,7 +103,6 @@ async function main() {
         if (isUnchangedSinceBundle(name)) return;
         try {
           bundlePreload(name);
-          ignoreUntil.set(name, Date.now() + SELF_WRITE_IGNORE_MS);
         } catch (err) {
           console.error(`[bundle-preloads] failed to bundle ${name}:`, err);
         }
