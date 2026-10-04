@@ -28,9 +28,7 @@ let outcomes: LevelCapHotkeyOutcome[];
 let captureResult: Buffer | null;
 
 async function setup(
-  lifetimeStats?: (
-    accountId: string,
-  ) => Promise<{ kills: number; missionsEnded: number; name?: string } | null>,
+  lifetimeStats?: (accountId: string) => Promise<{ kills: number; missionsEnded: number } | null>,
 ): Promise<{ tracker: Tracker; store: Store }> {
   const store = await import("../../services/levelCapStore");
   const tracker = await import("../../services/levelCapTracker");
@@ -287,16 +285,16 @@ describe("levelCapTracker", () => {
     }
   });
 
-  it("puts each squadmate's kills on their row of the run's squad", async () => {
+  it("reads only your own profile, never a squadmate's", async () => {
     vi.useFakeTimers();
     try {
       const HOST = "6ab92b4d61dc54d6b009e00b";
       const posted = { value: false };
-      const { tracker, store } = await setup(async (accountId) => {
+      const read = vi.fn(async (_accountId: string) => {
         const bump = posted.value ? 1 : 0;
-        if (accountId === "me") return { kills: 100 + bump * 50, missionsEnded: 10 + bump };
-        return { kills: 7000 + bump * 400, missionsEnded: 115 + bump, name: "L7ese" };
+        return { kills: 100 + bump * 50, missionsEnded: 10 + bump };
       });
+      const { tracker, store } = await setup(read);
       feed(tracker, [
         "1.0 Net [Info]: JoinSquadSessionCallback. Session id=abc123, host name=l7ese",
         "1.1 Net [Info]: AddSquadMember: Me, mm=A1, squadCount=1",
@@ -313,9 +311,10 @@ describe("levelCapTracker", () => {
       const run = store.getRuns()[0];
       expect(run.kills).toBe(50);
       expect(run.squadLog).toEqual([
-        { name: "l7ese", slot: 1, host: true, kills: 400 },
+        { name: "l7ese", slot: 1, host: true },
         { name: "Me", slot: 2, you: true },
       ]);
+      expect(read.mock.calls.every(([accountId]) => accountId === "me")).toBe(true);
       expect(tracker.getStatus().killsPending).toEqual([]);
     } finally {
       vi.useRealTimers();

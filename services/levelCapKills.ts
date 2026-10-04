@@ -18,8 +18,6 @@ export interface LifetimeStats {
   kills: number;
   /** Completed, quit, failed and interrupted: any way a mission can end. */
   missionsEnded: number;
-  /** The profile's display name without its platform glyph, when it has one. */
-  name?: string;
 }
 
 const count = (value: unknown): number =>
@@ -27,8 +25,7 @@ const count = (value: unknown): number =>
 
 /** Reads `getProfileViewingData.php`; null when the response has no stats. */
 export function parseLifetimeStats(raw: unknown): LifetimeStats | null {
-  const record = asRecord(raw);
-  const stats = asRecord(record?.Stats);
+  const stats = asRecord(asRecord(raw)?.Stats);
   if (!stats || !Array.isArray(stats.Enemies)) return null;
   let kills = 0;
   for (const enemy of stats.Enemies) kills += count(asRecord(enemy)?.kills);
@@ -37,13 +34,7 @@ export function parseLifetimeStats(raw: unknown): LifetimeStats | null {
     count(stats.MissionsQuit) +
     count(stats.MissionsFailed) +
     count(stats.MissionsInterrupted);
-  const out: LifetimeStats = { kills, missionsEnded };
-  const first: unknown = Array.isArray(record?.Results) ? record.Results[0] : null;
-  const displayName = asRecord(first)?.DisplayName;
-  // Names end in a private-use platform glyph (U+E000 for PC).
-  const name = typeof displayName === "string" ? displayName.replace(/[-]/g, "").trim() : "";
-  if (name) out.name = name;
-  return out;
+  return { kills, missionsEnded };
 }
 
 interface KillCounterDeps {
@@ -52,8 +43,6 @@ interface KillCounterDeps {
   /** An account's lifetime stats now; null when its profile shows none. */
   read(accountId: string): Promise<LifetimeStats | null>;
   onKills(runId: string, kills: number): void;
-  /** A squadmate's kills on the run, under the name on their profile. */
-  onSquadKills(runId: string, name: string, kills: number): void;
   /** The runs waiting on their kills changed, for the "kills..." hint. */
   onPending(): void;
 }
@@ -66,9 +55,10 @@ interface Tracked {
   reading: Promise<void>;
 }
 
-/** Kills on a run for you and each squadmate: lifetime kills after it less
- *  lifetime kills during it. Stats never move mid-mission, so any reading
- *  taken during the run will do. */
+/** Your kills on a run: lifetime kills after it less lifetime kills during it.
+ *  Stats never move mid-mission, so any reading taken during the run will do.
+ *  Only your own profile is read; polling squadmates' profiles from one address
+ *  is the kind of traffic DE's edge blocks. */
 export function createKillCounter(deps: KillCounterDeps) {
   // Accounts in the mission under way; null between missions.
   let players: Map<string, Tracked> | null = null;
@@ -141,13 +131,7 @@ export function createKillCounter(deps: KillCounterDeps) {
     }
   }
 
-  function poll(
-    runId: string,
-    accountId: string,
-    before: LifetimeStats,
-    deadline: number,
-    you: boolean,
-  ): void {
+  function poll(runId: string, accountId: string, before: LifetimeStats, deadline: number): void {
     const retry = () => {
       if (!pending.has(runId)) return;
       if (Date.now() + AFTER_POLL_MS > deadline) {
@@ -155,7 +139,7 @@ export function createKillCounter(deps: KillCounterDeps) {
         settle(runId);
         return;
       }
-      later(pollTimers, AFTER_POLL_MS, () => poll(runId, accountId, before, deadline, you));
+      later(pollTimers, AFTER_POLL_MS, () => poll(runId, accountId, before, deadline));
     };
     read(accountId)
       .then((after) => {
@@ -168,15 +152,8 @@ export function createKillCounter(deps: KillCounterDeps) {
           return;
         }
         const kills = Math.max(0, after.kills - before.kills);
-        if (you) {
-          log.info(`[LevelCap] ${kills} kills on run ${runId}`);
-          deps.onKills(runId, kills);
-          return;
-        }
-        const name = before.name ?? after.name;
-        if (!name) return;
-        log.info(`[LevelCap] ${name} got ${kills} kills on run ${runId}`);
-        deps.onSquadKills(runId, name, kills);
+        log.info(`[LevelCap] ${kills} kills on run ${runId}`);
+        deps.onKills(runId, kills);
       })
       .catch((err) => {
         log.warn("[LevelCap] kill read after the run failed:", normalizeErrorMessage(err));
@@ -191,11 +168,6 @@ export function createKillCounter(deps: KillCounterDeps) {
       players = new Map();
       const own = deps.ownAccountId();
       if (own) track(own);
-    },
-
-    /** An account id the log showed during the mission; yours is skipped. */
-    squadmateSeen(accountId: string): void {
-      if (accountId !== deps.ownAccountId()) track(accountId);
     },
 
     /** The mission ended; `runId` is the run it logged, or null when none was. */
@@ -223,8 +195,7 @@ export function createKillCounter(deps: KillCounterDeps) {
         pending.set(runId, measured.length);
         const deadline = Date.now() + AFTER_POLL_MS + AFTER_GIVE_UP_MS;
         for (const { accountId, before } of measured) {
-          const you = accountId === own;
-          later(pollTimers, AFTER_POLL_MS, () => poll(runId, accountId, before, deadline, you));
+          later(pollTimers, AFTER_POLL_MS, () => poll(runId, accountId, before, deadline));
         }
       });
     },
