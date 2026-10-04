@@ -31,7 +31,9 @@ const electronModule = require("electron") as Partial<typeof import("electron")>
 let notificationCtor = electronModule.Notification;
 let desktopNotificationSender: ((title: string, body: string) => void) | null = null;
 
-const WORLD_STATE_TTL_MS = 90_000;
+// Polling once a minute got the address 403'd at DE's edge; renderer reads share the TTL.
+const WORLD_STATE_REFRESH_MS = 5 * 60_000;
+const WORLD_STATE_TTL_MS = WORLD_STATE_REFRESH_MS;
 
 let _worldStateCache: unknown = null;
 let _worldStateCacheTime = 0;
@@ -664,6 +666,45 @@ function checkPreCycleNotifications(state: unknown): void {
   }
 }
 
+const CYCLE_ALERT_KEYS = Object.freeze({
+  earth: "earthCycle",
+  cetus: "cetusCycle",
+  vallis: "vallisCycle",
+  cambion: "cambionCycle",
+  duviri: "duviriCycle",
+} as const);
+
+// The cycle end each cycle-boundary refetch was made for, so a failed or stale
+// refetch is not repeated every pre-cycle tick.
+let _cycleRefetchFor: number | null = null;
+
+/** The earliest alerted cycle end that passed after the cache was fetched, so the
+ *  "has begun" alert need not wait for the slow background refresh. */
+function dueCycleBoundary(state: unknown, fetchedAt: number, now: number): number | null {
+  const cycleAlerts = ctx.overlaySettings?.cycleAlerts;
+  if (!cycleAlerts) return null;
+  const stateRecord = asRecord(state) ?? {};
+  let due: number | null = null;
+  for (const [alert, key] of Object.entries(CYCLE_ALERT_KEYS)) {
+    if (!cycleAlerts[alert as keyof typeof CYCLE_ALERT_KEYS]) continue;
+    const expiry = parseIsoMs(asRecord(stateRecord[key])?.expiry);
+    if (expiry !== null && expiry > fetchedAt && expiry <= now && (due === null || expiry < due)) {
+      due = expiry;
+    }
+  }
+  return due;
+}
+
+function refetchAtCycleBoundary(): void {
+  if (!_worldStateCache) return;
+  const due = dueCycleBoundary(_worldStateCache, _worldStateCacheTime, Date.now());
+  if (due === null || due === _cycleRefetchFor) return;
+  _cycleRefetchFor = due;
+  refreshWorldState().catch((err) => {
+    log.warn("[WorldState] cycle-boundary refresh failed:", normalizeErrorMessage(err));
+  });
+}
+
 function refreshWorldState(): Promise<unknown> {
   if (_worldStateFetch) return _worldStateFetch;
 
@@ -702,6 +743,7 @@ function resetForTest(): void {
   _worldStateCache = null;
   _worldStateCacheTime = 0;
   _worldStateFetch = null;
+  _cycleRefetchFor = null;
   _worldNotificationSnapshot = null;
   _cyclePreNotified.clear();
   _outstandingToastTags.clear();
@@ -800,17 +842,18 @@ function register(
   // enters the lead-time window without waiting for a full re-fetch.
   _preCycleInterval = setInterval(() => {
     if (_worldStateCache) checkPreCycleNotifications(_worldStateCache);
+    refetchAtCycleBoundary();
   }, 15_000);
 
-  // Re-fetch world state every 60 s in the background so the cache stays
-  // current and transition notifications fire correctly.
+  // Re-fetch world state in the background so the cache stays current and
+  // transition notifications fire correctly. Cycles run off cached expiries.
   _refreshInterval = setInterval(async () => {
     try {
       await refreshWorldState();
     } catch (err) {
       log.warn("[WorldState] background refresh failed:", normalizeErrorMessage(err));
     }
-  }, 60_000);
+  }, WORLD_STATE_REFRESH_MS);
 }
 
 const __test__ = {

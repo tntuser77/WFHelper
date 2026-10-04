@@ -16,6 +16,7 @@ import { loadRegionTranslation, localizedDictValue, nodeLabel } from "./regionNa
 import { withScope } from "./logger";
 import { userDataPath } from "./userDataPath";
 import { writeFileAtomicSync } from "./atomicFile";
+import { assertDeNotPaused, noteDeForbidden } from "./deBackoff";
 import { normalizeErrorMessage } from "../config/shared/errors";
 import type { CodexScanEntry, CodexScansResult } from "../config/shared/codexTypes";
 
@@ -208,6 +209,11 @@ const scanDiskCache = createJsonCache<ScanCache>(CACHE_FILE, (value) => {
 });
 
 function _httpsGetString(url: string): Promise<string> {
+  try {
+    assertDeNotPaused();
+  } catch (err) {
+    return Promise.reject(err);
+  }
   return withAbortTimeout(
     FETCH_TIMEOUT_MS,
     (signal) =>
@@ -235,6 +241,7 @@ function _httpsGetString(url: string): Promise<string> {
             res.on("close", () => finish(new Error("profile response closed before completion")));
             if (res.statusCode !== 200) {
               res.resume();
+              if (res.statusCode === 403) noteDeForbidden("Profile");
               finish(new Error(`HTTP ${res.statusCode}`));
               return;
             }
