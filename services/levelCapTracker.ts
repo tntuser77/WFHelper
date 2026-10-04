@@ -56,17 +56,6 @@ const _kills = createKillCounter({
   onKills(runId, kills) {
     if (store.updateRun(runId, (run) => (run.kills = kills))) _deps?.onChanged();
   },
-  onSquadKills(runId, name, kills) {
-    const key = name.toLowerCase();
-    let found = false;
-    store.updateRun(runId, (run) => {
-      const mate = run.squadLog?.find((entry) => !entry.you && entry.name.toLowerCase() === key);
-      if (mate) mate.kills = kills;
-      found = !!mate;
-    });
-    if (found) _deps?.onChanged();
-    else log.warn(`[LevelCap] ${name} is not in run ${runId}'s squad; their kills are dropped`);
-  },
   onPending: () => _deps?.onChanged(),
 });
 
@@ -76,17 +65,10 @@ function keepLogLine(line: string): void {
   if (_logLines.length > cap * 1.2) _logLines = _logLines.slice(-cap);
 }
 
-/** Starts counting kills for a mission and the squadmates it has shown so far. */
-function startKills(mission: LevelCapMission): void {
-  _kills.missionStarted();
-  for (const accountId of mission.accountIds) _kills.squadmateSeen(accountId);
-}
-
 export function initLevelCapTracker(deps: LevelCapDeps): void {
   _deps = deps;
   // A Cascade found at startup may have been primed before the profile could be read.
-  const mission = _parser.current();
-  if (mission) startKills(mission);
+  if (_parser.current()) _kills.missionStarted();
 }
 
 /** Group key: a Prime shares its base frame's row and folder. */
@@ -229,10 +211,8 @@ export function processLevelCapLine(line: string, source: "dbwin" | "file"): voi
     if (event.type === "start") {
       _missionRunId = null;
       _inMission = true;
-      startKills(event.mission);
+      _kills.missionStarted();
       changed = true;
-    } else if (event.type === "account") {
-      _kills.squadmateSeen(event.accountId);
     } else {
       // Squad samples to check the squad parser against.
       if (event.mission.players.length > 1) store.saveSquadLog(_logLines.join("\n"));
@@ -295,7 +275,7 @@ export function primeLevelCapFromLog(filePath: string, size: number): void {
   _missionRunId = loggedRunSince(
     Date.now() - Math.max(0, (lastSec ?? 0) - mission.startSec) * 1000,
   );
-  startKills(mission);
+  _kills.missionStarted();
   log.info(
     `[LevelCap] joined a Void Cascade already in progress (${mission.exolizers ?? "?"} Exolizers, round ${mission.rounds ?? "?"})`,
   );

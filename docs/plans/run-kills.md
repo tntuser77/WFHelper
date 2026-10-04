@@ -56,7 +56,9 @@ Show how many enemies you killed on each Void Cascade run. Squadmates' kills are
 - If the app is closed when a mission ends, that run gets no kills.
 - Each run makes about 3 before reads plus 1 to 20 after polls, at about 580 KB each.
 
-## Phase 2: squadmates (built 2026-09-30)
+## Phase 2: squadmates (built 2026-09-30, removed 2026-10-03)
+
+Removed. It read up to four profiles per run, several times each, and DE's Akamai edge started answering `api.warframe.com` with 403 21 minutes after it shipped. By 2026-10-03 IPv4 was blocked too, and game login failed. Only your own profile is read now. Squad kills already saved on old runs still show in the squad hover. The notes below record how it worked.
 
 `mm=` on `AddSquadMember` is a matchmaking id (for some players it is just their name), not the account id. A public fissure run with two others (2026-09-30) showed account ids the profile endpoint accepts. Both were checked against it, and it returns `Results[0].DisplayName`:
 

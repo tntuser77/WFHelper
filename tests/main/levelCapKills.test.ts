@@ -12,10 +12,9 @@ type Reading = LifetimeStats | null | Error;
 
 /** A counter whose profile reads come off a queue per account ("me" is you);
  *  an empty queue repeats its last reading. */
-function counter(readings: Reading[], squad: Record<string, Reading[]> = {}) {
+function counter(readings: Reading[]) {
   const kills: Array<[string, number]> = [];
-  const squadKills: Array<[string, string, number]> = [];
-  const queues: Record<string, Reading[]> = { ...squad, me: readings };
+  const queues: Record<string, Reading[]> = { me: readings };
   const last: Record<string, Reading> = {};
   const read = vi.fn(async (accountId: string) => {
     const queue = queues[accountId] ?? [];
@@ -29,10 +28,9 @@ function counter(readings: Reading[], squad: Record<string, Reading[]> = {}) {
     ownAccountId: () => "me",
     read,
     onKills: (runId, n) => kills.push([runId, n]),
-    onSquadKills: (runId, name, n) => squadKills.push([runId, name, n]),
     onPending,
   });
-  return { kc, read, kills, squadKills, onPending, readings, queues };
+  return { kc, read, kills, onPending, readings };
 }
 
 const flush = () => vi.advanceTimersByTimeAsync(0);
@@ -64,7 +62,7 @@ describe("parseLifetimeStats", () => {
           ],
         },
       }),
-    ).toEqual({ kills: 1023, missionsEnded: 7862, name: "TNTUSER55" });
+    ).toEqual({ kills: 1023, missionsEnded: 7862 });
   });
 
   it("is null when the response carries no stats", () => {
@@ -189,69 +187,6 @@ describe("createKillCounter", () => {
       ["run-1", 80],
       ["run-2", 70],
     ]);
-  });
-
-  it("counts each squadmate seen during the run under their profile name", async () => {
-    const { kc, kills, squadKills, readings, queues } = counter([stats(100, 5)], {
-      host: [{ kills: 7000, missionsEnded: 115, name: "l7ese" }],
-      mate: [{ kills: 43_000, missionsEnded: 548, name: "A_jie0929" }],
-    });
-    kc.missionStarted();
-    kc.squadmateSeen("host");
-    await minutes(5);
-    // Relic rewards name everyone, you included; you are not counted twice.
-    kc.squadmateSeen("me");
-    kc.squadmateSeen("mate");
-    kc.squadmateSeen("host");
-    await flush();
-    kc.missionEnded("run-1");
-    readings.push(stats(250, 6));
-    queues.host.push({ kills: 7400, missionsEnded: 116, name: "l7ese" });
-    queues.mate.push({ kills: 43_000, missionsEnded: 548, name: "A_jie0929" });
-    // Reads go one at a time, five seconds apart.
-    await minutes(1.5);
-    expect(kills).toEqual([["run-1", 150]]);
-    expect(squadKills).toEqual([["run-1", "l7ese", 400]]);
-    // One squadmate's stats are late, so the run stays pending for them.
-    expect(kc.pendingRunIds()).toEqual(["run-1"]);
-    queues.mate.push({ kills: 43_900, missionsEnded: 549, name: "A_jie0929" });
-    await minutes(1);
-    expect(squadKills).toEqual([
-      ["run-1", "l7ese", 400],
-      ["run-1", "A_jie0929", 900],
-    ]);
-    expect(kc.pendingRunIds()).toEqual([]);
-  });
-
-  it("skips a squadmate whose profile shows no stats, and ids seen between missions", async () => {
-    const { kc, kills, squadKills, readings, read } = counter([stats(100, 5)], {
-      hidden: [null],
-      stray: [stats(1, 1)],
-    });
-    kc.squadmateSeen("stray");
-    kc.missionStarted();
-    kc.squadmateSeen("hidden");
-    await flush();
-    kc.missionEnded("run-1");
-    readings.push(stats(130, 6));
-    await minutes(1.5);
-    expect(kills).toEqual([["run-1", 30]]);
-    expect(squadKills).toEqual([]);
-    expect(kc.pendingRunIds()).toEqual([]);
-    expect(read.mock.calls.some(([id]) => id === "stray")).toBe(false);
-  });
-
-  it("spaces profile reads five seconds apart", async () => {
-    const { kc, read } = counter([stats(100, 5)], { a: [stats(1, 1)], b: [stats(2, 2)] });
-    kc.missionStarted();
-    kc.squadmateSeen("a");
-    kc.squadmateSeen("b");
-    await flush();
-    expect(read).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(read).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(read.mock.calls.map(([id]) => id)).toEqual(["me", "a", "b"]);
   });
 
   it("stops every timer on reset", async () => {
