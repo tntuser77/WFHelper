@@ -563,6 +563,31 @@ describe("trade notification history", () => {
     );
   });
 
+  it("shows an unmatched trade without logging it once history opts out", async () => {
+    const { notifications } = await setup({
+      tradeDesktopNotificationsEnabled: true,
+      tradeNoMatchHistoryEnabled: false,
+    });
+
+    notifications.showTradeNotification(sale("Buyer"), "no-match");
+    const win = h.windows[0];
+    win.finishLoad();
+
+    expect(win.sent.some((m) => m.channel === "trade-notification-show")).toBe(true);
+    expect(h.recordNotification).not.toHaveBeenCalled();
+    expect(h.sendDesktopNotification).not.toHaveBeenCalled();
+    expect(h.dispatched).toEqual([]);
+  });
+
+  it("still logs a closed listing when unmatched history opts out", async () => {
+    const { notifications } = await setup({ tradeNoMatchHistoryEnabled: false });
+
+    notifications.showTradeNotification(sale("Buyer"), "closed");
+    h.windows[0].finishLoad();
+
+    expect(h.recordNotification).toHaveBeenCalledTimes(1);
+  });
+
   it("routes the toast through the channel layer", async () => {
     const { notifications } = await setup();
 

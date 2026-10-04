@@ -305,6 +305,7 @@
     "tradeRepHotkey",
     "tradeNotificationSeconds",
     "tradeDesktopNotificationsEnabled",
+    "tradeNoMatchHistoryEnabled",
     "windowsNotificationSeconds",
     "tradeNotificationOverlayEnabled",
     "relicRewardsOverlayEnabled",
@@ -1085,6 +1086,18 @@
                 <input
                   type="checkbox"
                   bind:checked={form.autoCloseWfmOrders}
+                  on:change={autoSave}
+                />
+              </SettingsRow>
+
+              <SettingsRow
+                label={$tr("settings.tradeNoMatchHistory")}
+                hint={$tr("settings.tradeNoMatchHistoryHint")}
+              >
+                <input
+                  type="checkbox"
+                  bind:checked={form.tradeNoMatchHistoryEnabled}
+                  disabled={!form.autoCloseWfmOrders}
                   on:change={autoSave}
                 />
               </SettingsRow>

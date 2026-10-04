@@ -230,6 +230,16 @@ describe("overlay settings controller", () => {
     ).toBe(60);
   });
 
+  it("keeps unmatched trades in history unless that is switched off", () => {
+    const { controller } = buildController();
+
+    expect(controller.normalizeOverlaySettings({}).tradeNoMatchHistoryEnabled).toBe(true);
+    expect(
+      controller.normalizeOverlaySettings({ tradeNoMatchHistoryEnabled: false })
+        .tradeNoMatchHistoryEnabled,
+    ).toBe(false);
+  });
+
   it("keeps the trade desktop notification opt-in off unless it is set", () => {
     const { controller } = buildController();
 

@@ -22,7 +22,7 @@ import { isNativeWayland } from "../services/linuxDisplayBackend";
 import { probeLayerShell } from "../services/layerShell";
 import { tradeNotificationBody, tradeNotificationTitle } from "../config/shared/notifications";
 import { durationMsFromSeconds } from "../config/shared/numeric";
-import { resolveRepOffer } from "../config/shared/tradeMatch";
+import { isUnmatchedTradeStatus, resolveRepOffer } from "../config/shared/tradeMatch";
 import type {
   TradeMatchPayload,
   TradeNotificationStatus,
@@ -294,6 +294,11 @@ function _scheduleHide(win: InstanceType<typeof BrowserWindow>, delayMs: number)
 // channel hides the OS toast only: the trade window showed either way, so the
 // history entry is not the channel layer's to withhold.
 function _recordTradeHistory(pending: Extract<PendingTradeNotification, { kind: "trade" }>): void {
+  // Opting out of unmatched trades in history keeps the toast and its rep offer,
+  // but also drops the OS and webhook copies, since those would log it again.
+  if (isUnmatchedTradeStatus(pending.status) && !ctx.overlaySettings.tradeNoMatchHistoryEnabled) {
+    return;
+  }
   const title = tradeNotificationTitle(pending.status);
   const body = tradeNotificationBody(pending.match);
   let recorded = false;

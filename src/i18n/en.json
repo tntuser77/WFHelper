@@ -1475,6 +1475,8 @@
   "notifications.clearAll": "Clear all",
   "settings.tradeRepKeybindEnable": "Reputation hotkey on the trade popup",
   "settings.unlistOnTrade": "Close warframe.market orders after a trade",
+  "settings.tradeNoMatchHistory": "Keep unmatched trades in notification history",
+  "settings.tradeNoMatchHistoryHint": "Trades that close none of your orders, like most purchases. Off still shows the trade toast.",
   "settings.wfmDmNotifications": "warframe.market message notifications",
   "settings.windowsNotifSound": "Notification sound",
   "settings.notificationSoundUsesSystem": "Use the Windows notification sound",

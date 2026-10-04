@@ -21,6 +21,11 @@ export type TradeNotificationStatus =
   | "close-failed"
   | "detected";
 
+/** Both read "No Listing Matched"; only the rep offer tells them apart. */
+export function isUnmatchedTradeStatus(status: TradeNotificationStatus): boolean {
+  return status === "no-match" || status === "match-failed";
+}
+
 /** Toast content for however many listings one trade closed. */
 export function summarizeMatches(
   matches: TradeMatchPayload[],

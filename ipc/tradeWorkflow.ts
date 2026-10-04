@@ -9,7 +9,11 @@ import type { ParsedLogTrade } from "../services/eeLogMonitor";
 import { isTradeNotificationOverlayEnabled } from "../config/runtime/overlaySettings";
 import { TRADE_RECORDED } from "../config/shared/ipcChannels";
 import { tradeNotificationBody, tradeNotificationTitle } from "../config/shared/notifications";
-import { summarizeMatches, summarizeTrade } from "../config/shared/tradeMatch";
+import {
+  isUnmatchedTradeStatus,
+  summarizeMatches,
+  summarizeTrade,
+} from "../config/shared/tradeMatch";
 import type { TradeMatchPayload, TradeNotificationStatus } from "../config/shared/tradeMatch";
 
 const log = withScope("tradeWorkflow");
@@ -33,6 +37,8 @@ export function handleConfirmedTrade(trade: ParsedLogTrade): void {
         return;
       }
       if (!ctx.overlaySettings.tradeDesktopNotificationsEnabled) return;
+      // A desktop notification always lands in history, so a muted one is dropped.
+      if (isUnmatchedTradeStatus(status) && !ctx.overlaySettings.tradeNoMatchHistoryEnabled) return;
       sendDesktopNotificationRaw(
         tradeNotificationTitle(status),
         tradeNotificationBody(payload),

@@ -1460,6 +1460,8 @@
   "notifications.clearAll": "全部清除",
   "settings.tradeRepKeybindEnable": "交易弹窗上的好评快捷键",
   "settings.unlistOnTrade": "交易后关闭 warframe.market 订单",
+  "settings.tradeNoMatchHistory": "在通知历史中保留未匹配的交易",
+  "settings.tradeNoMatchHistoryHint": "未关闭任何订单的交易（如大多数购买）。关闭后仍会显示交易提示。",
   "settings.wfmDmNotifications": "warframe.market 私信通知",
   "settings.windowsNotifSound": "通知声音",
   "settings.notificationSoundUsesSystem": "使用 Windows 通知提示音",
