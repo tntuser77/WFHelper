@@ -1,8 +1,16 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), "wfh-de-backoff-"));
+
+vi.mock("../../services/userDataPath", () => ({
+  userDataPath: (...segments: string[]) => path.join(userData, ...segments),
+}));
 
 vi.mock("../../services/worldStateFetch", () => ({
   fetchJsonWithTimeout: vi.fn(),
-  fetchJsonIpv4: vi.fn(),
 }));
 
 vi.mock("../../config/shared/fetchWithTimeout", () => ({
@@ -11,11 +19,11 @@ vi.mock("../../config/shared/fetchWithTimeout", () => ({
 
 import { fetchAndParse } from "../../services/worldStateParser";
 import { fetchWithTimeout } from "../../config/shared/fetchWithTimeout";
-import { fetchJsonIpv4, fetchJsonWithTimeout } from "../../services/worldStateFetch";
+import { fetchJsonWithTimeout } from "../../services/worldStateFetch";
+import { _resetDeBackoffForTest, dePausedUntil } from "../../services/deBackoff";
 
 const mockFetch = vi.mocked(fetchWithTimeout);
 const mockFetchJson = vi.mocked(fetchJsonWithTimeout);
-const mockFetchIpv4 = vi.mocked(fetchJsonIpv4);
 
 const DE = "https://api.warframe.com/cdn/worldState.php";
 
@@ -30,6 +38,7 @@ function response(status: number, body: unknown): Awaited<ReturnType<typeof fetc
 describe("world-state source chain", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    _resetDeBackoffForTest();
     mockFetchJson.mockRejectedValue(new Error("no cycles in this test"));
   });
 
@@ -43,16 +52,26 @@ describe("world-state source chain", () => {
     );
     expect(urls.filter((url) => url.endsWith("worldState.php"))).toEqual([DE]);
     expect(urls.some((url) => url.includes("oracle.browse.wf/worldState"))).toBe(false);
-    expect(mockFetchIpv4).not.toHaveBeenCalled();
   });
 
-  it("retries a DE 403 over IPv4", async () => {
+  it("pauses DE after a 403 instead of retrying", async () => {
     mockFetch.mockResolvedValue(response(403, {}));
-    mockFetchIpv4.mockResolvedValue({ ActiveMissions: [] });
 
-    await fetchAndParse();
+    await expect(fetchAndParse()).rejects.toThrow(/HTTP 403 for https:\/\/api\.warframe\.com/);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(dePausedUntil()).not.toBeNull();
 
-    expect(mockFetchIpv4).toHaveBeenCalledWith(DE, expect.any(Number));
+    await expect(fetchAndParse()).rejects.toThrow(/paused until/);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the pause across a restart", async () => {
+    mockFetch.mockResolvedValue(response(403, {}));
+    await expect(fetchAndParse()).rejects.toThrow(/HTTP 403/);
+
+    vi.resetModules();
+    const reloaded = await import("../../services/deBackoff");
+    expect(reloaded.dePausedUntil()).not.toBeNull();
   });
 
   it("rejects an empty successful response instead of reporting an empty world", async () => {
@@ -67,12 +86,5 @@ describe("world-state source chain", () => {
     await expect(fetchAndParse()).rejects.toThrow(
       /every world-state source failed: HTTP 503 for https:\/\/api\.warframe\.com/,
     );
-  });
-
-  it("names the IPv4 failure when the retry also fails", async () => {
-    mockFetch.mockResolvedValue(response(403, {}));
-    mockFetchIpv4.mockRejectedValue(new Error(`HTTP 403 for ${DE} (IPv4)`));
-
-    await expect(fetchAndParse()).rejects.toThrow(/\(IPv4\)/);
   });
 });

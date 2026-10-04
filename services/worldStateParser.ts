@@ -24,7 +24,8 @@ import {
   resolveDict,
 } from "./regionNames";
 import { titleCase } from "../config/shared/textNormalize";
-import { fetchJsonIpv4, fetchJsonWithTimeout } from "./worldStateFetch";
+import { assertDeNotPaused, noteDeForbidden } from "./deBackoff";
+import { fetchJsonWithTimeout } from "./worldStateFetch";
 import { computeSteelPathHonors } from "./worldStateSteelPath";
 
 const log = withScope("worldStateParser");
@@ -897,6 +898,7 @@ function isWorldStatePayload(value: unknown): value is WorldStateRaw {
 
 /** Tries each DE URL in order; throws with the last URL's failure when none answers. */
 async function fetchDeWorldState(): Promise<WorldStateRaw> {
+  assertDeNotPaused();
   let lastFailure = "no world-state URL configured";
   for (const url of FETCH_URLS) {
     try {
@@ -906,18 +908,18 @@ async function fetchDeWorldState(): Promise<WorldStateRaw> {
         { headers: { Accept: "application/json" } },
         new Error("timeout"),
       );
-      let raw: unknown;
       if (resp.status === 403) {
-        // Akamai blocks some IPv6 ranges outright; the same host answers over IPv4.
-        log.warn(`[WorldState] ${url} returned HTTP 403, retrying over IPv4`);
-        raw = await fetchJsonIpv4(url, FETCH_TIMEOUT_MS);
-      } else if (!resp.ok) {
+        // A flagged address; retrying elsewhere is what gets game login blocked too.
+        lastFailure = `HTTP 403 for ${url}`;
+        noteDeForbidden("World state");
+        break;
+      }
+      if (!resp.ok) {
         lastFailure = `HTTP ${resp.status} for ${url}`;
         log.warn(`[WorldState] ${lastFailure}`);
         continue;
-      } else {
-        raw = await resp.json();
       }
+      const raw: unknown = await resp.json();
       if (!isWorldStatePayload(raw)) {
         lastFailure = `${url} returned an invalid payload`;
         log.warn(`[WorldState] ${lastFailure}`);

@@ -11,6 +11,7 @@ import type { DownloadStage } from "../config/shared/statsTypes";
 import { readGameAuthz } from "./gameMemoryAuthz";
 import { readGameAuthzWin } from "./gameMemoryWin";
 import * as codexProfile from "./codexProfile";
+import { assertDeNotPaused, noteDeForbidden } from "./deBackoff";
 import { resolveEeLogPath } from "./eeLogPath";
 import { withScope } from "./logger";
 import { userDataPath } from "./userDataPath";
@@ -22,7 +23,8 @@ const IS_WINDOWS = process.platform === "win32";
 // Upstream ships warframe-api-helper.exe for Windows and a Linux.zip holding a
 // single `warframe-api-helper` ELF binary (works against the Proton game).
 const EXE_NAME = IS_WINDOWS ? "warframe-api-helper.exe" : "warframe-api-helper";
-const DEFAULT_POLL_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+// Each run is an authenticated inventory.php call from outside the game; keep them rare.
+const DEFAULT_POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 // Runs that failed before reaching DE's API (game closed, elevated, or not
 // logged in) never consumed the cooldown, so they may retry much sooner.
 const LOCAL_FAILURE_RETRY_MS = 90 * 1000;
@@ -506,8 +508,10 @@ function runHelperExe(): Promise<{ ok: boolean; reason: HelperRunReason | null }
   });
 }
 
-/** GET inventory.php with the helper-extracted authz. Tries api.warframe.com first. */
+/** GET inventory.php with the helper-extracted authz. Tries api.warframe.com first;
+ *  a 403 pauses DE calls instead of moving on, since it means the address is flagged. */
 async function fetchInventoryWithAuthz(authz: string, destPath: string): Promise<void> {
+  assertDeNotPaused();
   codexProfile.noteAuthz(authz);
   const hosts = ["api.warframe.com", "mobile.warframe.com"];
   const headers: Record<string, string> = {
@@ -527,6 +531,10 @@ async function fetchInventoryWithAuthz(authz: string, destPath: string): Promise
       }
       lastErr = new Error(`${host} returned HTTP ${res.statusCode} (${res.body.length} bytes)`);
       log.warn(String(lastErr));
+      if (res.statusCode === 403) {
+        noteDeForbidden("Inventory");
+        break;
+      }
     } catch (err) {
       lastErr = err;
       log.warn(`${host} request error:`, err instanceof Error ? err.message : String(err));
