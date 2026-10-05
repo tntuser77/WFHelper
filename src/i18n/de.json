@@ -2887,6 +2887,7 @@
   "levelCap.kills": "Kills",
   "levelCap.killsPerMin": "{count}/Min.",
   "levelCap.squadKills": "{count} Kills",
+  "levelCap.unknownRoom": "unbekannter Raum",
   "levelCap.squadAlias": "als {name}",
   "levelCap.dateAt": "{date} um {time}",
   "levelCap.builds.editHint": "Klicken, um nur die Runs dieses Builds zu zeigen, Doppelklick zum Bearbeiten",

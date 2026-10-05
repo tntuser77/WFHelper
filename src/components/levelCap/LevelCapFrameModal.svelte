@@ -155,7 +155,8 @@
   function tileRooms(run: LevelCapRun): string[] {
     return (
       run.tile?.rooms.map(
-        (room) => `${room.name ?? `#${room.fingerprint}`} (${room.exoSpawns ?? "?"})`,
+        (room) =>
+          `${room.name ?? (room.fingerprint ? `#${room.fingerprint}` : $t("levelCap.unknownRoom"))} (${room.exoSpawns ?? "?"})`,
       ) ?? []
     );
   }

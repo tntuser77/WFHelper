@@ -2887,6 +2887,7 @@
   "levelCap.kills": "击杀",
   "levelCap.killsPerMin": "{count}/分钟",
   "levelCap.squadKills": "{count} 击杀",
+  "levelCap.unknownRoom": "未知房间",
   "levelCap.squadAlias": "（以 {name}）",
   "levelCap.dateAt": "{date} {time}",
   "levelCap.builds.editHint": "单击只显示此配置的记录，双击编辑",
