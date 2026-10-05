@@ -151,8 +151,18 @@
     checked.clear();
   }
 
+  /** Room names with their Exolizer spawns, for the tile's hover. */
   function tileRooms(run: LevelCapRun): string[] {
-    return run.tile?.rooms.map((room) => room.name ?? `#${room.fingerprint}`) ?? [];
+    return (
+      run.tile?.rooms.map(
+        (room) => `${room.name ?? `#${room.fingerprint}`} (${room.exoSpawns ?? "?"})`,
+      ) ?? []
+    );
+  }
+
+  /** The tile as its rooms' Exolizer spawns, e.g. "354"; "?" for an unmapped room. */
+  function tileSpawns(run: LevelCapRun): string {
+    return run.tile?.rooms.map((room) => room.exoSpawns ?? "?").join("") ?? "";
   }
 
   function runDate(ms: number): string {
@@ -446,7 +456,7 @@
                 </div>
                 <button
                   type="button"
-                  class="grid min-w-0 flex-1 cursor-pointer grid-cols-[4.5rem_6.5rem_6rem_minmax(0,1fr)_auto] items-center gap-4 text-left"
+                  class="grid min-w-0 flex-1 cursor-pointer grid-cols-[4.5rem_6.5rem_6rem_2.5rem_minmax(0,1fr)] items-center gap-4 text-left"
                   onclick={() => toggle(expanded, run.id)}
                 >
                   <span
@@ -486,14 +496,11 @@
                     {/if}
                   </span>
                   <span
-                    class="flex min-w-0 flex-col text-xs leading-snug text-text-secondary"
+                    class="font-mono text-sm text-text-secondary"
                     title={tileRooms(run).join(" · ")}
+                    data-level-cap-tile>{tileSpawns(run)}</span
                   >
-                    {#each tileRooms(run) as room, i (i)}
-                      <span class="truncate">{room}</span>
-                    {/each}
-                  </span>
-                  <span class="flex flex-col items-end text-xs text-text-muted">
+                  <span class="flex min-w-0 flex-col items-end text-xs text-text-muted">
                     <span class="whitespace-nowrap">{runDate(run.completedAt)}</span>
                     {#if squad.names.length}
                       <span class="group/squad relative cursor-default" data-level-cap-squad
