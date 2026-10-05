@@ -17,7 +17,7 @@
     orderLevelCapTags,
     type LevelCapFrameRow,
   } from "../../lib/levelCap.js";
-  import { assignLevelCapBuild, createLevelCapBuild, levelCap } from "../../stores/levelCap.js";
+  import { assignLevelCapBuild, createLevelCapBuild } from "../../stores/levelCap.js";
   import { itemDb } from "../../stores/data.js";
   import { addToast } from "../../stores/toasts.js";
   import ModalShell from "../ModalShell.svelte";
@@ -107,7 +107,6 @@
   });
   const checkedRuns = $derived(runs.filter((run) => checked.has(run.id)));
   const buildName = (id: string | undefined) => builds.find((b) => b.id === id)?.name ?? "";
-  const killsPending = $derived(new Set($levelCap?.status.killsPending ?? []));
 
   /** Opens a build's editor, scrolled to a slot when one was clicked. */
   function edit(id: string, slot: string | null = null): void {
@@ -484,10 +483,6 @@
                       {#if perMinLabel(run)}
                         <span class="text-[10px] text-text-muted">{perMinLabel(run)}</span>
                       {/if}
-                    {:else if killsPending.has(run.id)}
-                      <span class="text-xs text-text-muted" data-level-cap-kills-pending
-                        >{$t("levelCap.killsPending")}</span
-                      >
                     {/if}
                   </span>
                   <span

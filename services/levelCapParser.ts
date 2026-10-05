@@ -351,6 +351,10 @@ export function createLevelCapParser() {
     current(): LevelCapMission | null {
       return active && active.endSec == null ? snapshot(active) : null;
     },
+    /** A Void Cascade is on its end screen: over, but not yet closed. */
+    closing(): boolean {
+      return active?.endSec != null;
+    },
     /** The squad as it stands, by HUD slot. */
     squad(): LevelCapSquadEntry[] {
       return [...squad]

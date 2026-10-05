@@ -101,9 +101,11 @@ export interface LevelCapRun {
   /** Rounds completed; the only progress a squad client's log carries. */
   rounds?: number | null;
   durationSec: number | null;
-  /** Enemies you killed, from your profile's lifetime kills before and after the
-   *  run; absent on runs from before this was counted or when a read failed. */
+  /** Enemies you killed, read off the end-of-mission screen (or, on older runs,
+   *  your profile's lifetime kills); absent when no one captured it. */
   kills?: number;
+  /** The end-of-mission picture the kills were read off; `screenshot` stays the run's own. */
+  killsScreenshot?: string;
   /** Players in the mission including you; null when the log never said. */
   squadSize: number | null;
   /** Names the log gave for the squad, you included; on screenshot runs, the
@@ -232,9 +234,8 @@ export interface LevelCapLogSquadmate {
   frame?: string;
   /** `frame` is the host's, guessed from what their level loaded first. */
   frameGuess?: true;
-  /** Enemies they killed, from their profile's lifetime kills before and after
-   *  the run; absent when unknown or their profile is private. Never on you:
-   *  your kills are the run's `kills`. */
+  /** Enemies they killed, off the end-of-mission screen (or, on older runs,
+   *  their profile); absent when unknown. Never on you: your kills are the run's `kills`. */
   kills?: number;
 }
 
@@ -278,8 +279,6 @@ export interface LevelCapStatus {
   rounds: number | null;
   /** Id of the run F12 already logged for this mission, if any. */
   runId: string | null;
-  /** Runs whose kills are still waiting for the profile to catch up. */
-  killsPending: string[];
 }
 
 export interface LevelCapFrameSkins {
@@ -322,5 +321,7 @@ export interface LevelCapImportResult {
 export type LevelCapHotkeyOutcome =
   | { type: "logged"; run: LevelCapRun; frameRuns: number }
   | { type: "screenshot-replaced"; run: LevelCapRun }
+  | { type: "kills-added"; run: LevelCapRun }
+  | { type: "kills-unreadable" }
   | { type: "below-target"; exolizers: number }
   | { type: "capture-failed" };

@@ -31,10 +31,9 @@ import {
   snapshotEquippedBuild,
   snapshotItemConfigs,
 } from "../services/levelCapBuild";
-import { fetchProfileJson, getProfileAccountId } from "../services/codexProfile";
-import { parseLifetimeStats } from "../services/levelCapKills";
 import { captureScreenFast } from "../services/screenCapture";
 import { readExolizersFromScreenshot } from "../services/levelCapExolizerOcr";
+import { readKillsFromScreenshot } from "../services/levelCapKillsOcr";
 import { readSquadFromScreenshot } from "../services/levelCapSquadOcr";
 import { loadSharp } from "../services/sharpRuntime";
 import { withScope } from "../services/logger";
@@ -393,14 +392,18 @@ function toastCard(outcome: LevelCapHotkeyOutcome): LevelCapToastCard {
     exolizers: null,
     target: LEVEL_CAP_EXOLIZER_TARGET,
     durationSec: null,
+    kills: null,
   };
   if (outcome.type === "below-target")
     return { ...card, status: "below", exolizers: outcome.exolizers };
   if (outcome.type === "capture-failed") return card;
+  if (outcome.type === "kills-unreadable") return { ...card, status: "noKills" };
   const { run } = outcome;
   return {
     ...card,
-    status: outcome.type === "logged" ? "logged" : "replaced",
+    status:
+      outcome.type === "logged" ? "logged" : outcome.type === "kills-added" ? "kills" : "replaced",
+    kills: outcome.type === "kills-added" ? (run.kills ?? null) : null,
     frame: run.frame,
     thumb: run.frameType ? (itemDb.lookupItem(run.frameType)?.imageUrl ?? null) : null,
     runNumber: outcome.type === "logged" ? outcome.frameRuns : null,
@@ -460,8 +463,7 @@ function register(): void {
       return shot && !shot.image.isEmpty() ? shot.image.toPNG() : null;
     },
     onChanged: pushUpdate,
-    accountId: getProfileAccountId,
-    lifetimeStats: async (accountId) => parseLifetimeStats(await fetchProfileJson(accountId)),
+    readKills: readKillsFromScreenshot,
     onHotkey: (outcome) => {
       broadcastToRenderers(LEVEL_CAP_HOTKEY, outcome);
       showLevelCapNotification(toastCard(outcome));

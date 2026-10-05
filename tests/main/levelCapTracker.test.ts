@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LevelCapHotkeyOutcome } from "../../config/shared/levelCapTypes";
+import type { KillsScreenRead } from "../../services/levelCapKillsOcr";
 import { DANTE_SUIT_ID, levelCapInventory } from "../fixtures/levelcap/inventory";
 
 let tmpDir: string;
@@ -26,10 +27,9 @@ const FOLDERS: Record<string, string> = { Ember: "Ember", Sandman: "Inaros", Pag
 
 let outcomes: LevelCapHotkeyOutcome[];
 let captureResult: Buffer | null;
+let killsRead: KillsScreenRead | null;
 
-async function setup(
-  lifetimeStats?: (accountId: string) => Promise<{ kills: number; missionsEnded: number } | null>,
-): Promise<{ tracker: Tracker; store: Store }> {
+async function setup(): Promise<{ tracker: Tracker; store: Store }> {
   const store = await import("../../services/levelCapStore");
   const tracker = await import("../../services/levelCapTracker");
   store.__resetLevelCapStoreForTest();
@@ -41,8 +41,7 @@ async function setup(
     capture: async () => captureResult,
     onChanged: () => {},
     onHotkey: (outcome) => outcomes.push(outcome),
-    accountId: () => "me",
-    lifetimeStats,
+    readKills: async () => killsRead,
   });
   return { tracker, store };
 }
@@ -77,6 +76,7 @@ beforeEach(() => {
   fs.mkdirSync(path.join(tmpDir, "userData"), { recursive: true });
   outcomes = [];
   captureResult = Buffer.from("png");
+  killsRead = null;
 });
 
 afterEach(() => {
@@ -139,7 +139,6 @@ describe("levelCapTracker", () => {
       exolizers: 108,
       rounds: null,
       runId: logged.id,
-      killsPending: [],
     });
 
     feed(tracker, [exo(4100, 110), ...END(4212, true)]);
@@ -263,62 +262,77 @@ describe("levelCapTracker", () => {
     expect(store.getRuns()[0]).toMatchObject({ exolizers: null, rounds: 27 });
   });
 
-  it("counts your kills on a run from the profile before and after it", async () => {
-    vi.useFakeTimers();
-    try {
-      const readings = [
-        { kills: 1_979_602, missionsEnded: 7739 },
-        { kills: 1_979_715, missionsEnded: 7740 },
-      ];
-      const { tracker, store } = await setup(async () => readings[0]);
-      feed(tracker, [...START, exo(4000, 108), ...END(4100, false)]);
-      const [run] = store.getRuns();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(tracker.getStatus().killsPending).toEqual([run.id]);
+  it("a press on the end screen adds the kills and keeps the run's screenshot", async () => {
+    const { tracker, store } = await setup();
+    feed(tracker, [
+      "1.0 Net [Info]: JoinSquadSessionCallback. Session id=abc123, host name=Host",
+      "1.1 Net [Info]: AddSquadMember: Me, mm=A1, squadCount=1",
+      "1.2 Net [Info]: AddSquadMember: Host, mm=A2, squadCount=2",
+      ...START,
+      exo(4000, 108),
+    ]);
+    tracker.onLevelCapHotkey();
+    await settle();
+    feed(tracker, END(4100, false));
 
-      readings.shift();
-      await vi.advanceTimersByTimeAsync(90_000);
-      expect(store.getRuns()[0].kills).toBe(113);
-      expect(tracker.getStatus().killsPending).toEqual([]);
-    } finally {
-      vi.useRealTimers();
-    }
+    vi.useFakeTimers({ now: Date.now() + 60_000 });
+    captureResult = Buffer.from("end screen");
+    killsRead = { kills: [472, 1478], names: ["Me", "Host"] };
+    tracker.onLevelCapHotkey();
+    vi.useRealTimers();
+    await settle();
+
+    expect(outcomes.map((o) => o.type)).toEqual(["logged", "kills-added"]);
+    const [run] = store.getRuns();
+    expect(run.kills).toBe(472);
+    expect(fs.readFileSync(run.screenshot!, "utf8")).toBe("png");
+    expect(fs.readFileSync(run.killsScreenshot!, "utf8")).toBe("end screen");
+    expect(run.squadLog).toEqual([
+      { name: "Host", slot: 1, host: true, kills: 1478 },
+      { name: "Me", slot: 2, you: true },
+    ]);
   });
 
-  it("reads only your own profile, never a squadmate's", async () => {
-    vi.useFakeTimers();
-    try {
-      const HOST = "6ab92b4d61dc54d6b009e00b";
-      const posted = { value: false };
-      const read = vi.fn(async (_accountId: string) => {
-        const bump = posted.value ? 1 : 0;
-        return { kills: 100 + bump * 50, missionsEnded: 10 + bump };
-      });
-      const { tracker, store } = await setup(read);
-      feed(tracker, [
-        "1.0 Net [Info]: JoinSquadSessionCallback. Session id=abc123, host name=l7ese",
-        "1.1 Net [Info]: AddSquadMember: Me, mm=A1, squadCount=1",
-        "1.2 Net [Info]: AddSquadMember: l7ese, mm=A2, squadCount=2",
-        `1.3 Net [Info]: Trying to connect to l7ese, flags: 0, id=${HOST}`,
-        ...START,
-        `200.0 Sys [Info]: VoidProjections: Still waiting on response from ${HOST}`,
-        exo(4000, 108),
-        ...END(4100, false),
-      ]);
-      await vi.advanceTimersByTimeAsync(10_000);
-      posted.value = true;
-      await vi.advanceTimersByTimeAsync(90_000);
-      const run = store.getRuns()[0];
-      expect(run.kills).toBe(50);
-      expect(run.squadLog).toEqual([
-        { name: "l7ese", slot: 1, host: true },
-        { name: "Me", slot: 2, you: true },
-      ]);
-      expect(read.mock.calls.every(([accountId]) => accountId === "me")).toBe(true);
-      expect(tracker.getStatus().killsPending).toEqual([]);
-    } finally {
-      vi.useRealTimers();
-    }
+  it("holds end-screen kills for the run the mission end logs", async () => {
+    const { tracker, store } = await setup();
+    const end = END(4100, false);
+    // The mission is over but not yet closed: the end screen is up.
+    feed(tracker, [...START, exo(4000, 108), ...end.slice(0, -1)]);
+    killsRead = { kills: [300], names: ["Player1"] };
+    tracker.onLevelCapHotkey();
+    await settle();
+    expect(store.getRuns()).toEqual([]);
+
+    feed(tracker, end.slice(-1));
+    const [run] = store.getRuns();
+    expect(run).toMatchObject({ source: "mission-end", kills: 300, screenshot: null });
+    expect(outcomes.map((o) => o.type)).toEqual(["kills-added"]);
+  });
+
+  it("says so when the picture has no kill counts, and changes nothing", async () => {
+    const { tracker, store } = await setup();
+    feed(tracker, [...START, exo(4000, 108)]);
+    tracker.onLevelCapHotkey();
+    await settle();
+    feed(tracker, END(4100, false));
+    vi.useFakeTimers({ now: Date.now() + 60_000 });
+    tracker.onLevelCapHotkey();
+    vi.useRealTimers();
+    await settle();
+    expect(outcomes.map((o) => o.type)).toEqual(["logged", "kills-unreadable"]);
+    expect(store.getRuns()[0].kills).toBeUndefined();
+  });
+
+  it("ignores the key long after the run", async () => {
+    const { tracker, store } = await setup();
+    feed(tracker, [...START, exo(4000, 108), ...END(4100, false)]);
+    vi.useFakeTimers({ now: Date.now() + 20 * 60_000 });
+    killsRead = { kills: [10], names: ["Player1"] };
+    tracker.onLevelCapHotkey();
+    vi.useRealTimers();
+    await settle();
+    expect(outcomes).toEqual([]);
+    expect(store.getRuns()[0].kills).toBeUndefined();
   });
 
   it("keeps the log's squad: HUD slots, host, and frames it loaded by name", async () => {

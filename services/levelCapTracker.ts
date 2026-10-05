@@ -1,7 +1,7 @@
 import fs from "node:fs";
 
 import { withScope } from "./logger";
-import { createKillCounter, type LifetimeStats } from "./levelCapKills";
+import type { KillsScreenRead } from "./levelCapKillsOcr";
 import { createLevelCapParser, isLevelCapLine, type LevelCapMission } from "./levelCapParser";
 import { snapshotBuildForFrame, snapshotEquippedBuild, suitTypeForId } from "./levelCapBuild";
 import * as store from "./levelCapStore";
@@ -20,6 +20,8 @@ const log = withScope("levelCapTracker");
 
 /** A held key repeats; one run per deliberate press. */
 const HOTKEY_DEBOUNCE_MS = 1500;
+/** How long after a run the key still reads its end-of-mission screen for kills. */
+const KILLS_WINDOW_MS = 15 * 60_000;
 
 interface LevelCapDeps {
   getInventory(): unknown;
@@ -32,16 +34,18 @@ interface LevelCapDeps {
   capture(): Promise<Buffer | null>;
   onChanged(): void;
   onHotkey(outcome: LevelCapHotkeyOutcome): void;
-  /** Your account id; null until an inventory fetch has seen it. */
-  accountId?(): string | null;
-  /** An account's lifetime kills and missions off its profile; null when it shows none. */
-  lifetimeStats?(accountId: string): Promise<LifetimeStats | null>;
+  /** The end-of-mission kill counts on a capture; null when it shows none. */
+  readKills(png: Buffer): Promise<KillsScreenRead | null>;
 }
 
 let _deps: LevelCapDeps | null = null;
 let _parser = createLevelCapParser();
 /** Run the hotkey already logged for the mission in progress. */
 let _missionRunId: string | null = null;
+/** The run the last mission logged, for kills read off its end screen. */
+let _lastRun: { id: string; endedAt: number } | null = null;
+/** Kills read off the end screen before the mission had logged its run. */
+let _pendingKills: { read: KillsScreenRead; png: Buffer } | null = null;
 let _lastHotkeyAt = 0;
 let _hotkeyBusy = false;
 /** EE.log lines of the mission under way, plus the lead-in where squad loaders print. */
@@ -49,15 +53,6 @@ let _logLines: string[] = [];
 let _inMission = false;
 const LEAD_IN_LINES = 3000;
 const MAX_MISSION_LINES = 200_000;
-
-const _kills = createKillCounter({
-  ownAccountId: () => _deps?.accountId?.() ?? null,
-  read: (accountId) => _deps?.lifetimeStats?.(accountId) ?? Promise.resolve(null),
-  onKills(runId, kills) {
-    if (store.updateRun(runId, (run) => (run.kills = kills))) _deps?.onChanged();
-  },
-  onPending: () => _deps?.onChanged(),
-});
 
 function keepLogLine(line: string): void {
   _logLines.push(line);
@@ -67,8 +62,6 @@ function keepLogLine(line: string): void {
 
 export function initLevelCapTracker(deps: LevelCapDeps): void {
   _deps = deps;
-  // A Cascade found at startup may have been primed before the profile could be read.
-  if (_parser.current()) _kills.missionStarted();
 }
 
 /** Group key: a Prime shares its base frame's row and folder. */
@@ -88,7 +81,6 @@ export function getStatus(): LevelCapStatus {
     exolizers: mission?.exolizers ?? null,
     rounds: mission?.rounds ?? null,
     runId: mission ? _missionRunId : null,
-    killsPending: _kills.pendingRunIds(),
   };
 }
 
@@ -133,6 +125,14 @@ function withoutArchgun(build: LevelCapBuild | null): LevelCapBuild | null {
   return build && { ...build, archgun: null };
 }
 
+/** Kills read off the end screen while the mission was still closing go on its run. */
+function applyPendingKills(runId: string): void {
+  const pending = _pendingKills;
+  _pendingKills = null;
+  const run = pending && store.recordKills(runId, pending.read, pending.png);
+  if (run) _deps?.onHotkey({ type: "kills-added", run });
+}
+
 /** Fills in or logs the run; returns its id, or null when the mission logged none. */
 function finishMission(mission: LevelCapMission): string | null {
   const deps = _deps;
@@ -170,6 +170,7 @@ function finishMission(mission: LevelCapMission): string | null {
     if (frameCorrected) store.relinkRun(runId);
     const archgun = archgunUsed ? snapshotEquippedBuild(deps.getInventory())?.archgun : null;
     if (archgun) store.addArchgunToBuild(runId, archgun);
+    applyPendingKills(runId);
     deps.onChanged();
     return runId;
   }
@@ -198,8 +199,15 @@ function finishMission(mission: LevelCapMission): string | null {
   });
   if (archgun) store.addArchgunToBuild(run.id, archgun);
   log.info(`[LevelCap] ${run.frame} run logged at mission end without a screenshot`);
+  applyPendingKills(run.id);
   deps.onChanged();
   return run.id;
+}
+
+function endMission(mission: LevelCapMission): void {
+  const runId = finishMission(mission);
+  _pendingKills = null;
+  _lastRun = runId ? { id: runId, endedAt: Date.now() } : null;
 }
 
 export function processLevelCapLine(line: string, source: "dbwin" | "file"): void {
@@ -210,15 +218,16 @@ export function processLevelCapLine(line: string, source: "dbwin" | "file"): voi
   for (const event of _parser.feedLine(line)) {
     if (event.type === "start") {
       _missionRunId = null;
+      _lastRun = null;
+      _pendingKills = null;
       _inMission = true;
-      _kills.missionStarted();
       changed = true;
     } else {
       // Squad samples to check the squad parser against.
       if (event.mission.players.length > 1) store.saveSquadLog(_logLines.join("\n"));
       _logLines = [];
       _inMission = false;
-      _kills.missionEnded(finishMission(event.mission));
+      endMission(event.mission);
     }
   }
   // Exolizer and round ticks update the live counter in the tab.
@@ -275,7 +284,6 @@ export function primeLevelCapFromLog(filePath: string, size: number): void {
   _missionRunId = loggedRunSince(
     Date.now() - Math.max(0, (lastSec ?? 0) - mission.startSec) * 1000,
   );
-  _kills.missionStarted();
   log.info(
     `[LevelCap] joined a Void Cascade already in progress (${mission.exolizers ?? "?"} Exolizers, round ${mission.rounds ?? "?"})`,
   );
@@ -284,17 +292,37 @@ export function primeLevelCapFromLog(filePath: string, size: number): void {
 /** EE.log was truncated (game restart): whatever was open has ended. */
 export function notifyLevelCapEeLogReset(): void {
   const mission = _parser.flush();
-  // The run's stats still post after a game restart, so its kills are still worth waiting for.
-  if (mission) _kills.missionEnded(finishMission(mission));
+  if (mission) endMission(mission);
   _parser = createLevelCapParser();
+}
+
+/** A press after the mission: the end screen's kill counts go on its run, and
+ *  the run keeps its own screenshot. */
+async function handleKillsShot(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome | null> {
+  const recent = _lastRun && Date.now() - _lastRun.endedAt < KILLS_WINDOW_MS ? _lastRun.id : null;
+  const runId = _missionRunId ?? recent;
+  // At the end screen a run the key never logged is still to come from the mission end.
+  const closing = _parser.closing();
+  if (!runId && !closing) {
+    log.info("[LevelCap] finish-run key pressed outside a Void Cascade; ignored");
+    return null;
+  }
+  const png = await deps.capture();
+  if (!png) return { type: "capture-failed" };
+  const read = await deps.readKills(png);
+  if (!read) return { type: "kills-unreadable" };
+  log.info(`[LevelCap] ${read.kills[0]} kills read off the end screen`);
+  if (!runId) {
+    _pendingKills = { read, png };
+    return null;
+  }
+  const run = store.recordKills(runId, read, png);
+  return run ? { type: "kills-added", run } : { type: "kills-unreadable" };
 }
 
 async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome | null> {
   const mission = _parser.current();
-  if (!mission) {
-    log.info("[LevelCap] finish-run key pressed outside a Void Cascade; ignored");
-    return null;
-  }
+  if (!mission) return handleKillsShot(deps);
   if (mission.exolizers !== null && mission.exolizers < LEVEL_CAP_EXOLIZER_TARGET) {
     return { type: "below-target", exolizers: mission.exolizers };
   }
@@ -361,9 +389,10 @@ export function __resetLevelCapTrackerForTest(): void {
   _deps = null;
   _parser = createLevelCapParser();
   _missionRunId = null;
+  _lastRun = null;
+  _pendingKills = null;
   _lastHotkeyAt = 0;
   _hotkeyBusy = false;
   _logLines = [];
   _inMission = false;
-  _kills.reset();
 }

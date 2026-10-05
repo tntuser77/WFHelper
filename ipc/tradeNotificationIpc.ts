@@ -92,13 +92,15 @@ function _applyPosition(win: InstanceType<typeof BrowserWindow>): void {
 
 /** A finished level cap run, shown in the trade toast's window. */
 export interface LevelCapToastCard {
-  status: "logged" | "replaced" | "below" | "failed";
+  status: "logged" | "replaced" | "kills" | "noKills" | "below" | "failed";
   frame: string;
   thumb: string | null;
   runNumber: number | null;
   exolizers: number | null;
   target: number;
   durationSec: number | null;
+  /** Your kills, when the press read them off the end screen. */
+  kills: number | null;
 }
 
 export interface TradeNotificationShowPayload {

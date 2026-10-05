@@ -59,6 +59,8 @@
   const LEVEL_CAP_LABELS = {
     logged: { key: "overlay.levelCap.logged", cls: "closed" },
     replaced: { key: "overlay.levelCap.replaced", cls: "closed" },
+    kills: { key: "overlay.levelCap.kills", cls: "closed" },
+    noKills: { key: "overlay.levelCap.noKills", cls: "unmatched" },
     below: { key: "overlay.levelCap.below", cls: "unmatched" },
     failed: { key: "overlay.levelCap.failed", cls: "unmatched" },
   };
@@ -102,6 +104,10 @@
       );
     }
     if (card.durationSec != null) facts.push(formatDuration(card.durationSec));
+    if (card.kills != null) {
+      facts.push(t("overlay.levelCap.killCount", { count: card.kills.toLocaleString() }));
+    }
+    if (card.status === "noKills") facts.push(t("overlay.levelCap.noKillsDetail"));
     if (card.status === "failed") facts.push(t("overlay.levelCap.failedDetail"));
     partnerName.textContent = facts.join(" · ");
 
