@@ -456,7 +456,7 @@
                 </div>
                 <button
                   type="button"
-                  class="grid min-w-0 flex-1 cursor-pointer grid-cols-[4.5rem_6.5rem_6rem_2.5rem_minmax(0,1fr)] items-center gap-4 text-left"
+                  class="grid min-w-0 flex-1 cursor-pointer grid-cols-[4.5rem_4.5rem_6rem_2rem_minmax(0,1fr)] items-center gap-3 text-left"
                   onclick={() => toggle(expanded, run.id)}
                 >
                   <span
