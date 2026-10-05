@@ -1065,7 +1065,10 @@ export function saveUnreadKillsShot(png: Buffer): string | null {
   try {
     const dir = path.join(getSettings().screenshotDir, KILLS_DIR, "unread");
     fs.mkdirSync(dir, { recursive: true });
-    const old = fs.readdirSync(dir).filter((name) => name.endsWith(".png")).sort();
+    const old = fs
+      .readdirSync(dir)
+      .filter((name) => name.endsWith(".png"))
+      .sort();
     for (const name of old.slice(0, Math.max(0, old.length - 9))) fs.rmSync(path.join(dir, name));
     const file = path.join(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}.png`);
     writeFileAtomicSync(file, png);

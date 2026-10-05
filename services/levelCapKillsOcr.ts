@@ -10,6 +10,8 @@ const log = withScope("levelCapKillsOcr");
 
 // In 1080p pixels on a 16:9 picture. The stat labels sit in one column on the
 // left, 50px a row; each player's column starts under their name, 293.5px apart.
+// The columns centre on the squad, so a smaller one starts half a step further in
+// per missing player.
 const LABEL_X = 230;
 const LABEL_WIDTH = 240;
 const LABEL_TOP = 500;
@@ -18,7 +20,12 @@ const ROW_PX = 50;
 const COLUMN_X = 545;
 const COLUMN_STEP = 293.5;
 const MAX_COLUMNS = 4;
-const NAME_BOX = { y: 458, height: 44, width: 200 };
+// Names sit lower on the Mission Complete screen than on the in-mission one,
+// with a line of stats right under them, so that box is a tight one.
+const NAME_BOXES = [
+  { y: 458, height: 44, width: 200 },
+  { y: 569, height: 32, width: 200 },
+];
 // Tight cells keep the frames standing behind the numbers out of the read; two
 // sizes vote, since one can still catch a stray edge.
 const CELLS = [
@@ -51,6 +58,11 @@ export function parseKillCount(text: string): number | null {
  *  survives, but no other row starts "Tota". */
 export function isTotalKillsLabel(text: string): boolean {
   return /^\W*t[o0][tl][a4]/i.test(text);
+}
+
+/** Whether an OCR'd name box holds a name rather than a stat row it overlapped. */
+export function looksLikeName(text: string): boolean {
+  return /\p{L}/u.test(text) && !/%/.test(text);
 }
 
 /** The value most reads agree on; a tie goes to the surest read. */
@@ -152,29 +164,59 @@ export async function readKillsFromScreenshot(source: Source): Promise<KillsScre
     }
     const centre = starts[hit] + (inkRows ? inkSum / inkRows / scale : ROW_PX / 2);
 
-    const columns = Array.from({ length: MAX_COLUMNS }, (_, i) => COLUMN_X + i * COLUMN_STEP);
+    // Every half step: even slots hold a 4 or 2 player squad, odd ones 3 or 1.
+    const slots = Array.from(
+      { length: MAX_COLUMNS * 2 - 1 },
+      (_, i) => COLUMN_X + (i * COLUMN_STEP) / 2,
+    );
     const reads = await Promise.all(
       CELLS.map(async (cell) =>
         recognizePaddleCrops(
           await Promise.all(
-            columns.map((x) => crop(box(x, centre - cell.height / 2, cell.width, cell.height))),
+            slots.map((x) => crop(box(x, centre - cell.height / 2, cell.width, cell.height))),
           ),
         ),
       ),
     );
-    const kills = columns.map((_, i) => vote(reads.map((read) => read[i])));
-    // Columns past the squad are empty; drop them from the end.
-    while (kills.length && kills[kills.length - 1] === null) kills.pop();
-    if (!kills.length || kills[0] === null) return null;
+    const voted = slots.map((_, i) => vote(reads.map((read) => read[i])));
+    const confidence = (i: number) => Math.max(...reads.map((read) => read[i].confidence));
+    const pick = (parity: number) => {
+      const indexes = slots.map((_, i) => i).filter((i) => i % 2 === parity);
+      const found = indexes.filter((i) => voted[i] !== null);
+      return {
+        indexes,
+        count: found.length,
+        sure: found.reduce((sum, i) => sum + confidence(i), 0),
+      };
+    };
+    const even = pick(0);
+    const odd = pick(1);
+    const chosen =
+      odd.count > even.count || (odd.count === even.count && odd.sure > even.sure) ? odd : even;
+    // Slots outside the squad are empty; drop them from both ends.
+    const columns = [...chosen.indexes];
+    while (columns.length && voted[columns[0]] === null) columns.shift();
+    while (columns.length && voted[columns[columns.length - 1]] === null) columns.pop();
+    if (!columns.length) return null;
+    const kills = columns.map((i) => voted[i]);
 
-    const names = await recognizePaddleCrops(
-      await Promise.all(
-        columns
-          .slice(0, kills.length)
-          .map((x) => crop(box(x, NAME_BOX.y, NAME_BOX.width, NAME_BOX.height))),
+    const nameReads = await Promise.all(
+      NAME_BOXES.map(async (nameBox) =>
+        recognizePaddleCrops(
+          await Promise.all(
+            columns.map((i) => crop(box(slots[i], nameBox.y, nameBox.width, nameBox.height))),
+          ),
+        ),
       ),
     );
-    return { kills, names: names.map((name) => name.text.trim()) };
+    const names = columns.map((_, c) => {
+      const best = nameReads
+        .map((read) => read[c])
+        .filter((read) => looksLikeName(read.text))
+        .sort((a, b) => b.confidence - a.confidence)[0];
+      return best ? best.text.trim() : "";
+    });
+    return { kills, names };
   } catch (err) {
     log.warn("[LevelCapOcr] kills read failed:", normalizeErrorMessage(err));
     return null;

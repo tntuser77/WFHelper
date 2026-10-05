@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isTotalKillsLabel, parseKillCount } from "../../services/levelCapKillsOcr";
+import { isTotalKillsLabel, looksLikeName, parseKillCount } from "../../services/levelCapKillsOcr";
 
 describe("parseKillCount", () => {
   it("reads a count, separators and all", () => {
@@ -34,5 +34,15 @@ describe("isTotalKillsLabel", () => {
     ]) {
       expect(isTotalKillsLabel(label)).toBe(false);
     }
+  });
+});
+
+describe("looksLikeName", () => {
+  it("keeps names and drops stat rows a name box overlapped", () => {
+    expect(looksLikeName("TNTUSER55")).toBe(true);
+    expect(looksLikeName("-Uber-")).toBe(true);
+    expect(looksLikeName("38%")).toBe(false);
+    expect(looksLikeName("1,438")).toBe(false);
+    expect(looksLikeName("")).toBe(false);
   });
 });
