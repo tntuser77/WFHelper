@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { isTotalKillsLabel, looksLikeName, parseKillCount } from "../../services/levelCapKillsOcr";
+import {
+  findInkRuns,
+  isTotalKillsLabel,
+  looksLikeName,
+  parseKillCount,
+  pickColumns,
+} from "../../services/levelCapKillsOcr";
 
 describe("parseKillCount", () => {
   it("reads a count, separators and all", () => {
@@ -44,5 +50,38 @@ describe("looksLikeName", () => {
     expect(looksLikeName("38%")).toBe(false);
     expect(looksLikeName("1,438")).toBe(false);
     expect(looksLikeName("")).toBe(false);
+  });
+});
+
+describe("findInkRuns", () => {
+  it("merges a number's digits and splits columns apart", () => {
+    const profile = [0, 5, 6, 0, 4, 0, 0, 0, 0, 0, 7, 7, 0, 1, 0];
+    expect(findInkRuns(profile, 3, 2)).toEqual([
+      { start: 1, end: 4 },
+      { start: 10, end: 11 },
+    ]);
+  });
+});
+
+describe("pickColumns", () => {
+  const at = (x: number, confidence = 0.9) => ({ x, confidence });
+
+  it("keeps the numbers on the squad's spacing and drops a stray between them", () => {
+    const picked = pickColumns(
+      [at(562), at(714, 0.6), at(855), at(1150), at(1442)],
+      293.5,
+      0.12,
+      4,
+    );
+    expect(picked.map((p) => p.x)).toEqual([562, 855, 1150, 1442]);
+  });
+
+  it("keeps one number a column, the one nearest the spacing", () => {
+    const picked = pickColumns([at(855), at(1128), at(1146)], 293.5, 0.12, 4);
+    expect(picked.map((p) => p.x)).toEqual([855, 1146]);
+  });
+
+  it("takes a lone number for a solo run", () => {
+    expect(pickColumns([at(920)], 293.5, 0.12, 4).map((p) => p.x)).toEqual([920]);
   });
 });

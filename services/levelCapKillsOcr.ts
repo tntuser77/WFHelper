@@ -9,17 +9,25 @@ import { normalizeErrorMessage } from "../config/shared/errors";
 const log = withScope("levelCapKillsOcr");
 
 // In 1080p pixels on a 16:9 picture. The stat labels sit in one column on the
-// left, 50px a row; each player's column starts under their name, 293.5px apart.
-// The columns centre on the squad, so a smaller one starts half a step further in
-// per missing player.
+// left, 50px a row. Where the table starts and where its columns sit moves with
+// the screen (in mission or Mission Complete) and the squad size, so the numbers
+// are found along the Total Kills row rather than at set places. Squad columns
+// are 293.5px apart.
 const LABEL_X = 230;
 const LABEL_WIDTH = 240;
-const LABEL_TOP = 500;
+const LABEL_TOP = 170;
 const LABEL_BOTTOM = 960;
 const ROW_PX = 50;
-const COLUMN_X = 545;
+const ROW_SCAN = { left: 480, right: 1650, height: 28 };
 const COLUMN_STEP = 293.5;
 const MAX_COLUMNS = 4;
+// A number's digits sit closer than this; anything wider apart is another column.
+const DIGIT_GAP = 18;
+// Cells start this far left of a number's ink, as the names start about there too.
+const CELL_LEAD = 6;
+const NAME_LEAD = 17;
+// How far off the column spacing a number may sit, as a share of a step.
+const STEP_SLACK = 0.12;
 // Names sit lower on the Mission Complete screen than on the in-mission one,
 // with a line of stats right under them, so that box is a tight one.
 const NAME_BOXES = [
@@ -36,6 +44,11 @@ const UPSCALE = 2;
 // Label text is a dim grey; anything this bright and unsaturated counts as ink.
 const INK_CUT = 110;
 const INK_SPREAD = 55;
+// Values are gold, the leader's white: bright red and green, no blue cast.
+const VALUE_RED = 140;
+const VALUE_GREEN = 120;
+// Inked pixels a column needs to count: specks off the frames behind have fewer.
+const MIN_INK = 3;
 // No one kills this many in one Cascade; past it the read is noise.
 const MAX_KILLS = 100_000;
 
@@ -63,6 +76,54 @@ export function isTotalKillsLabel(text: string): boolean {
 /** Whether an OCR'd name box holds a name rather than a stat row it overlapped. */
 export function looksLikeName(text: string): boolean {
   return /\p{L}/u.test(text) && !/%/.test(text);
+}
+
+/** Runs of inked columns along a row, digits of one number merged; in the
+ *  profile's own units. */
+export function findInkRuns(
+  profile: number[],
+  minInk: number,
+  gap: number,
+): Array<{ start: number; end: number }> {
+  const runs: Array<{ start: number; end: number }> = [];
+  profile.forEach((ink, x) => {
+    if (ink < minInk) return;
+    const last = runs[runs.length - 1];
+    if (last && x - last.end <= gap) last.end = x;
+    else runs.push({ start: x, end: x });
+  });
+  return runs;
+}
+
+/** The numbers that sit on one squad's column spacing: the largest such set, the
+ *  surest on a tie. Stray reads off the frames behind the table fall off the grid. */
+export function pickColumns<T extends { x: number; confidence: number }>(
+  found: T[],
+  step: number,
+  slack: number,
+  max: number,
+): T[] {
+  let best: T[] = [];
+  let bestSure = 0;
+  for (const anchor of found) {
+    // One number a column: a frame behind it can split its ink in two.
+    const byColumn = new Map<number, { item: T; off: number }>();
+    for (const other of found) {
+      const steps = (other.x - anchor.x) / step;
+      const column = Math.round(steps);
+      const off = Math.abs(steps - column);
+      if (off > slack) continue;
+      const seen = byColumn.get(column);
+      if (!seen || off < seen.off) byColumn.set(column, { item: other, off });
+    }
+    const onGrid = [...byColumn.entries()].sort(([a], [b]) => a - b).map(([, entry]) => entry.item);
+    const sure = onGrid.reduce((sum, other) => sum + other.confidence, 0);
+    if (onGrid.length > best.length || (onGrid.length === best.length && sure > bestSure)) {
+      best = onGrid;
+      bestSure = sure;
+    }
+  }
+  return best.slice(0, max);
 }
 
 /** The value most reads agree on; a tie goes to the surest read. */
@@ -164,47 +225,61 @@ export async function readKillsFromScreenshot(source: Source): Promise<KillsScre
     }
     const centre = starts[hit] + (inkRows ? inkSum / inkRows / scale : ROW_PX / 2);
 
-    // Every half step: even slots hold a 4 or 2 player squad, odd ones 3 or 1.
-    const slots = Array.from(
-      { length: MAX_COLUMNS * 2 - 1 },
-      (_, i) => COLUMN_X + (i * COLUMN_STEP) / 2,
+    // The numbers along the row: gold or white ink, one run per number.
+    const strip = box(
+      ROW_SCAN.left,
+      centre - ROW_SCAN.height / 2,
+      ROW_SCAN.right - ROW_SCAN.left,
+      ROW_SCAN.height,
     );
+    const row: Buffer = await sharp(source).extract(strip).removeAlpha().raw().toBuffer();
+    const profile = Array.from({ length: strip.width }, (_, x) => {
+      let ink = 0;
+      for (let y = 0; y < strip.height; y++) {
+        const i = (y * strip.width + x) * 3;
+        if (row[i] > VALUE_RED && row[i + 1] > VALUE_GREEN && row[i] >= row[i + 2]) ink++;
+      }
+      return ink;
+    });
+    const runs = findInkRuns(
+      profile,
+      Math.max(MIN_INK, Math.round(MIN_INK * scale)),
+      Math.round(DIGIT_GAP * scale),
+    );
+    // Back into 1080p units, where the crops are laid out.
+    const starts1080 = runs.map(
+      (run) => ROW_SCAN.left + (strip.left - box(ROW_SCAN.left, 0, 1, 1).left + run.start) / scale,
+    );
+    if (!starts1080.length) return null;
     const reads = await Promise.all(
       CELLS.map(async (cell) =>
         recognizePaddleCrops(
           await Promise.all(
-            slots.map((x) => crop(box(x, centre - cell.height / 2, cell.width, cell.height))),
+            starts1080.map((x) =>
+              crop(box(x - CELL_LEAD, centre - cell.height / 2, cell.width, cell.height)),
+            ),
           ),
         ),
       ),
     );
-    const voted = slots.map((_, i) => vote(reads.map((read) => read[i])));
-    const confidence = (i: number) => Math.max(...reads.map((read) => read[i].confidence));
-    const pick = (parity: number) => {
-      const indexes = slots.map((_, i) => i).filter((i) => i % 2 === parity);
-      const found = indexes.filter((i) => voted[i] !== null);
-      return {
-        indexes,
-        count: found.length,
-        sure: found.reduce((sum, i) => sum + confidence(i), 0),
-      };
-    };
-    const even = pick(0);
-    const odd = pick(1);
-    const chosen =
-      odd.count > even.count || (odd.count === even.count && odd.sure > even.sure) ? odd : even;
-    // Slots outside the squad are empty; drop them from both ends.
-    const columns = [...chosen.indexes];
-    while (columns.length && voted[columns[0]] === null) columns.shift();
-    while (columns.length && voted[columns[columns.length - 1]] === null) columns.pop();
+    const numbers = starts1080
+      .map((x, i) => ({
+        x,
+        kills: vote(reads.map((read) => read[i])),
+        confidence: Math.max(...reads.map((read) => read[i].confidence)),
+      }))
+      .filter((found) => found.kills !== null);
+    const columns = pickColumns(numbers, COLUMN_STEP, STEP_SLACK, MAX_COLUMNS);
     if (!columns.length) return null;
-    const kills = columns.map((i) => voted[i]);
+    const kills = columns.map((column) => column.kills);
 
     const nameReads = await Promise.all(
       NAME_BOXES.map(async (nameBox) =>
         recognizePaddleCrops(
           await Promise.all(
-            columns.map((i) => crop(box(slots[i], nameBox.y, nameBox.width, nameBox.height))),
+            columns.map((column) =>
+              crop(box(column.x - NAME_LEAD, nameBox.y, nameBox.width, nameBox.height)),
+            ),
           ),
         ),
       ),
