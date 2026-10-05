@@ -310,7 +310,11 @@ async function handleKillsShot(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcom
   const png = await deps.capture();
   if (!png) return { type: "capture-failed" };
   const read = await deps.readKills(png);
-  if (!read) return { type: "kills-unreadable" };
+  if (!read) {
+    const kept = store.saveUnreadKillsShot(png);
+    log.info(`[LevelCap] no kills read off the end screen${kept ? `; kept ${kept}` : ""}`);
+    return { type: "kills-unreadable" };
+  }
   log.info(`[LevelCap] ${read.kills[0]} kills read off the end screen`);
   if (!runId) {
     _pendingKills = { read, png };

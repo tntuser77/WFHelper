@@ -1059,6 +1059,23 @@ export function replaceScreenshot(file: string, png: Buffer): void {
   writeFileAtomicSync(file, png);
 }
 
+/** Keeps an end-screen picture the kills read failed on, so the reader can be
+ *  fixed against it; only the last few stay. */
+export function saveUnreadKillsShot(png: Buffer): string | null {
+  try {
+    const dir = path.join(getSettings().screenshotDir, KILLS_DIR, "unread");
+    fs.mkdirSync(dir, { recursive: true });
+    const old = fs.readdirSync(dir).filter((name) => name.endsWith(".png")).sort();
+    for (const name of old.slice(0, Math.max(0, old.length - 9))) fs.rmSync(path.join(dir, name));
+    const file = path.join(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}.png`);
+    writeFileAtomicSync(file, png);
+    return file;
+  } catch (err) {
+    log.warn("[LevelCap] could not keep the unread kills picture:", normalizeErrorMessage(err));
+    return null;
+  }
+}
+
 /** Keeps the end-of-mission picture and puts its kills on the run: the first
  *  column is yours, the rest go to the logged squadmates their names match. */
 export function recordKills(id: string, read: KillsScreenRead, png: Buffer): LevelCapRun | null {
