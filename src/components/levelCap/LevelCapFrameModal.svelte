@@ -480,7 +480,7 @@
                       {/if}
                     </span>
                   {/if}
-                  <span class="flex flex-col leading-tight" title={$t("levelCap.col.kills")}>
+                  <span class="relative leading-tight" title={$t("levelCap.col.kills")}>
                     {#if run.kills != null}
                       <span class="flex items-baseline gap-1">
                         <span class="font-mono text-base font-bold text-text-primary"
@@ -491,7 +491,10 @@
                         >
                       </span>
                       {#if perMinLabel(run)}
-                        <span class="text-[10px] text-text-muted">{perMinLabel(run)}</span>
+                        <span
+                          class="absolute left-0 top-full whitespace-nowrap text-[10px] text-text-muted"
+                          >{perMinLabel(run)}</span
+                        >
                       {/if}
                     {/if}
                   </span>
