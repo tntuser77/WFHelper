@@ -2769,7 +2769,7 @@
   "levelCap.settings.playerAliases": "Spieler-Aliasse",
   "levelCap.settings.playerAliasesHint": "Ein Spieler pro Zeile: Hauptname = Zweit- oder alte Namen, durch Kommas getrennt. Runs unter diesen Namen zählen für den Hauptnamen.",
   "levelCap.settings.hotkey": "Hotkey für Run-Ende",
-  "levelCap.settings.hotkeyHint": "Wirkt nur in einer Void-Kaskade. Leer lassen zum Ausschalten.",
+  "levelCap.settings.hotkeyHint": "Nur während einer Void-Kaskade und 15 Minuten danach belegt, für die Kills vom Endbildschirm; sonst bleibt sie beim Spiel und bei Steam. Leer lassen zum Ausschalten.",
   "levelCap.settings.hotkeyUnbound": "{key} konnte nicht belegt werden. Eine andere App nutzt die Taste vielleicht, wähle eine andere.",
   "levelCap.settings.passthrough": "Taste an das Spiel weitergeben, damit Steam weiterhin seinen Screenshot macht",
   "levelCap.settings.screenshotDir": "Screenshot-Ordner",

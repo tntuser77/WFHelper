@@ -2769,7 +2769,7 @@
   "levelCap.settings.playerAliases": "玩家别名",
   "levelCap.settings.playerAliasesHint": "每行一个玩家：主名字 = 小号或旧名字，用逗号分隔。用这些名字的记录都算作主名字。",
   "levelCap.settings.hotkey": "结束记录快捷键",
-  "levelCap.settings.hotkeyHint": "仅在虚空覆涌中生效。留空即关闭。",
+  "levelCap.settings.hotkeyHint": "仅在虚空覆涌期间及结束后 15 分钟内占用（用于读取结算画面的击杀数），其余时间按键归游戏和 Steam。留空即关闭。",
   "levelCap.settings.hotkeyUnbound": "无法绑定 {key}，可能已被其他应用占用，请换一个按键。",
   "levelCap.settings.passthrough": "按键同时传给游戏，Steam 仍会截图",
   "levelCap.settings.screenshotDir": "截图文件夹",

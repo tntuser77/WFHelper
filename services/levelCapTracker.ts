@@ -370,6 +370,14 @@ async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome |
   return { type: "logged", run, frameRuns };
 }
 
+/** Whether the finish-run key has work: a Void Cascade open or closing, or its
+ *  end screen still in the kills window. Outside that the key is left to the
+ *  game and Steam. */
+export function levelCapHotkeyWanted(now = Date.now()): boolean {
+  if (_parser.current() || _parser.closing()) return true;
+  return _lastRun !== null && now - _lastRun.endedAt < KILLS_WINDOW_MS;
+}
+
 /** Bound to the finish-run key; does nothing outside a Void Cascade. */
 export function onLevelCapHotkey(): void {
   const deps = _deps;

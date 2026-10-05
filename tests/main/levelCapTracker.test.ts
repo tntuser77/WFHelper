@@ -323,6 +323,16 @@ describe("levelCapTracker", () => {
     expect(store.getRuns()[0].kills).toBeUndefined();
   });
 
+  it("wants the key only in a Void Cascade and its kills window", async () => {
+    const { tracker } = await setup();
+    expect(tracker.levelCapHotkeyWanted()).toBe(false);
+    feed(tracker, START);
+    expect(tracker.levelCapHotkeyWanted()).toBe(true);
+    feed(tracker, [exo(4000, 108), ...END(4100, false)]);
+    expect(tracker.levelCapHotkeyWanted()).toBe(true);
+    expect(tracker.levelCapHotkeyWanted(Date.now() + 20 * 60_000)).toBe(false);
+  });
+
   it("ignores the key long after the run", async () => {
     const { tracker, store } = await setup();
     feed(tracker, [...START, exo(4000, 108), ...END(4100, false)]);

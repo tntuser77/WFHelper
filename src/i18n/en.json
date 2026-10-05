@@ -2789,7 +2789,7 @@
   "levelCap.settings.playerAliases": "Player aliases",
   "levelCap.settings.playerAliasesHint": "One player per line: main name = alt or old names, comma separated. Runs under those names count as the main name.",
   "levelCap.settings.hotkey": "Finish-run hotkey",
-  "levelCap.settings.hotkeyHint": "Only acts inside a Void Cascade. Leave empty to turn it off.",
+  "levelCap.settings.hotkeyHint": "Only held during a Void Cascade and for 15 minutes after, for the end-screen kills; the rest of the time it stays with the game and Steam. Leave empty to turn it off.",
   "levelCap.settings.hotkeyUnbound": "{key} could not be bound. Another app may be using it, so pick a different key.",
   "levelCap.settings.passthrough": "Let the key through to the game, so Steam still takes its screenshot",
   "levelCap.settings.screenshotDir": "Screenshot folder",
