@@ -42,10 +42,12 @@ const CELLS = [
   { width: 150, height: 36, tail: 16 },
 ];
 const UPSCALE = 2;
-// Label text is a dim grey; anything this bright and unsaturated counts as ink.
+// Label text is a dim grey, or gold on some end screens; anything this bright
+// and unsaturated counts as ink, as does value gold. Only the labels' first
+// 110px count: past the shortest label the floor behind the table shows through.
 const INK_CUT = 110;
 const INK_SPREAD = 55;
-// Values are gold, the leader's white: bright red and green, no blue cast.
+const LABEL_INK_WIDTH = 110;
 const VALUE_RED = 140;
 const VALUE_GREEN = 120;
 // Inked pixels a column needs to count: specks off the frames behind have fewer.
@@ -54,7 +56,8 @@ const MIN_INK = 3;
 const MAX_KILLS = 100_000;
 
 export interface KillsScreenRead {
-  /** Kills per column, left to right; you are the first. Null where unreadable. */
+  /** Kills per column, left to right; you are the first. Null where unreadable;
+   *  empty when the picture is an end screen but no number could be read. */
   kills: Array<number | null>;
   /** Name over each column as read; "" where unreadable. */
   names: string[];
@@ -161,6 +164,21 @@ interface Box {
   height: number;
 }
 
+/** An end screen whose numbers could not be read. */
+const NO_NUMBERS: KillsScreenRead = { kills: [], names: [] };
+
+/** Whether a pixel is label or value ink: bright grey/white or gold. */
+function isInk(r: number, g: number, b: number): boolean {
+  const lo = Math.min(r, g, b);
+  const hi = Math.max(r, g, b);
+  return (lo > INK_CUT && hi - lo < INK_SPREAD) || isValueInk(r, g, b);
+}
+
+/** Values are gold, the leader's white: bright red and green, no blue cast. */
+function isValueInk(r: number, g: number, b: number): boolean {
+  return r > VALUE_RED && g > VALUE_GREEN && r >= b;
+}
+
 /** The end-of-mission kill counts, or null when the picture has no Total Kills row. */
 export async function readKillsFromScreenshot(source: Source): Promise<KillsScreenRead | null> {
   if (!paddleRecognizerAvailable()) return null;
@@ -215,11 +233,9 @@ export async function readKillsFromScreenshot(source: Source): Promise<KillsScre
     let inkSum = 0;
     for (let y = 0; y < slot.height; y++) {
       let ink = 0;
-      for (let x = 0; x < slot.width; x++) {
+      for (let x = 0; x < Math.min(slot.width, Math.round(LABEL_INK_WIDTH * scale)); x++) {
         const i = (y * slot.width + x) * 3;
-        const lo = Math.min(raw[i], raw[i + 1], raw[i + 2]);
-        const hi = Math.max(raw[i], raw[i + 1], raw[i + 2]);
-        if (lo > INK_CUT && hi - lo < INK_SPREAD) ink++;
+        if (isInk(raw[i], raw[i + 1], raw[i + 2])) ink++;
       }
       inkRows += ink;
       inkSum += ink * y;
@@ -238,7 +254,7 @@ export async function readKillsFromScreenshot(source: Source): Promise<KillsScre
       let ink = 0;
       for (let y = 0; y < strip.height; y++) {
         const i = (y * strip.width + x) * 3;
-        if (row[i] > VALUE_RED && row[i + 1] > VALUE_GREEN && row[i] >= row[i + 2]) ink++;
+        if (isValueInk(row[i], row[i + 1], row[i + 2])) ink++;
       }
       return ink;
     });
@@ -252,7 +268,7 @@ export async function readKillsFromScreenshot(source: Source): Promise<KillsScre
       (run) => ROW_SCAN.left + (strip.left - box(ROW_SCAN.left, 0, 1, 1).left + run.start) / scale,
     );
     const inkWidths = runs.map((run) => (run.end - run.start + 1) / scale);
-    if (!starts1080.length) return null;
+    if (!starts1080.length) return NO_NUMBERS;
     const reads = await Promise.all(
       CELLS.map(async (cell) =>
         recognizePaddleCrops(
@@ -279,7 +295,7 @@ export async function readKillsFromScreenshot(source: Source): Promise<KillsScre
       }))
       .filter((found) => found.kills !== null);
     const columns = pickColumns(numbers, COLUMN_STEP, STEP_SLACK, MAX_COLUMNS);
-    if (!columns.length) return null;
+    if (!columns.length) return NO_NUMBERS;
     const kills = columns.map((column) => column.kills);
 
     const nameReads = await Promise.all(

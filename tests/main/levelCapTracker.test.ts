@@ -318,6 +318,25 @@ describe("levelCapTracker", () => {
     expect(store.getRuns()[0]).toMatchObject({ kills: 1074, durationSec: 4088 });
   });
 
+  it("an end screen whose numbers fail to read keeps the thumbnail", async () => {
+    const { tracker, store } = await setup();
+    feed(tracker, [...START, exo(4000, 108)]);
+    tracker.onLevelCapHotkey();
+    await settle();
+
+    vi.useFakeTimers({ now: Date.now() + 2000 });
+    captureResult = Buffer.from("end screen");
+    killsRead = { kills: [], names: [] };
+    tracker.onLevelCapHotkey();
+    vi.useRealTimers();
+    await settle();
+
+    expect(outcomes.map((o) => o.type)).toEqual(["logged", "kills-unreadable"]);
+    const [run] = store.getRuns();
+    expect(fs.readFileSync(run.screenshot!, "utf8")).toBe("png");
+    expect(run.killsScreenshot).toBeUndefined();
+  });
+
   it("never makes the kills picture the screenshot of a run the key had not logged", async () => {
     const { tracker, store } = await setup();
     feed(tracker, [...START, exo(4000, 108)]);

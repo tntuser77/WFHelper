@@ -328,12 +328,13 @@ async function handleKillsShot(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcom
   const png = await deps.capture();
   if (!png) return { type: "capture-failed" };
   const read = await deps.readKills(png);
-  if (!read) {
-    const kept = store.saveUnreadKillsShot(png);
-    log.info(`[LevelCap] no kills read off the end screen${kept ? `; kept ${kept}` : ""}`);
-    return { type: "kills-unreadable" };
-  }
-  return putKills(read, png);
+  return read?.kills.length ? putKills(read, png) : keepUnreadKills(png);
+}
+
+function keepUnreadKills(png: Buffer): LevelCapHotkeyOutcome {
+  const kept = store.saveUnreadKillsShot(png);
+  log.info(`[LevelCap] no kills read off the end screen${kept ? `; kept ${kept}` : ""}`);
+  return { type: "kills-unreadable" };
 }
 
 async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome | null> {
@@ -345,9 +346,10 @@ async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome |
   const png = await deps.capture();
   if (!png) return { type: "capture-failed" };
   // The end screen comes up before EE.log closes the mission, so any press can
-  // be the kills picture; it never becomes or replaces the run's screenshot.
+  // be the kills picture; it never becomes or replaces the run's screenshot,
+  // even when its Total Kills row is there but its numbers are not.
   const read = await deps.readKills(png);
-  if (read) return putKills(read, png);
+  if (read) return read.kills.length ? putKills(read, png) : keepUnreadKills(png);
 
   const existing = _missionRunId && store.getRuns().find((r) => r.id === _missionRunId);
   if (existing) {
