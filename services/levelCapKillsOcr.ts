@@ -35,10 +35,11 @@ const NAME_BOXES = [
   { y: 569, height: 32, width: 200 },
 ];
 // Tight cells keep the frames standing behind the numbers out of the read; two
-// sizes vote, since one can still catch a stray edge.
+// sizes vote, since one can still catch a stray edge. A cell ends this far past
+// its number's ink, or a leaf beside it reads as one more digit.
 const CELLS = [
-  { width: 120, height: 30 },
-  { width: 150, height: 36 },
+  { width: 120, height: 30, tail: 10 },
+  { width: 150, height: 36, tail: 16 },
 ];
 const UPSCALE = 2;
 // Label text is a dim grey; anything this bright and unsaturated counts as ink.
@@ -250,13 +251,21 @@ export async function readKillsFromScreenshot(source: Source): Promise<KillsScre
     const starts1080 = runs.map(
       (run) => ROW_SCAN.left + (strip.left - box(ROW_SCAN.left, 0, 1, 1).left + run.start) / scale,
     );
+    const inkWidths = runs.map((run) => (run.end - run.start + 1) / scale);
     if (!starts1080.length) return null;
     const reads = await Promise.all(
       CELLS.map(async (cell) =>
         recognizePaddleCrops(
           await Promise.all(
-            starts1080.map((x) =>
-              crop(box(x - CELL_LEAD, centre - cell.height / 2, cell.width, cell.height)),
+            starts1080.map((x, i) =>
+              crop(
+                box(
+                  x - CELL_LEAD,
+                  centre - cell.height / 2,
+                  Math.min(cell.width, CELL_LEAD + inkWidths[i] + cell.tail),
+                  cell.height,
+                ),
+              ),
             ),
           ),
         ),
