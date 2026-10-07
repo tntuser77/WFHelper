@@ -7,6 +7,8 @@ on:
 
 jobs:
   smoke:
+    # api.wfhelper.com is upstream's deployment and 403s this fork's runners.
+    if: github.repository == 'WFHelper/WFHelper'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
