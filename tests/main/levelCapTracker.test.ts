@@ -293,6 +293,45 @@ describe("levelCapTracker", () => {
     ]);
   });
 
+  it("a press on the end screen before the mission closes adds kills, not a screenshot", async () => {
+    const { tracker, store } = await setup();
+    feed(tracker, [...START, exo(4000, 108)]);
+    tracker.onLevelCapHotkey();
+    await settle();
+
+    // EE.log has not ended the mission yet, but the end screen is up.
+    vi.useFakeTimers({ now: Date.now() + 5000 });
+    captureResult = Buffer.from("end screen");
+    killsRead = { kills: [1074], names: ["Player1"] };
+    tracker.onLevelCapHotkey();
+    vi.useRealTimers();
+    await settle();
+
+    expect(outcomes.map((o) => o.type)).toEqual(["logged", "kills-added"]);
+    const [run] = store.getRuns();
+    expect(run.kills).toBe(1074);
+    expect(fs.readFileSync(run.screenshot!, "utf8")).toBe("png");
+    expect(fs.readFileSync(run.killsScreenshot!, "utf8")).toBe("end screen");
+
+    feed(tracker, END(4100, false));
+    expect(store.getRuns()).toHaveLength(1);
+    expect(store.getRuns()[0]).toMatchObject({ kills: 1074, durationSec: 4088 });
+  });
+
+  it("never makes the kills picture the screenshot of a run the key had not logged", async () => {
+    const { tracker, store } = await setup();
+    feed(tracker, [...START, exo(4000, 108)]);
+    killsRead = { kills: [300], names: ["Player1"] };
+    tracker.onLevelCapHotkey();
+    await settle();
+    expect(store.getRuns()).toEqual([]);
+
+    feed(tracker, END(4100, false));
+    const [run] = store.getRuns();
+    expect(run).toMatchObject({ source: "mission-end", kills: 300, screenshot: null });
+    expect(outcomes.map((o) => o.type)).toEqual(["kills-added"]);
+  });
+
   it("holds end-screen kills for the run the mission end logs", async () => {
     const { tracker, store } = await setup();
     const end = END(4100, false);

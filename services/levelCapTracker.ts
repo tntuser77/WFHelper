@@ -296,15 +296,32 @@ export function notifyLevelCapEeLogReset(): void {
   _parser = createLevelCapParser();
 }
 
+/** The run end-screen kills belong to: the mission's own, else the last one's
+ *  while its end screen can still be up. */
+function killsRunId(): string | null {
+  if (_missionRunId) return _missionRunId;
+  return _lastRun && Date.now() - _lastRun.endedAt < KILLS_WINDOW_MS ? _lastRun.id : null;
+}
+
+/** Puts end-screen kills on their run, or holds them for the run the mission end
+ *  logs. The picture is only ever the kills picture, never the run's screenshot. */
+function putKills(read: KillsScreenRead, png: Buffer): LevelCapHotkeyOutcome | null {
+  log.info(`[LevelCap] ${read.kills[0]} kills read off the end screen`);
+  // The mission may have closed while the picture was being read.
+  const runId = killsRunId();
+  if (!runId) {
+    if (_parser.current() || _parser.closing()) _pendingKills = { read, png };
+    return null;
+  }
+  const run = store.recordKills(runId, read, png);
+  return run ? { type: "kills-added", run } : { type: "kills-unreadable" };
+}
+
 /** A press after the mission: the end screen's kill counts go on its run, and
  *  the run keeps its own screenshot. */
 async function handleKillsShot(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome | null> {
-  const recent = () =>
-    _lastRun && Date.now() - _lastRun.endedAt < KILLS_WINDOW_MS ? _lastRun.id : null;
-  let runId = _missionRunId ?? recent();
   // At the end screen a run the key never logged is still to come from the mission end.
-  const closing = _parser.closing();
-  if (!runId && !closing) {
+  if (!killsRunId() && !_parser.closing()) {
     log.info("[LevelCap] finish-run key pressed outside a Void Cascade; ignored");
     return null;
   }
@@ -316,15 +333,7 @@ async function handleKillsShot(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcom
     log.info(`[LevelCap] no kills read off the end screen${kept ? `; kept ${kept}` : ""}`);
     return { type: "kills-unreadable" };
   }
-  log.info(`[LevelCap] ${read.kills[0]} kills read off the end screen`);
-  // The mission may have closed while the picture was being read.
-  if (!runId && !_parser.closing()) runId = recent();
-  if (!runId) {
-    _pendingKills = { read, png };
-    return null;
-  }
-  const run = store.recordKills(runId, read, png);
-  return run ? { type: "kills-added", run } : { type: "kills-unreadable" };
+  return putKills(read, png);
 }
 
 async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome | null> {
@@ -335,6 +344,10 @@ async function handleHotkey(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome |
   }
   const png = await deps.capture();
   if (!png) return { type: "capture-failed" };
+  // The end screen comes up before EE.log closes the mission, so any press can
+  // be the kills picture; it never becomes or replaces the run's screenshot.
+  const read = await deps.readKills(png);
+  if (read) return putKills(read, png);
 
   const existing = _missionRunId && store.getRuns().find((r) => r.id === _missionRunId);
   if (existing) {
