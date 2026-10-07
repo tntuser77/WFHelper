@@ -309,6 +309,20 @@ describe("levelCapTracker", () => {
     expect(outcomes.map((o) => o.type)).toEqual(["kills-added"]);
   });
 
+  it("puts end-screen kills on the run when the mission closes during the read", async () => {
+    const { tracker, store } = await setup();
+    const end = END(4100, false);
+    feed(tracker, [...START, exo(4000, 108), ...end.slice(0, -1)]);
+    killsRead = { kills: [300], names: ["Player1"] };
+    tracker.onLevelCapHotkey();
+    // The mission closes before the read comes back.
+    feed(tracker, end.slice(-1));
+    await settle();
+    await settle();
+    expect(store.getRuns()[0]).toMatchObject({ source: "mission-end", kills: 300 });
+    expect(outcomes.map((o) => o.type)).toEqual(["kills-added"]);
+  });
+
   it("says so when the picture has no kill counts, and changes nothing", async () => {
     const { tracker, store } = await setup();
     feed(tracker, [...START, exo(4000, 108)]);

@@ -299,8 +299,9 @@ export function notifyLevelCapEeLogReset(): void {
 /** A press after the mission: the end screen's kill counts go on its run, and
  *  the run keeps its own screenshot. */
 async function handleKillsShot(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcome | null> {
-  const recent = _lastRun && Date.now() - _lastRun.endedAt < KILLS_WINDOW_MS ? _lastRun.id : null;
-  const runId = _missionRunId ?? recent;
+  const recent = () =>
+    _lastRun && Date.now() - _lastRun.endedAt < KILLS_WINDOW_MS ? _lastRun.id : null;
+  let runId = _missionRunId ?? recent();
   // At the end screen a run the key never logged is still to come from the mission end.
   const closing = _parser.closing();
   if (!runId && !closing) {
@@ -316,6 +317,8 @@ async function handleKillsShot(deps: LevelCapDeps): Promise<LevelCapHotkeyOutcom
     return { type: "kills-unreadable" };
   }
   log.info(`[LevelCap] ${read.kills[0]} kills read off the end screen`);
+  // The mission may have closed while the picture was being read.
+  if (!runId && !_parser.closing()) runId = recent();
   if (!runId) {
     _pendingKills = { read, png };
     return null;
