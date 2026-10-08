@@ -4,6 +4,7 @@ import path from "node:path";
 import { app } from "electron";
 
 import { cleanSquadRead, matchRowsToPlayers, resolveSquadNames } from "./levelCapSquadNames";
+import type { KillsScreenRead } from "./levelCapKillsOcr";
 import type { SquadScreenshotRead } from "./levelCapSquadOcr";
 import { groupPortraits, isPortrait } from "./levelCapSquadPortraits";
 import { guessLevelCapTags, newlyGuessedLevelCapTags } from "./levelCapTagGuess";
@@ -42,8 +43,10 @@ const INDEX_FILE = "level-cap-runs.json";
 const INDEX_SCHEMA_VERSION = 5;
 const MAX_BUILD_NAME = 48;
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp"]);
-/** Folders the old sorter script left beside the frame folders. */
-const IGNORED_DIRS = new Set(["__pycache__", "__init__"]);
+/** End-of-mission pictures kills were read off; beside the frame folders, not runs of their own. */
+const KILLS_DIR = "Kills";
+/** Folders that hold no runs: the old sorter script's, and the kills pictures. */
+const IGNORED_DIRS = new Set(["__pycache__", "__init__", KILLS_DIR]);
 
 let _runs: LevelCapRun[] = [];
 let _builds: LevelCapNamedBuild[] = [];
@@ -111,6 +114,10 @@ function normalizeRun(raw: unknown): LevelCapRun | null {
   delete out.tags;
   delete out.kills;
   if (Number.isSafeInteger(run.kills) && (run.kills as number) >= 0) out.kills = run.kills;
+  delete out.killsScreenshot;
+  if (typeof run.killsScreenshot === "string" && run.killsScreenshot) {
+    out.killsScreenshot = run.killsScreenshot;
+  }
   delete out.players;
   delete out.exolizerOcr;
   if (run.exolizerOcr === "read" || run.exolizerOcr === "unreadable") {
@@ -601,7 +608,9 @@ function mirrorToBackup(indexText: string): void {
   const backupDir = _settings?.backupDir.trim();
   if (!backupDir) return;
   const shotRoot = path.resolve(_settings?.screenshotDir ?? "");
-  const shots = _runs.flatMap((run) => (run.screenshot ? [run.screenshot] : []));
+  const shots = _runs.flatMap((run) =>
+    [run.screenshot, run.killsScreenshot].filter((shot): shot is string => !!shot),
+  );
   _mirrorChain = _mirrorChain
     .then(() => mirror(backupDir, indexText, shotRoot, shots))
     .catch((err) => log.warn("[LevelCap] backup mirror failed:", normalizeErrorMessage(err)));
@@ -1048,6 +1057,53 @@ export function saveScreenshot(frame: string, png: Buffer): string {
 
 export function replaceScreenshot(file: string, png: Buffer): void {
   writeFileAtomicSync(file, png);
+}
+
+/** Keeps an end-screen picture the kills read failed on, so the reader can be
+ *  fixed against it; only the last few stay. */
+export function saveUnreadKillsShot(png: Buffer): string | null {
+  try {
+    const dir = path.join(getSettings().screenshotDir, KILLS_DIR, "unread");
+    fs.mkdirSync(dir, { recursive: true });
+    const old = fs
+      .readdirSync(dir)
+      .filter((name) => name.endsWith(".png"))
+      .sort();
+    for (const name of old.slice(0, Math.max(0, old.length - 9))) fs.rmSync(path.join(dir, name));
+    const file = path.join(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}.png`);
+    writeFileAtomicSync(file, png);
+    return file;
+  } catch (err) {
+    log.warn("[LevelCap] could not keep the unread kills picture:", normalizeErrorMessage(err));
+    return null;
+  }
+}
+
+/** Keeps the end-of-mission picture and puts its kills on the run: the first
+ *  column is yours, the rest go to the logged squadmates their names match. */
+export function recordKills(id: string, read: KillsScreenRead, png: Buffer): LevelCapRun | null {
+  const run = getRuns().find((r) => r.id === id);
+  if (!run || read.kills[0] == null) return null;
+  const dir = path.join(getSettings().screenshotDir, KILLS_DIR);
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${run.id} ${run.frame}.png`.replace(/[<>:"/\\|?*]/g, ""));
+  writeFileAtomicSync(file, png);
+  return updateRun(id, (r) => {
+    r.kills = read.kills[0] as number;
+    r.killsScreenshot = file;
+    const mates = (r.squadLog ?? []).filter((mate) => !mate.you);
+    if (!mates.length) return;
+    const columns = read.names.slice(1).map((name) => [name]);
+    const picked = matchRowsToPlayers(
+      columns,
+      mates.map((mate) => mate.name),
+    );
+    picked.forEach((name, i) => {
+      const kills = read.kills[i + 1];
+      const mate = mates.find((m) => m.name === name);
+      if (mate && kills != null) mate.kills = kills;
+    });
+  });
 }
 
 interface ImportResolver {

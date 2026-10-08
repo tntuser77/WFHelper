@@ -31,10 +31,9 @@ import {
   snapshotEquippedBuild,
   snapshotItemConfigs,
 } from "../services/levelCapBuild";
-import { fetchProfileJson, getProfileAccountId } from "../services/codexProfile";
-import { parseLifetimeStats } from "../services/levelCapKills";
 import { captureScreenFast } from "../services/screenCapture";
 import { readExolizersFromScreenshot } from "../services/levelCapExolizerOcr";
+import { readKillsFromScreenshot } from "../services/levelCapKillsOcr";
 import { readSquadFromScreenshot } from "../services/levelCapSquadOcr";
 import { loadSharp } from "../services/sharpRuntime";
 import { withScope } from "../services/logger";
@@ -95,6 +94,11 @@ const SCREENSHOT_MIME: Record<string, string> = {
 };
 
 let _boundHotkey = "";
+/** The last bind of the finish-run key failed. */
+let _hotkeyFailed = false;
+/** The key is only held while a Void Cascade or its kills window is open; this
+ *  catches the window running out. */
+const HOTKEY_SYNC_MS = 15_000;
 let _readingScreenshots = false;
 // Startup has enough to load; the screenshot pass can wait a little.
 const SCREENSHOT_READ_DELAY_MS = 15_000;
@@ -241,7 +245,7 @@ function payload(): LevelCapPayload {
     skinArt: skinFallbackArt(ownedFrameSkins()),
     frameIcons: store.getFrameIcons(),
     hotkey: {
-      bound: _boundHotkey !== "",
+      bound: !_hotkeyFailed,
       canPassThrough: process.platform === "win32",
     },
     abilityNames,
@@ -350,15 +354,21 @@ async function readScreenshots(): Promise<void> {
   }
 }
 
-function bindHotkey(): void {
+/** Holds the finish-run key while the tracker has work for it and lets it go
+ *  otherwise; `rebind` picks up a changed key or passthrough. */
+function syncHotkey(rebind = false): void {
   const { hotkey, passthrough } = store.getSettings();
+  const wanted = hotkey && tracker.levelCapHotkeyWanted() ? hotkey : "";
+  if (wanted === _boundHotkey && !rebind) return;
   if (_boundHotkey) unregisterTransientHotkey(_boundHotkey);
   _boundHotkey = "";
-  if (!hotkey) return;
-  if (registerTransientHotkey(hotkey, tracker.onLevelCapHotkey, { passthrough })) {
-    _boundHotkey = hotkey;
+  _hotkeyFailed = false;
+  if (!wanted) return;
+  if (registerTransientHotkey(wanted, tracker.onLevelCapHotkey, { passthrough })) {
+    _boundHotkey = wanted;
   } else {
-    log.warn("[LevelCap] could not bind finish-run hotkey:", hotkey);
+    _hotkeyFailed = true;
+    log.warn("[LevelCap] could not bind finish-run hotkey:", wanted);
   }
 }
 
@@ -393,14 +403,18 @@ function toastCard(outcome: LevelCapHotkeyOutcome): LevelCapToastCard {
     exolizers: null,
     target: LEVEL_CAP_EXOLIZER_TARGET,
     durationSec: null,
+    kills: null,
   };
   if (outcome.type === "below-target")
     return { ...card, status: "below", exolizers: outcome.exolizers };
   if (outcome.type === "capture-failed") return card;
+  if (outcome.type === "kills-unreadable") return { ...card, status: "noKills" };
   const { run } = outcome;
   return {
     ...card,
-    status: outcome.type === "logged" ? "logged" : "replaced",
+    status:
+      outcome.type === "logged" ? "logged" : outcome.type === "kills-added" ? "kills" : "replaced",
+    kills: outcome.type === "kills-added" ? (run.kills ?? null) : null,
     frame: run.frame,
     thumb: run.frameType ? (itemDb.lookupItem(run.frameType)?.imageUrl ?? null) : null,
     runNumber: outcome.type === "logged" ? outcome.frameRuns : null,
@@ -459,9 +473,11 @@ function register(): void {
       const shot = await captureScreenFast();
       return shot && !shot.image.isEmpty() ? shot.image.toPNG() : null;
     },
-    onChanged: pushUpdate,
-    accountId: getProfileAccountId,
-    lifetimeStats: async (accountId) => parseLifetimeStats(await fetchProfileJson(accountId)),
+    onChanged() {
+      syncHotkey();
+      pushUpdate();
+    },
+    readKills: readKillsFromScreenshot,
     onHotkey: (outcome) => {
       broadcastToRenderers(LEVEL_CAP_HOTKEY, outcome);
       showLevelCapNotification(toastCard(outcome));
@@ -471,7 +487,8 @@ function register(): void {
       }
     },
   });
-  bindHotkey();
+  syncHotkey();
+  setInterval(() => syncHotkey(), HOTKEY_SYNC_MS).unref?.();
   setTimeout(() => void readScreenshots(), SCREENSHOT_READ_DELAY_MS).unref?.();
 
   handleAuthorized(LEVEL_CAP_GET, assertMainRendererSender, () => {
@@ -605,7 +622,7 @@ function register(): void {
   handleAuthorized(LEVEL_CAP_UPDATE_SETTINGS, assertMainRendererSender, (_e, patch: unknown) => {
     if (!isSettingsPatch(patch)) return payload();
     store.updateSettings(patch);
-    if (patch.hotkey !== undefined || patch.passthrough !== undefined) bindHotkey();
+    if (patch.hotkey !== undefined || patch.passthrough !== undefined) syncHotkey(true);
     return payload();
   });
 

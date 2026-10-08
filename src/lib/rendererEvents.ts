@@ -61,6 +61,16 @@ export function initRendererEvents(): () => void {
           level: "info",
           message: t("levelCap.toast.replaced", { frame: outcome.run.frame }),
         });
+      } else if (outcome.type === "kills-added") {
+        addToast({
+          level: "success",
+          message: t("levelCap.toast.kills", {
+            frame: outcome.run.frame,
+            count: (outcome.run.kills ?? 0).toLocaleString(),
+          }),
+        });
+      } else if (outcome.type === "kills-unreadable") {
+        addToast({ level: "warning", message: t("levelCap.toast.noKills") });
       } else if (outcome.type === "below-target") {
         addToast({
           level: "warning",
